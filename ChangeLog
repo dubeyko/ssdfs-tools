@@ -1,0 +1,119 @@
+********************************************************************************
+*                            CHANGELOG SECTION                                 *
+********************************************************************************
+
+v.1.00 [May 26, 2019]
+    (*) WDC has released incomplete source code.
+
+v.0.30 [August 01, 2018]
+    (*) [mkfs] Fix bugs in btree creation (step 2).
+
+v.0.29 [May 25, 2018]
+    (*) [mkfs] Fix bugs in btree creation (step 1).
+
+v.0.28 [March 09, 2018]
+    (*) [mkfs] Implement btree support.
+
+v.0.27 [October 05, 2016]
+    (*) [mkfs] Fix bugs in block bitmap creation.
+
+v.0.26 [June 22, 2016]
+    (*) [mkfs] Fix bugs in PEB migration scheme support.
+
+v.0.25 [June 02, 2016]
+    (*) [mkfs] Support of reworked block bitmap on-disk layout.
+    (*) [mkfs] Add compression options.
+    (*) [mkfs] Support PEBs migration scheme.
+
+v.0.24 [January 14, 2016]
+    (*) [mkfs] Support of reworked offset translation table.
+
+v.0.23 [December 02, 2015]
+    (*) [dumpfs] Implement header parsing functionality.
+
+v.0.22 [November 18, 2015]
+    (*) [mkfs] Fix bugs in mount operation (step 6).
+    (*) [dumpfs] Add option of raw dump show.
+
+v.0.21 [November 11, 2015]
+    (*) [mkfs] Fix bugs in mount operation (step 5).
+    (*) [dumpfs] Implement operation of extraction the main
+                 file system info.
+
+v.0.20 [October 14, 2015]
+    (*) [mkfs] Fix bugs in mount operation (step 4).
+
+v.0.19 [October 07, 2015]
+    (*) [mkfs] Fix bugs in mount operation (step 3).
+
+v.0.18 [September 30, 2015]
+    (*) [mkfs] Fix bugs in mount operation (step 2).
+
+v.0.17 [September 23, 2015]
+    (*) [mkfs] Fix bugs in mount operation (step 1).
+
+v.0.16 [September 16, 2015]
+    (*) [mkfs] Fix found bugs during testing different page, erase block
+               and segment sizes.
+
+v.0.15 [September 09, 2015]
+    (*) [mkfs] Compilation errors have been fixed.
+
+v.0.14 [September 02, 2015]  (**not compilable**)
+    (*) [mkfs] Creation of mapping table object has been implemented.
+
+v.0.12 [August 26, 2015]  (**not compilable**)
+    (*) [mkfs] Partial implementation of mapping table object creation.
+
+v.0.11 [August 19, 2015]  (**not compilable**)
+    (*) [mkfs] Implement offsets table creation.
+    (*) [mkfs] Implement block descriptors table creation.
+    (*) [mkfs] Reorganize mkfs utility structure.
+
+v.0.10 [August 12, 2015]  (**not compilable**)
+    (*) [mkfs] Implement block bitmap creation.
+
+v.0.9 [May 27, 2015]
+    (*) [mkfs] Fix bugs in segment bitmap creation functionality.
+
+v.0.8 [May 20, 2015]
+    (*) [mkfs] Implement segment bitmap creation.
+    (*) [mkfs] Fix compilation errors.
+
+v.0.7 [May 13, 2015]  (**not compilable**)
+    (*) [mkfs] Implement preparation of segment bitmap's structures.
+    (*) [lib] Add segment bitmap's common functionality.
+    (*) [include] Add on-disk layout declarations.
+    (*) Correct HGST copyright.
+
+v.0.6 [November 12, 2014]
+    (*) [include] Correct header with on-disk layout declarations.
+    (*) [mkfs] Correct logic of log creation.
+
+v.0.5 [June 25, 2014]
+    (*) [lib] Fix issue with CRC32 calculation.
+    (*) [mkfs] Calculate creation time in nanoseconds.
+    (*) [mkfs] Fix issue with segment header and log footer commit.
+
+v.0.4 [June 18, 2014]
+    (*) [mkfs] Add 128KB as possible erase block size.
+
+v.0.3 [May 07, 2014]
+    (*) [mkfs] It was fixed bugs in ssdfs-utils-v.0.2.
+    (*) [mkfs] It was made preliminary testing.
+
+v.0.2 [April 30, 2014] (*NOT COMPILABLE*)
+    (*) [mkfs] It was defined segment header structure.
+    (*) [mkfs] It was defined superblock structure.
+    (*) [mkfs] It was defined log footer structure.
+    (*) [mkfs] It was implemented write/erase operations.
+    (*) [mkfs] It was implemented superblock creation.
+    (*) [mkfs] It was implemented segment preparation.
+    (*) [mkfs] It was implemented writing prepared volume on device.
+
+v.0.1 [April 23, 2014]
+    (*) [mkfs] It was adopted functionality of checking formated partition.
+    (*) [mkfs] It was adopted functionality of device mount state checking.
+    (*) [mkfs] It was implemented open_device() method.
+    (*) [mkfs] It was implemented options parsing functionality.
+    (*) It was prepared building framework (autoconf, automake).

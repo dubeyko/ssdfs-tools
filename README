@@ -1,0 +1,34 @@
+SSDFS TOOLS
+
+* DESCRIPTION
+
+SSDFS is flash-friendly file system is designed with the goals:
+ (1) take into account the open-channel SSD model;
+ (2) descrease as much as possible the write amplification issue;
+ (3) decrease as much as possible the GC activity;
+ (4) widely use the compression, delta-encoding, and deduplication.
+
+* TOOLS
+
+ (1) mkfs.ssdfs   - new volume creation utility.
+ (2) dumpfs.ssdfs - segments' content dumping utility.
+ (3) fsck.ssdfs   - file system checking and recovering utility (not implemented).
+ (4) tunefs.ssdfs - file system volume's tuning utility (not implemented).
+ (5) resize.ssdfs - file system volume's resize utility (not implemented).
+ (6) snap.ssdfs   - snapshots management utility (not implemented).
+
+* BEFORE COMPILATION
+
+ It needs to install the following packages:
+ (1) autoconf
+ (2) libtool
+ (3) uuid-dev
+ (4) blkid_dev
+ (5) zlib library and development headers
+
+* HOW TO COMPILE
+
+ $ cd ssdfs-utils
+ $ ./autogen.sh
+ $ ./configure
+ $ make

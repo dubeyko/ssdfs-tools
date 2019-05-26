@@ -1,0 +1,256 @@
+//SPDX-License-Identifier: BSD-3-Clause-Clear
+/*
+ * ssdfs-utils -- SSDFS file system utilities.
+ *
+ * lib/ssdfs_common.c - common usefull functionality.
+ *
+ * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ *              http://www.hgst.com/
+ *
+ * HGST Confidential
+ * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ *
+ * Created by HGST, San Jose Research Center, Storage Architecture Group
+ * Authors: Vyacheslav Dubeyko <Vyacheslav.Dubeyko@wdc.com>
+ *
+ * Acknowledgement: Cyril Guyot <Cyril.Guyot@wdc.com>
+ *                  Zvonimir Bandic <Zvonimir.Bandic@wdc.com>
+ */
+
+#define _LARGEFILE64_SOURCE
+#define __USE_FILE_OFFSET64
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
+#include <getopt.h>
+#include <fcntl.h>
+#include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <paths.h>
+#include <blkid/blkid.h>
+#include <uuid/uuid.h>
+#include <limits.h>
+#include <time.h>
+#include <zlib.h>
+#include <mtd/mtd-abi.h>
+
+#include "ssdfs_utils.h"
+
+__le32 ssdfs_crc32_le(void *data, size_t len)
+{
+	return cpu_to_le32(~crc32(0, data, len));
+}
+
+int ssdfs_calculate_csum(struct ssdfs_metadata_check *check,
+			  void *buf, size_t buf_size)
+{
+	u16 bytes;
+	u16 flags;
+
+	bytes = le16_to_cpu(check->bytes);
+	flags = le16_to_cpu(check->flags);
+
+	if (bytes > buf_size) {
+		SSDFS_ERR("corrupted size %d of checked data\n", bytes);
+		return -EINVAL;
+	}
+
+	if (flags & SSDFS_CRC32) {
+		check->csum = 0;
+		check->csum = ssdfs_crc32_le(buf, bytes);
+	} else {
+		SSDFS_ERR("unknown flags set %#x\n", flags);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+int is_csum_valid(struct ssdfs_metadata_check *check,
+		   void *buf, size_t buf_size)
+{
+	__le32 old_csum;
+	__le32 calc_csum;
+	int err;
+
+	old_csum = check->csum;
+
+	err = ssdfs_calculate_csum(check, buf, buf_size);
+	if (err) {
+		SSDFS_ERR("fail to calculate checksum\n");
+		return SSDFS_FALSE;
+	}
+
+	calc_csum = check->csum;
+	check->csum = old_csum;
+
+	if (old_csum != calc_csum) {
+		SSDFS_ERR("old_csum %#x != calc_csum %#x\n",
+			  le32_to_cpu(old_csum),
+			  le32_to_cpu(calc_csum));
+		return SSDFS_FALSE;
+	}
+
+	return SSDFS_TRUE;
+}
+
+#define BILLION		1000000000L
+
+u64 ssdfs_current_time_in_nanoseconds(void)
+{
+	time_t ctime;
+	u64 nanoseconds;
+
+	ctime = time(NULL);
+	nanoseconds = (u64)ctime * BILLION;
+	return nanoseconds;
+}
+
+char *ssdfs_nanoseconds_to_time(u64 nanoseconds)
+{
+	time_t time = (time_t)(nanoseconds / BILLION);
+	return ctime(&time);
+}
+
+int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf)
+{
+	ssize_t ret;
+	size_t rest;
+
+	rest = size;
+	while (rest > 0) {
+		ret = pwrite(fd, buf, rest, offset);
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
+			SSDFS_ERR("write failed: %s\n", strerror(errno));
+			return errno;
+		}
+
+		rest -= ret;
+		offset += ret;
+		buf += ret;
+	}
+	return 0;
+}
+
+int ssdfs_pread(int fd, u64 offset, size_t size, void *buf)
+{
+	ssize_t ret;
+	size_t rest;
+
+	rest = size;
+	while (rest > 0) {
+		ret = pread(fd, buf, rest, offset);
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
+			SSDFS_ERR("read failed: %s\n", strerror(errno));
+			return errno;
+		}
+
+		rest -= ret;
+		offset += ret;
+		buf += ret;
+	}
+	return 0;
+}
+
+int open_device(struct ssdfs_environment *env)
+{
+	struct mtd_info_user mtd;
+	struct stat stat;
+	int err;
+
+	SSDFS_DBG(env->show_debug, "dev_name %s\n", env->dev_name);
+
+	env->fd = open(env->dev_name, O_RDWR | O_LARGEFILE);
+	if (env->fd == -1) {
+		SSDFS_ERR("unable to open %s: %s\n",
+			  env->dev_name, strerror(errno));
+		return errno;
+	}
+
+	err = fstat(env->fd, &stat);
+	if (err) {
+		SSDFS_ERR("unable to get file status %s: %s\n",
+			  env->dev_name, strerror(errno));
+		return errno;
+	}
+
+	switch (stat.st_mode & S_IFMT) {
+	case S_IFSOCK:
+	case S_IFLNK:
+	case S_IFDIR:
+	case S_IFIFO:
+		SSDFS_ERR("device %s has invalid type\n",
+			  env->dev_name);
+		return -EOPNOTSUPP;
+
+	case S_IFCHR:
+		/* mtd device type */
+		if (major(stat.st_rdev) != SSDFS_MTD_MAJOR_DEV) {
+			SSDFS_ERR("non-mtd character device number %u\n",
+				  major(stat.st_rdev));
+			return -EOPNOTSUPP;
+		}
+
+		err = ioctl(env->fd, MEMGETINFO, &mtd);
+		if (err) {
+			SSDFS_ERR("mtd ioctl failed for %s: %s\n",
+				  env->dev_name, strerror(errno));
+			return errno;
+		}
+
+		env->erase_size = mtd.erasesize;
+		/* check erase size */
+		{
+			int shift = ffs(mtd.erasesize) - 1;
+			if (mtd.erasesize != 1 << shift) {
+				SSDFS_ERR("erasesize must be a power of 2\n");
+				return -EINVAL;
+			}
+		}
+		/* check writesize */
+		{
+			int shift = ffs(mtd.writesize) - 1;
+			if (mtd.writesize != 1 << shift) {
+				SSDFS_ERR("writesize must be a power of 2\n");
+				return -EINVAL;
+			}
+		}
+
+		env->fs_size = mtd.size;
+		env->dev_ops = &mtd_ops;
+		env->device_type = SSDFS_MTD_DEVICE;
+		break;
+
+	case S_IFREG:
+		/* regular file */
+		env->fs_size = stat.st_size;
+		env->dev_ops = &bdev_ops;
+		env->device_type = SSDFS_BLK_DEVICE;
+		break;
+
+	case S_IFBLK:
+		/* block device type */
+		err = ioctl(env->fd, BLKGETSIZE64, &env->fs_size);
+		if (err) {
+			SSDFS_ERR("block ioctl failed for %s: %s\n",
+				  env->dev_name, strerror(errno));
+			return errno;
+		}
+		env->dev_ops = &bdev_ops;
+		env->device_type = SSDFS_BLK_DEVICE;
+		break;
+
+	default:
+		SSDFS_ERR("device %s has unknown type\n",
+			  env->dev_name);
+		BUG();
+	}
+
+	return 0;
+}
