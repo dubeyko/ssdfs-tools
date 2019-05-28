@@ -36,7 +36,7 @@
 #include <zlib.h>
 #include <mtd/mtd-abi.h>
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 
 __le32 ssdfs_crc32_le(void *data, size_t len)
 {

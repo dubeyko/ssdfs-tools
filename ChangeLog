@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.1.01 [May 27, 2019]
+    (*) Fix compilation errors - reimplement SSDFS constants (step 1).
+
 v.1.00 [May 26, 2019]
     (*) WDC has released incomplete source code.
 
