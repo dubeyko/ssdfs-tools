@@ -17,7 +17,7 @@
  *                  Zvonimir Bandic <Zvonimir.Bandic@wdc.com>
  */
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 
 /************************************************************************
  *                       Write/Erase operations                         *

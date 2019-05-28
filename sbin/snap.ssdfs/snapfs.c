@@ -19,7 +19,7 @@
 
 #include <stdio.h>
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 
 static void print_version(void)
 {

@@ -20,7 +20,7 @@
 #include <sys/ioctl.h>
 #include <mtd/mtd-abi.h>
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 
 /************************************************************************
  *                       Write/Erase operations                         *

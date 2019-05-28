@@ -17,7 +17,7 @@
  *                  Zvonimir Bandic <Zvonimir.Bandic@wdc.com>
  */
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 #include "segbmap.h"
 
 u32 SEG_BMAP_BYTES(u64 items_count)

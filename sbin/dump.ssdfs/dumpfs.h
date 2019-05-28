@@ -28,7 +28,7 @@
 
 #define dumpfs_fmt(fmt) "dump.ssdfs: " SSDFS_UTILS_VERSION ": " fmt
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 
 #define SSDFS_DUMPFS_INFO(show, fmt, ...) \
 	do { \

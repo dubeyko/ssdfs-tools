@@ -28,7 +28,7 @@
 
 #define mkfs_fmt(fmt) "mkfs.ssdfs: " SSDFS_UTILS_VERSION ": " fmt
 
-#include "ssdfs_utils.h"
+#include "ssdfs_tools.h"
 #include "segbmap.h"
 
 #define SSDFS_MKFS_INFO(show, fmt, ...) \
