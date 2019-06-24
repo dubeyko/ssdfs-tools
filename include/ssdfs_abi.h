@@ -1991,12 +1991,14 @@ struct ssdfs_peb_table_fragment_header {
 } __attribute__((packed));
 
 /* PEB table fragment's flags */
-#define SSDFS_PEBTBL_UNDER_RECOVERING		(1 << 0)
-#define SSDFS_PEBTBL_BADBLK_EXIST		(1 << 1)
-#define SSDFS_PEBTBL_TRY_CORRECT_PEBS_AGAIN	(1 << 2)
+#define SSDFS_PEBTBL_FRAG_ZLIB_COMPR		(1 << 0)
+#define SSDFS_PEBTBL_FRAG_LZO_COMPR		(1 << 1)
+#define SSDFS_PEBTBL_UNDER_RECOVERING		(1 << 2)
+#define SSDFS_PEBTBL_BADBLK_EXIST		(1 << 3)
+#define SSDFS_PEBTBL_TRY_CORRECT_PEBS_AGAIN	(1 << 4)
 #define SSDFS_PEBTBL_FIND_RECOVERING_PEBS \
 	(SSDFS_PEBTBL_UNDER_RECOVERING | SSDFS_PEBTBL_BADBLK_EXIST)
-#define SSDFS_PEBTBL_FLAGS_MASK			0x7
+#define SSDFS_PEBTBL_FLAGS_MASK			0x1F
 
 /* PEB table recover thresholds */
 #define SSDFS_PEBTBL_FIRST_RECOVER_TRY		(0)

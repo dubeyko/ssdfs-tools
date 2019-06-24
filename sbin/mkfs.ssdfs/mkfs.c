@@ -68,6 +68,7 @@ static struct ssdfs_volume_layout volume_layout = {
 	.maptbl.portions_per_fragment = SSDFS_MAPTBL_FRAG_PER_PEB_DEFAULT,
 	.maptbl.log_pages = U16_MAX,
 	.maptbl.migration_threshold = U16_MAX,
+	.maptbl.reserved_pebs_per_fragment = U16_MAX,
 	.maptbl.compression = SSDFS_UNKNOWN_COMPRESSION,
 	.btree.node_size = SSDFS_8KB,
 	.btree.min_index_area_size = 0,

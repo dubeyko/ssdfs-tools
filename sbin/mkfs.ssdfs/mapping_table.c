@@ -197,6 +197,11 @@ define_stripes_per_portion:
 		return -E2BIG;
 	}
 
+	if (layout->maptbl.reserved_pebs_per_fragment >= U16_MAX) {
+		layout->maptbl.reserved_pebs_per_fragment =
+			SSDFS_MAPTBL_RESERVED_PEBS_DEFAULT;
+	}
+
 	layout->maptbl.maptbl_pebs = maptbl_pebs;
 	layout->maptbl.lebtbl_portion_bytes = lebtbl_portion_bytes;
 	layout->maptbl.pebtbl_portion_bytes = pebtbl_portion_bytes;
@@ -349,6 +354,8 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 	struct ssdfs_peb_table_fragment_header *hdr;
 	size_t hdr_size = sizeof(struct ssdfs_peb_table_fragment_header);
 	u16 pebs_per_portion = layout->maptbl.pebs_per_portion;
+	u16 reserved_pebs_pct = layout->maptbl.reserved_pebs_per_fragment;
+	u64 reserved_pebs;
 	u16 stripes_per_portion;
 	u32 peb_desc_per_stripe;
 	u64 pebs_per_volume;
@@ -395,8 +402,11 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 	hdr->start_peb = cpu_to_le64(start_peb);
 	BUG_ON(pebs_count >= U16_MAX);
 	hdr->pebs_count = cpu_to_le16(pebs_count);
-	hdr->unused_pebs = cpu_to_le16(pebs_count);
-	hdr->reserved_pebs = 0;
+
+	reserved_pebs = (pebs_count * reserved_pebs_pct) / 100;
+	BUG_ON(reserved_pebs >= U16_MAX);
+	hdr->unused_pebs = cpu_to_le16((u16)(pebs_count - reserved_pebs));
+	hdr->reserved_pebs = cpu_to_le16((u16)reserved_pebs);
 
 	hdr->stripe_id = cpu_to_le16(stripe_index);
 	hdr->portion_id = cpu_to_le16(portion_index);

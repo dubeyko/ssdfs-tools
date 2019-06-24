@@ -52,7 +52,9 @@ void print_usage(void)
 	SSDFS_INFO("\t [-L|--label]\t\t  set a volume label.\n");
 	SSDFS_INFO("\t [-M|--maptbl has_copy,stripes_per_fragment=value,"
 		   "fragments_per_peb=value,log_pages=value,"
-		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
+		   "migration_threshold=value,"
+		   "reserved_pebs_per_fragment=percentage,"
+		   "compression=(none|zlib|lzo)]\t  "
 		   "PEB mapping table options.\n");
 	SSDFS_INFO("\t [-m|--migration-threshold]  max amount of migration PEBs "
 		   "for segment.\n");
@@ -233,6 +235,17 @@ static void check_migration_threshold(int value)
 	}
 }
 
+static void check_reserved_pebs_per_fragment(int value)
+{
+	if (value == 0 || value > 80) {
+		SSDFS_ERR("invalid reserved PEBs per fragment %d option: "
+			  "Please, use any value 1%%-80%% in the range\n",
+			  value);
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+}
+
 static int get_compression_id(char *value)
 {
 	int id = SSDFS_UNCOMPRESSED_BLOB;
@@ -365,6 +378,7 @@ void parse_options(int argc, char *argv[],
 		MAPTBL_FRAGS_PER_PEB_OPT,
 		MAPTBL_LOG_PAGES_OPT,
 		MAPTBL_MIGRATION_THRESHOLD_OPT,
+		MAPTBL_RESERVED_PEBS_PER_FRAGMENT_OPT,
 		MAPTBL_COMPRESSION_OPT,
 	};
 	char *const maptbl_tokens[] = {
@@ -373,6 +387,8 @@ void parse_options(int argc, char *argv[],
 		[MAPTBL_FRAGS_PER_PEB_OPT]	 = "fragments_per_peb",
 		[MAPTBL_LOG_PAGES_OPT]		 = "log_pages",
 		[MAPTBL_MIGRATION_THRESHOLD_OPT] = "migration_threshold",
+		[MAPTBL_RESERVED_PEBS_PER_FRAGMENT_OPT] =
+					    "reserved_pebs_per_fragment",
 		[MAPTBL_COMPRESSION_OPT]	 = "compression",
 		NULL
 	};
@@ -506,6 +522,12 @@ void parse_options(int argc, char *argv[],
 					count = atoi(value);
 					check_migration_threshold(count);
 					maptbl->migration_threshold =
+								    (u16)count;
+					break;
+				case MAPTBL_RESERVED_PEBS_PER_FRAGMENT_OPT:
+					count = atoi(value);
+					check_reserved_pebs_per_fragment(count);
+					maptbl->reserved_pebs_per_fragment =
 								    (u16)count;
 					break;
 				case MAPTBL_COMPRESSION_OPT:

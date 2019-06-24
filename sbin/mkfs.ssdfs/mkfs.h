@@ -196,6 +196,7 @@ struct ssdfs_segbmap_layout {
  * @portions_per_peb: count of maptbl's portions per PEB
  * @log_pages: count of pages in the full log
  * @migration_threshold: max amount of migrating PEBs for segment
+ * @reserved_pebs_per_fragment: percentage of reserved PEBs for fragment
  * @compression: compression type
  * @maptbl_pebs: count of PEBs for the whole mapping table
  * @lebtbl_portion_bytes: LEB table's fragments size for one maptbl portion
@@ -213,6 +214,7 @@ struct ssdfs_maptbl_layout {
 	u16 portions_per_fragment;
 	u16 log_pages;
 	u16 migration_threshold;
+	u16 reserved_pebs_per_fragment;
 	int compression;
 
 	/* layout */
