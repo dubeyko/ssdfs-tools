@@ -24,6 +24,274 @@
  ************************************************************************/
 
 static
+void ssdfs_dumpfs_parse_btree_descriptor(struct ssdfs_btree_descriptor *desc)
+{
+	u8 *magic = (u8 *)&desc->magic;
+	u16 flags = le16_to_cpu(desc->flags);
+	u32 node_size = 1 << desc->log_node_size;
+	u16 index_size = le16_to_cpu(desc->index_size);
+	u16 item_size = le16_to_cpu(desc->item_size);
+	u16 index_area_min_size = le16_to_cpu(desc->index_area_min_size);
+
+	SSDFS_INFO("B-TREE HEADER:\n");
+
+	SSDFS_INFO("MAGIC: %c%c%c%c\n",
+		   *magic, *(magic + 1),
+		   *(magic + 2), *(magic + 3));
+
+	SSDFS_INFO("B-TREE FLAGS: ");
+
+	if (flags & SSDFS_BTREE_DESC_INDEX_AREA_RESIZABLE)
+		SSDFS_INFO("SSDFS_BTREE_DESC_INDEX_AREA_RESIZABLE ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	switch (desc->type) {
+	case SSDFS_INODES_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_INODES_BTREE\n");
+		break;
+
+	case SSDFS_DENTRIES_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_DENTRIES_BTREE\n");
+		break;
+
+	case SSDFS_EXTENTS_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_EXTENTS_BTREE\n");
+		break;
+
+	case SSDFS_SHARED_EXTENTS_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_SHARED_EXTENTS_BTREE\n");
+		break;
+
+	case SSDFS_XATTR_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_XATTR_BTREE\n");
+		break;
+
+	case SSDFS_SHARED_XATTR_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_SHARED_XATTR_BTREE\n");
+		break;
+
+	case SSDFS_SHARED_DICTIONARY_BTREE:
+		SSDFS_INFO("B-TREE TYPE: SSDFS_SHARED_DICTIONARY_BTREE\n");
+		break;
+
+	default:
+		SSDFS_INFO("B-TREE TYPE: UNKNOWN_BTREE_TYPE\n");
+		break;
+	}
+
+	SSDFS_INFO("NODE_SIZE: %u bytes\n", node_size);
+	SSDFS_INFO("PAGES_PER_NODE: %u\n", desc->pages_per_node);
+	SSDFS_INFO("NODE_PTR_SIZE: %u bytes\n", desc->node_ptr_size);
+	SSDFS_INFO("INDEX_SIZE: %u bytes\n", index_size);
+	SSDFS_INFO("ITEM_SIZE: %u bytes\n", item_size);
+	SSDFS_INFO("INDEX_AREA_MIN_SIZE: %u bytes\n", index_area_min_size);
+}
+
+static
+void ssdfs_dumpfs_parse_dentries_btree_descriptor(struct ssdfs_dentries_btree_descriptor *tree)
+{
+	SSDFS_INFO("DENTRIES B-TREE HEADER:\n");
+
+	ssdfs_dumpfs_parse_btree_descriptor(&tree->desc);
+}
+
+static
+void ssdfs_dumpfs_parse_extents_btree_descriptor(struct ssdfs_extents_btree_descriptor *tree)
+{
+	SSDFS_INFO("EXTENTS B-TREE HEADER:\n");
+
+	ssdfs_dumpfs_parse_btree_descriptor(&tree->desc);
+}
+
+static
+void ssdfs_dumpfs_parse_xattr_btree_descriptor(struct ssdfs_xattr_btree_descriptor *tree)
+{
+	SSDFS_INFO("XATTRS B-TREE HEADER:\n");
+
+	ssdfs_dumpfs_parse_btree_descriptor(&tree->desc);
+}
+
+static
+void ssdfs_dumpfs_parse_maptbl_sb_header(struct ssdfs_segment_header *hdr)
+{
+	struct ssdfs_maptbl_sb_header *maptbl = &hdr->volume_hdr.maptbl;
+	u32 fragments_count = le32_to_cpu(maptbl->fragments_count);
+	u32 fragment_bytes = le32_to_cpu(maptbl->fragment_bytes);
+	u64 last_peb_recover_cno = le64_to_cpu(maptbl->last_peb_recover_cno);
+	u64 lebs_count = le64_to_cpu(maptbl->lebs_count);
+	u64 pebs_count = le64_to_cpu(maptbl->pebs_count);
+	u16 fragments_per_seg = le16_to_cpu(maptbl->fragments_per_seg);
+	u16 fragments_per_peb = le16_to_cpu(maptbl->fragments_per_peb);
+	u16 flags = le16_to_cpu(maptbl->flags);
+	u16 pre_erase_pebs = le16_to_cpu(maptbl->pre_erase_pebs);
+	u16 lebs_per_fragment = le16_to_cpu(maptbl->lebs_per_fragment);
+	u16 pebs_per_fragment = le16_to_cpu(maptbl->pebs_per_fragment);
+	u16 pebs_per_stripe = le16_to_cpu(maptbl->pebs_per_stripe);
+	u16 stripes_per_fragment = le16_to_cpu(maptbl->stripes_per_fragment);
+	int i;
+
+	SSDFS_INFO("MAPPING TABLE HEADER:\n");
+
+	SSDFS_INFO("FRAGMENTS_COUNT: %u\n", fragments_count);
+	SSDFS_INFO("FRAGMENT_BYTES: %u\n", fragment_bytes);
+	SSDFS_INFO("LAST_PEB_RECOVER_CNO: %llu\n", last_peb_recover_cno);
+	SSDFS_INFO("LEBS_COUNT: %llu\n", lebs_count);
+	SSDFS_INFO("PEBS_COUNT: %llu\n", pebs_count);
+	SSDFS_INFO("FRAGMENTS_PER_SEGMENT: %u\n", fragments_per_seg);
+	SSDFS_INFO("FRAGMENTS_PER_PEB: %u\n", fragments_per_peb);
+	SSDFS_INFO("PRE_ERASE_PEBS: %u\n", pre_erase_pebs);
+	SSDFS_INFO("LEBS_PER_FRAGMENT: %u\n", lebs_per_fragment);
+	SSDFS_INFO("PEBS_PER_FRAGMENT: %u\n", pebs_per_fragment);
+	SSDFS_INFO("PEBS_PER_STRIPE: %u\n", pebs_per_stripe);
+	SSDFS_INFO("STRIPES_PER_FRAGMENT: %u\n", stripes_per_fragment);
+
+	SSDFS_INFO("MAPPING TABLE FLAGS: ");
+
+	if (flags & SSDFS_MAPTBL_HAS_COPY)
+		SSDFS_INFO("SSDFS_MAPTBL_HAS_COPY ");
+
+	if (flags & SSDFS_MAPTBL_ERROR)
+		SSDFS_INFO("SSDFS_MAPTBL_ERROR ");
+
+	if (flags & SSDFS_MAPTBL_MAKE_ZLIB_COMPR)
+		SSDFS_INFO("SSDFS_MAPTBL_MAKE_ZLIB_COMPR ");
+
+	if (flags & SSDFS_MAPTBL_MAKE_LZO_COMPR)
+		SSDFS_INFO("SSDFS_MAPTBL_MAKE_LZO_COMPR ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	SSDFS_INFO("MAPPING TABLE EXTENTS:\n");
+
+	for (i = 0; i < SSDFS_MAPTBL_RESERVED_EXTENTS; i++) {
+		struct ssdfs_meta_area_extent *extent;
+
+		extent = &maptbl->extents[i][SSDFS_MAIN_MAPTBL_SEG];
+
+		SSDFS_INFO("extent[%d][MAIN]: start_id %llu, len %u, ",
+			   i,
+			   le64_to_cpu(extent->start_id),
+			   le32_to_cpu(extent->len));
+
+		switch (le16_to_cpu(extent->type)) {
+		case SSDFS_EMPTY_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_EMPTY_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_SEG_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_SEG_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_PEB_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_PEB_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_BLK_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_BLK_EXTENT_TYPE, ");
+			break;
+
+		default:
+			SSDFS_INFO("UNKNOWN_EXTENT_TYPE, ");
+			break;
+		}
+
+		SSDFS_INFO("flags %#x\n",
+			   le16_to_cpu(extent->flags));
+
+		extent = &maptbl->extents[i][SSDFS_COPY_MAPTBL_SEG];
+
+		SSDFS_INFO("extent[%d][COPY]: start_id %llu, len %u, ",
+			   i,
+			   le64_to_cpu(extent->start_id),
+			   le32_to_cpu(extent->len));
+
+		switch (le16_to_cpu(extent->type)) {
+		case SSDFS_EMPTY_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_EMPTY_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_SEG_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_SEG_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_PEB_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_PEB_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_BLK_EXTENT_TYPE:
+			SSDFS_INFO("SSDFS_BLK_EXTENT_TYPE, ");
+			break;
+
+		default:
+			SSDFS_INFO("UNKNOWN_EXTENT_TYPE, ");
+			break;
+		}
+
+		SSDFS_INFO("flags %#x\n",
+			   le16_to_cpu(extent->flags));
+	}
+}
+
+static
+void ssdfs_dumpfs_parse_segbmap_sb_header(struct ssdfs_segment_header *hdr)
+{
+	struct ssdfs_segbmap_sb_header *segbmap = &hdr->volume_hdr.segbmap;
+	u16 fragments_count = le16_to_cpu(segbmap->fragments_count);
+	u16 fragments_per_seg = le16_to_cpu(segbmap->fragments_per_seg);
+	u16 fragments_per_peb = le16_to_cpu(segbmap->fragments_per_peb);
+	u16 fragment_size = le16_to_cpu(segbmap->fragment_size);
+	u32 bytes_count = le32_to_cpu(segbmap->bytes_count);
+	u16 flags = le16_to_cpu(segbmap->flags);
+	u16 segs_count = le16_to_cpu(segbmap->segs_count);
+	int i;
+
+	SSDFS_INFO("SEGMENT BITMAP HEADER:\n");
+
+	SSDFS_INFO("FRAGMENTS_COUNT: %u\n", fragments_count);
+	SSDFS_INFO("FRAGMENTS_PER_SEGMENT: %u\n", fragments_per_seg);
+	SSDFS_INFO("FRAGMENTS_PER_PEB: %u\n", fragments_per_peb);
+	SSDFS_INFO("FRAGMENTS_SIZE: %u bytes\n", fragment_size);
+	SSDFS_INFO("BYTES_COUNT: %u bytes\n", bytes_count);
+	SSDFS_INFO("SEGMENTS_COUNT: %u\n", segs_count);
+
+	SSDFS_INFO("SEGMENT BITMAP FLAGS: ");
+
+	if (flags & SSDFS_SEGBMAP_HAS_COPY)
+		SSDFS_INFO("SSDFS_SEGBMAP_HAS_COPY ");
+
+	if (flags & SSDFS_SEGBMAP_ERROR)
+		SSDFS_INFO("SSDFS_SEGBMAP_ERROR ");
+
+	if (flags & SSDFS_SEGBMAP_MAKE_ZLIB_COMPR)
+		SSDFS_INFO("SSDFS_SEGBMAP_MAKE_ZLIB_COMPR ");
+
+	if (flags & SSDFS_SEGBMAP_MAKE_LZO_COMPR)
+		SSDFS_INFO("SSDFS_SEGBMAP_MAKE_LZO_COMPR ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	SSDFS_INFO("SEGMENT BITMAP SEGMENTS:\n");
+
+	for (i = 0; i < SSDFS_SEGBMAP_SEGS; i++) {
+		SSDFS_INFO("SEG[%d][MAIN]: %llu; SEG[%d][COPY]: %llu\n",
+			   i,
+			   le64_to_cpu(segbmap->segs[i][SSDFS_MAIN_SEGBMAP_SEG]),
+			   i,
+			   le64_to_cpu(segbmap->segs[i][SSDFS_COPY_SEGBMAP_SEG]));
+	}
+}
+
+static
 void ssdfs_dumpfs_parse_segment_header(struct ssdfs_segment_header *hdr)
 {
 	struct ssdfs_volume_header *vh = &hdr->volume_hdr;
@@ -224,6 +492,33 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_segment_header *hdr)
 	SSDFS_INFO("LOG_FOOTER: offset %u, size %u\n",
 		   le32_to_cpu(desc->offset),
 		   le32_to_cpu(desc->size));
+
+	SSDFS_INFO("\n");
+
+	SSDFS_INFO("PREV_MIGRATING_PEB: migration_id %u\n",
+		   hdr->peb_migration_id[SSDFS_PREV_MIGRATING_PEB]);
+	SSDFS_INFO("CUR_MIGRATING_PEB: migration_id %u\n",
+		   hdr->peb_migration_id[SSDFS_CUR_MIGRATING_PEB]);
+
+	SSDFS_INFO("\n");
+
+	ssdfs_dumpfs_parse_segbmap_sb_header(hdr);
+
+	SSDFS_INFO("\n");
+
+	ssdfs_dumpfs_parse_maptbl_sb_header(hdr);
+
+	SSDFS_INFO("\n");
+
+	ssdfs_dumpfs_parse_dentries_btree_descriptor(&vh->dentries_btree);
+
+	SSDFS_INFO("\n");
+
+	ssdfs_dumpfs_parse_extents_btree_descriptor(&vh->extents_btree);
+
+	SSDFS_INFO("\n");
+
+	ssdfs_dumpfs_parse_xattr_btree_descriptor(&vh->xattr_btree);
 }
 
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
@@ -281,6 +576,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 	}
 
 	magic = &sg_buf.volume_hdr.magic;
+
 	if (le32_to_cpu(magic->common) != SSDFS_SUPER_MAGIC ||
 	    le16_to_cpu(magic->key) != SSDFS_SEGMENT_HDR_MAGIC) {
 		if (env->peb.log_size == U32_MAX) {
@@ -316,6 +612,13 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 
 		offset += env->peb.log_index * env->peb.log_size;
 		size = env->peb.log_size;
+	}
+
+	if (le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC ||
+	    le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC) {
+		ssdfs_dumpfs_parse_segment_header(&sg_buf);
+	} else {
+		SSDFS_INFO("PEB IS EMPTY\n");
 	}
 
 	if (env->is_raw_dump_requested) {

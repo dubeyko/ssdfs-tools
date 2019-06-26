@@ -21,6 +21,35 @@
 
 #define SSDFS_DUMPFS_PEB_SEARCH_SHIFT	(1)
 
+int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
+		offset = peb_id * peb_size;
+
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read block bitmap: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
 int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 				     u64 peb_id, u32 peb_size,
 				     struct ssdfs_segment_header *hdr)

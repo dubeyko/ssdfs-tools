@@ -37,10 +37,11 @@ void print_usage(void)
 	SSDFS_INFO("Usage: dump.ssdfs <options> [<device> | <image-file>]\n");
 	SSDFS_INFO("Options:\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
+	SSDFS_INFO("\t [-g|--granularity]\t\t  show key volume's details.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
 	SSDFS_INFO("\t [-p|--peb id=value,size=value,"
 		   "log_index=value,log_size=value,"
-		   "parse_header,parse_all]\t  "
+		   "parse_header,parse_all,raw_dump]\t  "
 		   "show PEB dump.\n");
 	SSDFS_INFO("\t [-q|--quiet]\t\t  quiet execution (useful for scripts).\n");
 	SSDFS_INFO("\t [-r|--raw-dump show,offset=value,size=value]\t  "
@@ -65,9 +66,10 @@ void parse_options(int argc, char *argv[],
 	int c;
 	int oi = 1;
 	char *p;
-	char sopts[] = "dhp:qr:V";
+	char sopts[] = "dghp:qr:V";
 	static const struct option lopts[] = {
 		{"debug", 0, NULL, 'd'},
+		{"granularity", 0, NULL, 'g'},
 		{"help", 0, NULL, 'h'},
 		{"peb", 1, NULL, 'p'},
 		{"quiet", 0, NULL, 'q'},
@@ -82,6 +84,7 @@ void parse_options(int argc, char *argv[],
 		PEB_LOG_SIZE_OPT,
 		PEB_PARSE_HEADER_OPT,
 		PEB_PARSE_ALL_OPT,
+		PEB_SHOW_RAW_DUMP_OPT,
 	};
 	char *const peb_dump_tokens[] = {
 		[PEB_ID_OPT]			= "id",
@@ -90,6 +93,7 @@ void parse_options(int argc, char *argv[],
 		[PEB_LOG_SIZE_OPT]		= "log_size",
 		[PEB_PARSE_HEADER_OPT]		= "parse_header",
 		[PEB_PARSE_ALL_OPT]		= "parse_all",
+		[PEB_SHOW_RAW_DUMP_OPT]		= "raw_dump",
 		NULL
 	};
 	enum {
@@ -110,6 +114,9 @@ void parse_options(int argc, char *argv[],
 		switch (c) {
 		case 'd':
 			env->base.show_debug = SSDFS_TRUE;
+			break;
+		case 'g':
+			env->command = SSDFS_DUMP_GRANULARITY_COMMAND;
 			break;
 		case 'h':
 			print_usage();
@@ -160,6 +167,9 @@ void parse_options(int argc, char *argv[],
 					break;
 				case PEB_PARSE_ALL_OPT:
 					peb->parse_flags = SSDFS_PARSE_ALL_MASK;
+					break;
+				case PEB_SHOW_RAW_DUMP_OPT:
+					env->is_raw_dump_requested = SSDFS_TRUE;
 					break;
 				default:
 					print_usage();
