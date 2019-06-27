@@ -23,6 +23,512 @@
  *                     Show PEB dump command                            *
  ************************************************************************/
 
+
+
+
+
+
+
+
+static
+int ssdfs_dumpfs_parse_blk2off_table(void *area_buf, u32 area_size)
+{
+	struct ssdfs_blk2off_table_header *hdr =
+			(struct ssdfs_blk2off_table_header *)area_buf;
+	size_t hdr_size = sizeof(struct ssdfs_blk2off_table_header);
+	struct ssdfs_translation_extent *extents = NULL;
+	size_t extent_desc_size = sizeof(struct ssdfs_translation_extent);
+	struct ssdfs_phys_offset_table_header *pot_table = NULL;
+	size_t pot_desc_size = sizeof(struct ssdfs_phys_offset_table_header);
+	struct ssdfs_signature *magic = &hdr->magic;
+	u8 *magic_common = (u8 *)&magic->common;
+	u8 *magic_key = (u8 *)&magic->key;
+	u16 flags;
+	u16 extents_count;
+	u16 offset_table_off;
+	u32 pot_magic;
+	size_t size;
+	int i;
+	int err;
+
+	if (area_size < hdr_size) {
+		SSDFS_ERR("area_size %u < hdr_size %zu\n",
+			  area_size, hdr_size);
+		return -EINVAL;
+	}
+
+	SSDFS_INFO("BLK2OFF TABLE:\n");
+
+	SSDFS_INFO("MAGIC: %c%c%c%c %c%c\n",
+		   *magic_common, *(magic_common + 1),
+		   *(magic_common + 2), *(magic_common + 3),
+		   *magic_key, *(magic_key + 1));
+	SSDFS_INFO("VERSION: v.%u.%u\n",
+		   magic->version.major,
+		   magic->version.minor);
+
+	SSDFS_INFO("METADATA CHECK:\n");
+	SSDFS_INFO("BYTES: %u\n", le16_to_cpu(hdr->check.bytes));
+
+	flags = le16_to_cpu(hdr->check.flags);
+
+	SSDFS_INFO("METADATA CHECK FLAGS: ");
+
+	if (flags & SSDFS_CRC32)
+		SSDFS_INFO("SSDFS_CRC32 ");
+
+	if (flags & SSDFS_BLK2OFF_TBL_ZLIB_COMPR)
+		SSDFS_INFO("SSDFS_BLK2OFF_TBL_ZLIB_COMPR ");
+
+	if (flags & SSDFS_BLK2OFF_TBL_LZO_COMPR)
+		SSDFS_INFO("SSDFS_BLK2OFF_TBL_LZO_COMPR ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	SSDFS_INFO("CHECKSUM: %#x\n", le32_to_cpu(hdr->check.csum));
+
+	SSDFS_INFO("EXTENTS OFFSET: %u bytes\n",
+			le16_to_cpu(hdr->extents_off));
+	extents_count = le16_to_cpu(hdr->extents_count);
+	SSDFS_INFO("EXTENTS COUNT: %u\n", extents_count);
+	offset_table_off = le16_to_cpu(hdr->offset_table_off);
+	SSDFS_INFO("OFFSETS TABLE OFFSET: %u bytes\n", offset_table_off);
+	SSDFS_INFO("FRAGMENTS COUNT: %u\n",
+			le16_to_cpu(hdr->fragments_count));
+
+	if (extents_count > 1) {
+		size = hdr_size + ((extents_count - 1) * extent_desc_size);
+
+		if (area_size < size) {
+			SSDFS_ERR("area_size %u < size %zu\n",
+				  area_size, size);
+			return -EINVAL;
+		}
+	}
+
+	SSDFS_INFO("\n");
+
+	extents = &hdr->sequence[0];
+
+	for (i = 0; i < extents_count; i++) {
+		SSDFS_INFO("EXTENT#%d:\n", i);
+		SSDFS_INFO("LOGICAL BLOCK: %u\n",
+			    le16_to_cpu(extents[i].logical_blk));
+		SSDFS_INFO("OFFSET_ID: %u\n",
+			    le16_to_cpu(extents[i].offset_id));
+		SSDFS_INFO("LENGTH: %u\n",
+			    le16_to_cpu(extents[i].len));
+		SSDFS_INFO("SEQUENCE_ID: %u\n",
+			    extents[i].sequence_id);
+
+		switch (extents[i].state) {
+		case SSDFS_LOGICAL_BLK_FREE:
+			SSDFS_INFO("EXTENT STATE: SSDFS_LOGICAL_BLK_FREE\n");
+			break;
+
+		case SSDFS_LOGICAL_BLK_USED:
+			SSDFS_INFO("EXTENT STATE: SSDFS_LOGICAL_BLK_USED\n");
+			break;
+
+		default:
+			SSDFS_INFO("EXTENT STATE: UNKNOWN\n");
+			break;
+		}
+
+		SSDFS_INFO("\n");
+	}
+
+	if (area_size < (offset_table_off + pot_desc_size)) {
+		SSDFS_ERR("area_size %u, offset_table_off %u, "
+			  "pot_desc_size %zu\n",
+			  area_size, offset_table_off,
+			  pot_desc_size);
+		return -EINVAL;
+	}
+
+	pot_table = (struct ssdfs_phys_offset_table_header *)((u8*)area_buf +
+							    offset_table_off);
+
+	SSDFS_INFO("PHYSICAL OFFSETS TABLE HEADER:\n");
+	SSDFS_INFO("START_ID: %u\n", le16_to_cpu(pot_table->start_id));
+	SSDFS_INFO("ID_COUNT: %u\n", le16_to_cpu(pot_table->id_count));
+	SSDFS_INFO("BYTE_SIZE: %u bytes\n", le32_to_cpu(pot_table->byte_size));
+	SSDFS_INFO("PEB INDEX: %u\n", le16_to_cpu(pot_table->peb_index));
+	SSDFS_INFO("SEQUENCE_ID: %u\n", le16_to_cpu(pot_table->sequence_id));
+
+	switch (le16_to_cpu(pot_table->type)) {
+	case SSDFS_SEG_OFF_TABLE:
+		SSDFS_INFO("OFFSET TABLE TYPE: SSDFS_SEG_OFF_TABLE\n");
+		break;
+
+	default:
+		SSDFS_INFO("OFFSET TABLE TYPE: UNKNOWN\n");
+		break;
+	}
+
+	flags = le16_to_cpu(pot_table->flags);
+
+	SSDFS_INFO("OFFSET TABLE FLAGS: ");
+
+	if (flags & SSDFS_OFF_TABLE_HAS_CSUM)
+		SSDFS_INFO("SSDFS_OFF_TABLE_HAS_CSUM ");
+
+	if (flags & SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT)
+		SSDFS_INFO("SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	pot_magic = le32_to_cpu(pot_table->magic);
+	magic_common = (u8 *)&pot_magic;
+
+	SSDFS_INFO("OFFSET TABLE MAGIC: %c%c%c%c\n",
+		   *magic_common, *(magic_common + 1),
+		   *(magic_common + 2), *(magic_common + 3));
+
+	SSDFS_INFO("CHECKSUM: %#x\n", le32_to_cpu(pot_table->checksum));
+	SSDFS_INFO("USED LOGICAL BLOCKS: %u\n",
+			le16_to_cpu(pot_table->used_logical_blks));
+	SSDFS_INFO("FREE LOGICAL BLOCKS: %u\n",
+			le16_to_cpu(pot_table->free_logical_blks));
+	SSDFS_INFO("LAST ALLOCATED BLOCK: %u\n",
+			le16_to_cpu(pot_table->last_allocated_blk));
+	SSDFS_INFO("NEXT FRAGMENT OFFSET: %u bytes\n",
+			le16_to_cpu(pot_table->next_fragment_off));
+
+
+
+
+	return 0;
+}
+
+
+
+
+
+
+
+static
+int ssdfs_dumpfs_parse_block_bitmap_fragment(void *area_buf,
+					     u32 offset, u32 size,
+					     u32 *parsed_bytes)
+{
+	struct ssdfs_block_bitmap_fragment *hdr;
+	u16 peb_index;
+	u16 sequence_id;
+	u16 flags;
+	u16 type;
+	u16 last_free_blk;
+	u16 metadata_blks;
+	u16 invalid_blks;
+	u32 compr_bytes;
+	u32 uncompr_bytes;
+	u16 fragments_count;
+	u16 desc_size;
+	int i;
+	int res;
+
+	*parsed_bytes = 0;
+
+	if (size < sizeof(struct ssdfs_block_bitmap_fragment)) {
+		SSDFS_ERR("size %u is lesser than %zu\n",
+			  size,
+			  sizeof(struct ssdfs_block_bitmap_fragment));
+		return -EINVAL;
+	}
+
+	hdr = (struct ssdfs_block_bitmap_fragment *)((u8 *)area_buf + offset);
+	peb_index = le16_to_cpu(hdr->peb_index);
+	sequence_id = le16_to_cpu(hdr->sequence_id);
+	flags = le16_to_cpu(hdr->flags);
+	type = le16_to_cpu(hdr->type);
+	last_free_blk = le16_to_cpu(hdr->last_free_blk);
+	metadata_blks = le16_to_cpu(hdr->metadata_blks);
+	invalid_blks = le16_to_cpu(hdr->invalid_blks);
+
+	SSDFS_INFO("PEB_INDEX: %u\n", peb_index);
+	SSDFS_INFO("SEQUENCE_ID: %u\n", sequence_id);
+
+	SSDFS_INFO("FRAGMENT FLAGS: ");
+
+	if (flags & SSDFS_MIGRATING_BLK_BMAP)
+		SSDFS_INFO("SSDFS_MIGRATING_BLK_BMAP ");
+
+	if (flags & SSDFS_PEB_HAS_EXT_PTR)
+		SSDFS_INFO("SSDFS_PEB_HAS_EXT_PTR ");
+
+	if (flags & SSDFS_PEB_HAS_RELATION)
+		SSDFS_INFO("SSDFS_PEB_HAS_RELATION ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	switch (type) {
+	case SSDFS_SRC_BLK_BMAP:
+		SSDFS_INFO("FRAGMENT TYPE: SSDFS_SRC_BLK_BMAP\n");
+		break;
+
+	case SSDFS_DST_BLK_BMAP:
+		SSDFS_INFO("FRAGMENT TYPE: SSDFS_DST_BLK_BMAP\n");
+		break;
+
+	default:
+		SSDFS_INFO("FRAGMENT TYPE: UNKNOWN\n");
+		break;
+	}
+
+	SSDFS_INFO("LAST_FREE_BLK: %u\n", last_free_blk);
+	SSDFS_INFO("METADATA_BLKS: %u\n", metadata_blks);
+	SSDFS_INFO("INVALID_BLKS: %u\n", invalid_blks);
+
+	compr_bytes = le32_to_cpu(hdr->chain_hdr.compr_bytes);
+	uncompr_bytes = le32_to_cpu(hdr->chain_hdr.uncompr_bytes);
+	fragments_count = le16_to_cpu(hdr->chain_hdr.fragments_count);
+	desc_size = le16_to_cpu(hdr->chain_hdr.desc_size);
+	flags = le16_to_cpu(hdr->chain_hdr.flags);
+
+	SSDFS_INFO("CHAIN HEADER:\n");
+	SSDFS_INFO("COMPRESSED BYTES: %u bytes\n", compr_bytes);
+	SSDFS_INFO("UNCOMPRESSED BYTES: %u bytes\n", uncompr_bytes);
+	SSDFS_INFO("FRAGMENTS COUNT: %u\n", fragments_count);
+	SSDFS_INFO("DESC_SIZE: %u bytes\n", desc_size);
+	SSDFS_INFO("MAGIC: %c\n", hdr->chain_hdr.magic);
+
+	switch (hdr->chain_hdr.type) {
+	case SSDFS_LOG_AREA_CHAIN_HDR:
+		SSDFS_INFO("CHAIN TYPE: SSDFS_LOG_AREA_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK_STATE_CHAIN_HDR:
+		SSDFS_INFO("CHAIN TYPE: SSDFS_BLK_STATE_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK_DESC_CHAIN_HDR:
+		SSDFS_INFO("CHAIN TYPE: SSDFS_BLK_DESC_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK_BMAP_CHAIN_HDR:
+		SSDFS_INFO("CHAIN TYPE: SSDFS_BLK_BMAP_CHAIN_HDR\n");
+		break;
+
+	default:
+		SSDFS_INFO("CHAIN TYPE: UNKNOWN\n");
+		break;
+	}
+
+	SSDFS_INFO("CHAIN FLAGS: ");
+
+	if (flags & SSDFS_MULTIPLE_HDR_CHAIN)
+		SSDFS_INFO("SSDFS_MULTIPLE_HDR_CHAIN ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	*parsed_bytes += sizeof(struct ssdfs_block_bitmap_fragment);
+
+	for (i = 0; i < fragments_count; i++) {
+		size_t frag_desc_size = sizeof(struct ssdfs_fragment_desc);
+		struct ssdfs_fragment_desc *frag;
+		u8 *data;
+
+		if ((size - *parsed_bytes) < frag_desc_size) {
+			SSDFS_ERR("size %u is lesser than %zu\n",
+				  size - *parsed_bytes,
+				  frag_desc_size);
+			return -EINVAL;
+		}
+
+		frag = (struct ssdfs_fragment_desc *)((u8 *)area_buf + offset +
+							*parsed_bytes);
+
+		SSDFS_INFO("\n");
+		SSDFS_INFO("FRAGMENT_INDEX: #%d\n", i);
+		SSDFS_INFO("OFFSET: %u bytes\n",
+			   le32_to_cpu(frag->offset));
+		SSDFS_INFO("COMPRESSED_SIZE: %u bytes\n",
+			   le16_to_cpu(frag->compr_size));
+		SSDFS_INFO("UNCOMPRESSED_SIZE: %u bytes\n",
+			   le16_to_cpu(frag->uncompr_size));
+		SSDFS_INFO("CHECKSUM: %#x\n",
+			   le32_to_cpu(frag->checksum));
+		SSDFS_INFO("SEQUENCE_ID: %u\n",
+			   frag->sequence_id);
+		SSDFS_INFO("MAGIC: %c\n",
+			   frag->magic);
+
+		switch (frag->type) {
+		case SSDFS_FRAGMENT_UNCOMPR_BLOB:
+			SSDFS_INFO("FRAGMENT TYPE: SSDFS_FRAGMENT_UNCOMPR_BLOB\n");
+			break;
+
+		case SSDFS_FRAGMENT_ZLIB_BLOB:
+			SSDFS_INFO("FRAGMENT TYPE: SSDFS_FRAGMENT_ZLIB_BLOB\n");
+			break;
+
+		case SSDFS_FRAGMENT_LZO_BLOB:
+			SSDFS_INFO("FRAGMENT TYPE: SSDFS_FRAGMENT_LZO_BLOB\n");
+			break;
+
+		case SSDFS_DATA_BLK_STATE_DESC:
+			SSDFS_INFO("FRAGMENT TYPE: SSDFS_DATA_BLK_STATE_DESC\n");
+			break;
+
+		case SSDFS_DATA_BLK_DESC:
+			SSDFS_INFO("FRAGMENT TYPE: SSDFS_DATA_BLK_DESC\n");
+			break;
+
+		case SSDFS_NEXT_TABLE_DESC:
+			SSDFS_INFO("FRAGMENT TYPE: SSDFS_NEXT_TABLE_DESC\n");
+			break;
+
+		default:
+			SSDFS_INFO("FRAGMENT TYPE: UNKNOWN\n");
+			break;
+		}
+
+		SSDFS_INFO("FRAGMENT FLAGS: ");
+
+		if (flags & SSDFS_FRAGMENT_HAS_CSUM)
+			SSDFS_INFO("SSDFS_FRAGMENT_HAS_CSUM ");
+
+		if (flags == 0)
+			SSDFS_INFO("NONE");
+
+		SSDFS_INFO("\n");
+
+		*parsed_bytes += frag_desc_size;
+
+		if ((size - *parsed_bytes) < le16_to_cpu(frag->compr_size)) {
+			SSDFS_ERR("size %u is lesser than %u\n",
+				  size - *parsed_bytes,
+				  le16_to_cpu(frag->compr_size));
+			return -EINVAL;
+		}
+
+		data = (u8 *)area_buf + offset + *parsed_bytes;
+
+		SSDFS_INFO("RAW DATA:\n");
+
+		res = ssdfs_dumpfs_show_raw_string(0, data,
+						le16_to_cpu(frag->compr_size));
+		if (res < 0) {
+			SSDFS_ERR("fail to dump raw data: size %u, err %d\n",
+				  le16_to_cpu(frag->compr_size), res);
+			return res;
+		}
+
+		*parsed_bytes += le16_to_cpu(frag->compr_size);
+	}
+
+	SSDFS_INFO("\n");
+
+
+	return 0;
+}
+
+static
+int ssdfs_dumpfs_parse_block_bitmap(void *area_buf, u32 area_size)
+{
+	struct ssdfs_block_bitmap_header *hdr =
+			(struct ssdfs_block_bitmap_header *)area_buf;
+	struct ssdfs_signature *magic = &hdr->magic;
+	u8 *magic_common = (u8 *)&magic->common;
+	u8 *magic_key = (u8 *)&magic->key;
+	u16 fragments_count = le16_to_cpu(hdr->fragments_count);
+	u32 bytes_count = le32_to_cpu(hdr->bytes_count);
+	u8 flags = hdr->flags;
+	u8 type = hdr->type;
+	u32 offset;
+	u32 size;
+	int i;
+	int err;
+
+	if (area_size < bytes_count) {
+		SSDFS_ERR("area_size %u < bytes_count %u\n",
+			  area_size, bytes_count);
+		return -EINVAL;
+	}
+
+	SSDFS_INFO("BLOCK BITMAP:\n");
+
+	SSDFS_INFO("MAGIC: %c%c%c%c %c%c\n",
+		   *magic_common, *(magic_common + 1),
+		   *(magic_common + 2), *(magic_common + 3),
+		   *magic_key, *(magic_key + 1));
+	SSDFS_INFO("VERSION: v.%u.%u\n",
+		   magic->version.major,
+		   magic->version.minor);
+
+	SSDFS_INFO("FRAGMENTS_COUNT: %u\n", fragments_count);
+	SSDFS_INFO("BYTES_COUNT: %u bytes\n", bytes_count);
+
+	SSDFS_INFO("BLOCK BITMAP FLAGS: ");
+
+	if (flags & SSDFS_BLK_BMAP_BACKUP)
+		SSDFS_INFO("SSDFS_BLK_BMAP_BACKUP ");
+
+	if (flags & SSDFS_BLK_BMAP_COMPRESSED)
+		SSDFS_INFO("SSDFS_BLK_BMAP_COMPRESSED ");
+
+	if (flags == 0)
+		SSDFS_INFO("NONE");
+
+	SSDFS_INFO("\n");
+
+	switch (type) {
+	case SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB:
+		SSDFS_INFO("BLOCK BITMAP TYPE: SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB\n");
+		break;
+
+	case SSDFS_BLK_BMAP_ZLIB_BLOB:
+		SSDFS_INFO("BLOCK BITMAP TYPE: SSDFS_BLK_BMAP_ZLIB_BLOB\n");
+		break;
+
+	case SSDFS_BLK_BMAP_LZO_BLOB:
+		SSDFS_INFO("BLOCK BITMAP TYPE: SSDFS_BLK_BMAP_LZO_BLOB\n");
+		break;
+
+	default:
+		SSDFS_INFO("BLOCK BITMAP TYPE: UNKNOWN\n");
+		break;
+	}
+
+	SSDFS_INFO("\n");
+
+	offset = sizeof(struct ssdfs_block_bitmap_header);
+	size = area_size - offset;
+
+	for (i = 0; i < fragments_count; i++) {
+		u32 parsed_bytes = 0;
+
+		SSDFS_INFO("BLOCK BITMAP FRAGMENT: #%d\n", i);
+
+		err = ssdfs_dumpfs_parse_block_bitmap_fragment(area_buf,
+								offset, size,
+								&parsed_bytes);
+		if (err) {
+			SSDFS_ERR("fail to parse block bitmap fragment: "
+				  "offset %u, size %u, err %d\n",
+				  offset, size, err);
+			return err;
+		}
+
+		offset += parsed_bytes;
+		size = area_size - offset;
+	}
+
+	return 0;
+}
+
 static
 void ssdfs_dumpfs_parse_btree_descriptor(struct ssdfs_btree_descriptor *desc)
 {
@@ -521,12 +1027,30 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_segment_header *hdr)
 	ssdfs_dumpfs_parse_xattr_btree_descriptor(&vh->xattr_btree);
 }
 
+static
+int is_ssdfs_dumpfs_area_valid(struct ssdfs_metadata_descriptor *desc)
+{
+	u32 area_offset = le32_to_cpu(desc->offset);
+	u32 area_size = le32_to_cpu(desc->size);
+
+	if (area_size == 0 || area_size >= U32_MAX)
+		return SSDFS_FALSE;
+
+	if (area_offset == 0 || area_offset >= U32_MAX)
+		return SSDFS_FALSE;
+
+	return SSDFS_TRUE;
+}
+
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 {
 	struct ssdfs_segment_header sg_buf;
 	struct ssdfs_signature *magic;
+	struct ssdfs_metadata_descriptor *desc;
+	void *area_buf = NULL;
 	u64 offset;
-	u32 size;
+	u32 area_offset;
+	u32 area_size;
 	int step = 2;
 	int err = 0;
 
@@ -567,6 +1091,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 
 	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
 						env->peb.size,
+						0, env->peb.size,
 						&sg_buf);
 	if (err) {
 		SSDFS_ERR("fail to read PEB's header: "
@@ -592,7 +1117,6 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 
 	if (env->peb.show_all_logs) {
 		offset = env->peb.id * env->peb.size;
-		size = env->peb.size;
 	} else {
 		offset = env->peb.id * env->peb.size;
 
@@ -611,36 +1135,189 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		}
 
 		offset += env->peb.log_index * env->peb.log_size;
-		size = env->peb.log_size;
+	}
+
+	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
+						env->peb.size,
+						env->peb.log_index,
+						env->peb.log_size,
+						&sg_buf);
+	if (err) {
+		SSDFS_ERR("fail to read PEB's header: "
+			  "peb_id %llu, peb_size %u, "
+			  "log_index %u, err %d\n",
+			  env->peb.id, env->peb.size,
+			  env->peb.log_index, err);
+		goto finish_peb_dump;
 	}
 
 	if (le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC ||
 	    le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC) {
+		SSDFS_INFO("PEB_ID %llu, LOG_INDEX %u\n\n",
+			   env->peb.id, env->peb.log_index);
+
 		ssdfs_dumpfs_parse_segment_header(&sg_buf);
+
+		SSDFS_INFO("\n");
+
+		if (env->is_raw_dump_requested) {
+			env->raw_dump.offset = offset;
+			env->raw_dump.size =
+				sizeof(struct ssdfs_segment_header);
+
+			err = ssdfs_dumpfs_show_raw_dump(env);
+			if (err) {
+				SSDFS_ERR("fail to make segment header dump: "
+					  "peb_id %llu, err %d\n",
+					  env->peb.id, err);
+				goto finish_peb_dump;
+			}
+
+			SSDFS_INFO("\n");
+		}
+
+		desc = &sg_buf.desc_array[SSDFS_BLK_BMAP_INDEX];
+		area_offset = le32_to_cpu(desc->offset);
+		area_size = le32_to_cpu(desc->size);
+
+		if (is_ssdfs_dumpfs_area_valid(desc)) {
+			area_buf = malloc(area_size);
+			if (!area_buf) {
+				err = -ENOMEM;
+				SSDFS_ERR("fail to allocate memory: "
+					  "size %u\n", area_size);
+				goto finish_peb_dump;
+			}
+
+			memset(area_buf, 0, area_size);
+
+			err = ssdfs_dumpfs_read_block_bitmap(env,
+							     env->peb.id,
+							     env->peb.size,
+							     env->peb.log_index,
+							     env->peb.log_size,
+							     area_offset,
+							     area_size,
+							     area_buf);
+			if (err) {
+				SSDFS_ERR("fail to read block bitmap: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_index %u, err %d\n",
+					  env->peb.id, env->peb.size,
+					  env->peb.log_index, err);
+				goto finish_parse_block_bitmap;
+			}
+
+			err = ssdfs_dumpfs_parse_block_bitmap(area_buf, area_size);
+			if (err) {
+				SSDFS_ERR("fail to parse block bitmap: "
+					  "peb_id %llu, log_index %u, err %d\n",
+					  env->peb.id, env->peb.log_index, err);
+				goto finish_parse_block_bitmap;
+			}
+
+finish_parse_block_bitmap:
+			free(area_buf);
+			area_buf = NULL;
+
+			if (err)
+				goto finish_peb_dump;
+
+			SSDFS_INFO("\n");
+
+			if (env->is_raw_dump_requested) {
+				env->raw_dump.offset = offset + area_offset;
+				env->raw_dump.size = area_size;
+
+				err = ssdfs_dumpfs_show_raw_dump(env);
+				if (err) {
+					SSDFS_ERR("fail to make block bitmap "
+						  "raw dump: "
+						  "peb_id %llu, err %d\n",
+						  env->peb.id, err);
+					goto finish_peb_dump;
+				}
+
+				SSDFS_INFO("\n");
+			}
+		}
+
+		desc = &sg_buf.desc_array[SSDFS_OFF_TABLE_INDEX];
+		area_offset = le32_to_cpu(desc->offset);
+		area_size = le32_to_cpu(desc->size);
+
+		if (is_ssdfs_dumpfs_area_valid(desc)) {
+			area_buf = malloc(area_size);
+			if (!area_buf) {
+				err = -ENOMEM;
+				SSDFS_ERR("fail to allocate memory: "
+					  "size %u\n", area_size);
+				goto finish_peb_dump;
+			}
+
+			memset(area_buf, 0, area_size);
+
+			err = ssdfs_dumpfs_read_blk2off_table(env,
+							     env->peb.id,
+							     env->peb.size,
+							     env->peb.log_index,
+							     env->peb.log_size,
+							     area_offset,
+							     area_size,
+							     area_buf);
+			if (err) {
+				SSDFS_ERR("fail to read blk2off table: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_index %u, err %d\n",
+					  env->peb.id, env->peb.size,
+					  env->peb.log_index, err);
+				goto finish_parse_blk2off_table;
+			}
+
+			err = ssdfs_dumpfs_parse_blk2off_table(area_buf,
+								area_size);
+			if (err) {
+				SSDFS_ERR("fail to parse blk2off table: "
+					  "peb_id %llu, log_index %u, err %d\n",
+					  env->peb.id, env->peb.log_index, err);
+				goto finish_parse_blk2off_table;
+			}
+
+finish_parse_blk2off_table:
+			free(area_buf);
+			area_buf = NULL;
+
+			if (err)
+				goto finish_peb_dump;
+
+			SSDFS_INFO("\n");
+
+			if (env->is_raw_dump_requested) {
+				env->raw_dump.offset = offset + area_offset;
+				env->raw_dump.size = area_size;
+
+				err = ssdfs_dumpfs_show_raw_dump(env);
+				if (err) {
+					SSDFS_ERR("fail to make blk2off table "
+						  "raw dump: "
+						  "peb_id %llu, err %d\n",
+						  env->peb.id, err);
+					goto finish_peb_dump;
+				}
+
+				SSDFS_INFO("\n");
+			}
+		}
+
+
 	} else {
 		SSDFS_INFO("PEB IS EMPTY\n");
-	}
-
-	if (env->is_raw_dump_requested) {
-		env->raw_dump.offset = offset;
-		env->raw_dump.size = size;
-
-		err = ssdfs_dumpfs_show_raw_dump(env);
-		if (err) {
-			SSDFS_ERR("fail to make raw dump of PEB: "
-				  "id %llu, err %d\n",
-				  env->peb.id, err);
-			goto finish_peb_dump;
-		}
 	}
 
 	SSDFS_DUMPFS_INFO(env->base.show_info,
 			  "[00%d]\t[SUCCESS]\n",
 			  step);
 	step++;
-
-
-	SSDFS_ERR("TODO: implement operation...\n");
 
 finish_peb_dump:
 	return err;

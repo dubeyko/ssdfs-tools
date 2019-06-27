@@ -30,7 +30,6 @@
 #define IS_PRINT(ptr) \
 	(isprint(*(ptr)) ? *(ptr) : '.')
 
-static
 int ssdfs_dumpfs_show_raw_string(u64 offset, const u8 *ptr, u32 len)
 {
 	ssize_t printed = 0;

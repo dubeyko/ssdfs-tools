@@ -2,8 +2,11 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.1.05 [June 27, 2019]
+    (*) [dumpfs] implement PEB's dump functionality (step 2).
+
 v.1.04 [June 26, 2019]
-    (*) [dumpfs] implement PEB's dump functionality.
+    (*) [dumpfs] implement PEB's dump functionality (step 1).
 
 v.1.03 [June 24, 2019]
     (*) [mkfs] fix bugs in mapping table creation functionality.

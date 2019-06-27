@@ -21,8 +21,9 @@
 
 #define SSDFS_DUMPFS_PEB_SEARCH_SHIFT	(1)
 
-int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
+int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
@@ -36,6 +37,38 @@ int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
 		offset = peb_id * peb_size;
 
+	offset += log_index * log_size;
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read blk2off table: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
+		offset = peb_id * peb_size;
+
+	offset += log_index * log_size;
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
@@ -52,6 +85,7 @@ int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 
 int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 				     u64 peb_id, u32 peb_size,
+				     int log_index, u32 log_size,
 				     struct ssdfs_segment_header *hdr)
 {
 	size_t sg_size = sizeof(struct ssdfs_segment_header);
@@ -64,6 +98,8 @@ int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 
 	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
 		offset = peb_id * peb_size;
+
+	offset += log_index * log_size;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, sg_size,
 				      hdr);
@@ -101,6 +137,7 @@ int ssdfs_dumpfs_find_any_valid_peb(struct ssdfs_dumpfs_environment *env,
 		err = ssdfs_dumpfs_read_segment_header(env,
 							offset / peb_size,
 							peb_size,
+							0, peb_size,
 							hdr);
 		if (err) {
 			SSDFS_ERR("fail to read segment header: "

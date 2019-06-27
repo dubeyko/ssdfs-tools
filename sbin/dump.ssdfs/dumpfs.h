@@ -107,7 +107,18 @@ struct ssdfs_dumpfs_environment {
 /* common.c */
 int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 				     u64 peb_id, u32 peb_size,
+				     int log_index, u32 log_size,
 				     struct ssdfs_segment_header *hdr);
+int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf);
+int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf);
 int ssdfs_dumpfs_find_any_valid_peb(struct ssdfs_dumpfs_environment *env,
 				    struct ssdfs_segment_header *hdr);
 void ssdfs_dumpfs_show_key_volume_details(struct ssdfs_dumpfs_environment *env,
@@ -126,6 +137,7 @@ int ssdfs_dumpfs_show_granularity(struct ssdfs_dumpfs_environment *env);
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env);
 
 /* show_raw_dump.c */
+int ssdfs_dumpfs_show_raw_string(u64 offset, const u8 *ptr, u32 len);
 int ssdfs_dumpfs_show_raw_dump(struct ssdfs_dumpfs_environment *env);
 
 #endif /* _SSDFS_UTILS_DUMPFS_H */
