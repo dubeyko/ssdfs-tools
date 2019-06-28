@@ -17,9 +17,115 @@
  *                  Zvonimir Bandic <Zvonimir.Bandic@wdc.com>
  */
 
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "dumpfs.h"
 
 #define SSDFS_DUMPFS_PEB_SEARCH_SHIFT	(1)
+
+int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env)
+{
+#define SSDFS_DUMPFS_PATH_LEN		(256)
+	char buf[SSDFS_DUMPFS_PATH_LEN];
+
+	if (!env->dump_into_files)
+		return -EFAULT;
+
+	memset(buf, 0, SSDFS_DUMPFS_PATH_LEN);
+
+	snprintf(buf, SSDFS_DUMPFS_PATH_LEN - 1,
+		 "%speb-%llu-log-%u-dump.txt",
+		 env->output_folder,
+		 env->peb.id,
+		 env->peb.log_index);
+
+	env->fd = creat(buf, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	if (env->fd == -1) {
+		SSDFS_ERR("unable to create %s: %s\n",
+			  buf, strerror(errno));
+		return errno;
+	}
+
+	env->stream = fdopen(env->fd, "w");
+	if (env->stream == NULL) {
+		SSDFS_ERR("fail to open file's stream: %s\n",
+			  strerror(errno));
+		return errno;
+	}
+
+	return 0;
+}
+
+void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env)
+{
+	fclose(env->stream);
+	close(env->fd);
+}
+
+int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
+		offset = peb_id * peb_size;
+
+	offset += log_index * log_size;
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read log footer: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
+		offset = peb_id * peb_size;
+
+	offset += log_index * log_size;
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read block descriptors array: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
 
 int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,

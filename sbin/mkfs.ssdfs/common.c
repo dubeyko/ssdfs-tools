@@ -26,18 +26,6 @@
  *                      Common creation functionality                   *
  ************************************************************************/
 
-const char *uuid_string(const unsigned char *uuid)
-{
-	static char buf[256];
-
-	sprintf(buf, "%02x%02x%02x%02x-%02x%02x-%02x%02x-" \
-		"%02x%02x-%02x%02x%02x%02x%02x%02x", uuid[0], uuid[1],
-		uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
-		uuid[8], uuid[9], uuid[10], uuid[11], uuid[12],
-		uuid[13], uuid[14], uuid[15]);
-	return buf;
-}
-
 int reserve_segments(struct ssdfs_volume_layout *layout,
 		     int meta_index)
 {

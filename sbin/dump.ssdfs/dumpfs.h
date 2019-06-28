@@ -45,12 +45,18 @@ enum SSDFS_DUMPFS_COMMANDS {
 };
 
 enum SSDFS_DUMPFS_PARSE_FLAGS {
-	SSDFS_PARSE_HEADER,
-	SSDFS_PARSE_FLAGS_MAX
+	SSDFS_PARSE_HEADER		= 1 << 0,
+	SSDFS_PARSE_LOG_FOOTER		= 1 << 1,
+	SSDFS_PARSE_BLOCK_BITMAP	= 1 << 2,
+	SSDFS_PARSE_BLK2OFF_TABLE	= 1 << 3,
+	SSDFS_PARSE_BLOCK_STATE_AREA	= 1 << 4,
+	SSDFS_PARSE_FLAGS_MAX		= 0x1F
 };
 
 #define SSDFS_PARSE_ALL_MASK \
-	(SSDFS_PARSE_HEADER)
+	(SSDFS_PARSE_HEADER | SSDFS_PARSE_LOG_FOOTER | \
+	 SSDFS_PARSE_BLOCK_BITMAP | SSDFS_PARSE_BLK2OFF_TABLE | \
+	 SSDFS_PARSE_BLOCK_STATE_AREA)
 
 /*
  * struct ssdfs_peb_dump_environment - PEB dump environment
@@ -94,6 +100,10 @@ struct ssdfs_raw_dump_environment {
  * @raw_dump: raw dump environment
  * @command: concrete dumpfs execution command
  * @is_raw_dump_requested: is raw dump requested?
+ * @dump_into_files: does it need to dump in files?
+ * @fd: file descriptor to store dump output
+ * @stream: file stream
+ * @output_folder: path to the output folder
  */
 struct ssdfs_dumpfs_environment {
 	struct ssdfs_environment base;
@@ -102,9 +112,16 @@ struct ssdfs_dumpfs_environment {
 
 	int command;
 	int is_raw_dump_requested;
+
+	int dump_into_files;
+	int fd;
+	FILE *stream;
+	const char *output_folder;
 };
 
 /* common.c */
+int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env);
+void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env);
 int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 				     u64 peb_id, u32 peb_size,
 				     int log_index, u32 log_size,
@@ -115,6 +132,16 @@ int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 				   u32 area_offset, u32 size,
 				   void *buf);
 int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf);
+int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   int log_index, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf);
+int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
 				   int log_index, u32 log_size,
 				   u32 area_offset, u32 size,

@@ -45,7 +45,7 @@ static struct ssdfs_dumpfs_environment environment = {
 	.peb.id = U64_MAX,
 	.peb.size = U32_MAX,
 	.peb.show_all_logs = SSDFS_TRUE,
-	.peb.log_index = U16_MAX,
+	.peb.log_index = 0,
 	.peb.log_size = U32_MAX,
 	.peb.parse_flags = 0,
 	.raw_dump.offset = U64_MAX,
@@ -54,6 +54,9 @@ static struct ssdfs_dumpfs_environment environment = {
 	.raw_dump.buf_size = U32_MAX,
 	.command = SSDFS_DUMP_COMMAND_MAX,
 	.is_raw_dump_requested = SSDFS_FALSE,
+	.fd = -1,
+	.stream = NULL,
+	.dump_into_files = SSDFS_FALSE,
 };
 
 /************************************************************************

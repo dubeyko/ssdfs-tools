@@ -39,9 +39,12 @@ void print_usage(void)
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-g|--granularity]\t\t  show key volume's details.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
+	SSDFS_INFO("\t [-o|--output-folder]\t\t  define output folder.\n");
 	SSDFS_INFO("\t [-p|--peb id=value,size=value,"
 		   "log_index=value,log_size=value,"
-		   "parse_header,parse_all,raw_dump]\t  "
+		   "parse_header,parse_log_footer,parse_block_bitmap,"
+		   "parse_blk2off_table,parse_block_state_area,parse_all,"
+		   "raw_dump]\t  "
 		   "show PEB dump.\n");
 	SSDFS_INFO("\t [-q|--quiet]\t\t  quiet execution (useful for scripts).\n");
 	SSDFS_INFO("\t [-r|--raw-dump show,offset=value,size=value]\t  "
@@ -66,11 +69,12 @@ void parse_options(int argc, char *argv[],
 	int c;
 	int oi = 1;
 	char *p;
-	char sopts[] = "dghp:qr:V";
+	char sopts[] = "dgho:p:qr:V";
 	static const struct option lopts[] = {
 		{"debug", 0, NULL, 'd'},
 		{"granularity", 0, NULL, 'g'},
 		{"help", 0, NULL, 'h'},
+		{"output-folder", 1, NULL, 'o'},
 		{"peb", 1, NULL, 'p'},
 		{"quiet", 0, NULL, 'q'},
 		{"raw-dump", 1, NULL, 'r'},
@@ -83,6 +87,10 @@ void parse_options(int argc, char *argv[],
 		PEB_LOG_INDEX_OPT,
 		PEB_LOG_SIZE_OPT,
 		PEB_PARSE_HEADER_OPT,
+		PEB_PARSE_LOG_FOOTER_OPT,
+		PEB_PARSE_BLOCK_BITMAP_OPT,
+		PEB_PARSE_BLK2OFF_TBL_OPT,
+		PEB_PARSE_BLOCK_STATE_OPT,
 		PEB_PARSE_ALL_OPT,
 		PEB_SHOW_RAW_DUMP_OPT,
 	};
@@ -92,6 +100,10 @@ void parse_options(int argc, char *argv[],
 		[PEB_LOG_INDEX_OPT]		= "log_index",
 		[PEB_LOG_SIZE_OPT]		= "log_size",
 		[PEB_PARSE_HEADER_OPT]		= "parse_header",
+		[PEB_PARSE_LOG_FOOTER_OPT]	= "parse_log_footer",
+		[PEB_PARSE_BLOCK_BITMAP_OPT]	= "parse_block_bitmap",
+		[PEB_PARSE_BLK2OFF_TBL_OPT]	= "parse_blk2off_table",
+		[PEB_PARSE_BLOCK_STATE_OPT]	= "parse_block_state_area",
 		[PEB_PARSE_ALL_OPT]		= "parse_all",
 		[PEB_SHOW_RAW_DUMP_OPT]		= "raw_dump",
 		NULL
@@ -121,6 +133,14 @@ void parse_options(int argc, char *argv[],
 		case 'h':
 			print_usage();
 			exit(EXIT_SUCCESS);
+		case 'o':
+			env->dump_into_files = SSDFS_TRUE;
+			env->output_folder = optarg;
+			if (!env->output_folder) {
+				print_usage();
+				exit(EXIT_SUCCESS);
+			}
+			break;
 		case 'p':
 			switch (env->command) {
 			case SSDFS_DUMP_GRANULARITY_COMMAND:
@@ -164,6 +184,18 @@ void parse_options(int argc, char *argv[],
 					break;
 				case PEB_PARSE_HEADER_OPT:
 					peb->parse_flags |= SSDFS_PARSE_HEADER;
+					break;
+				case PEB_PARSE_LOG_FOOTER_OPT:
+					peb->parse_flags |= SSDFS_PARSE_LOG_FOOTER;
+					break;
+				case PEB_PARSE_BLOCK_BITMAP_OPT:
+					peb->parse_flags |= SSDFS_PARSE_BLOCK_BITMAP;
+					break;
+				case PEB_PARSE_BLK2OFF_TBL_OPT:
+					peb->parse_flags |= SSDFS_PARSE_BLK2OFF_TABLE;
+					break;
+				case PEB_PARSE_BLOCK_STATE_OPT:
+					peb->parse_flags |= SSDFS_PARSE_BLOCK_STATE_AREA;
 					break;
 				case PEB_PARSE_ALL_OPT:
 					peb->parse_flags = SSDFS_PARSE_ALL_MASK;

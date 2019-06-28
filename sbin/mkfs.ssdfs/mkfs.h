@@ -392,7 +392,6 @@ void parse_options(int argc, char *argv[],
 		   struct ssdfs_volume_layout *layout);
 
 /* common.c */
-const char *uuid_string(const unsigned char *uuid);
 int reserve_segments(struct ssdfs_volume_layout *layout,
 		     int meta_index);
 int set_extent_start_offset(struct ssdfs_volume_layout *layout,

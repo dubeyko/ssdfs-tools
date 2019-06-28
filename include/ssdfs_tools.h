@@ -35,6 +35,9 @@
 #define SSDFS_INFO(fmt, ...) \
 	fprintf(stdout, fmt, ##__VA_ARGS__)
 
+#define SSDFS_FILE_INFO(stream, fmt, ...) \
+	fprintf(stream, fmt, ##__VA_ARGS__)
+
 #define SSDFS_DBG(show, fmt, ...) \
 	do { \
 		if (show) { \
@@ -90,6 +93,7 @@ struct ssdfs_environment {
 };
 
 /* lib/ssdfs_common.c */
+const char *uuid_string(const unsigned char *uuid);
 __le32 ssdfs_crc32_le(void *data, size_t len);
 int ssdfs_calculate_csum(struct ssdfs_metadata_check *check,
 			 void *buf, size_t buf_size);
