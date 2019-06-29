@@ -32,7 +32,7 @@ int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env)
 	char buf[SSDFS_DUMPFS_PATH_LEN];
 
 	if (!env->dump_into_files)
-		return -EFAULT;
+		return 0;
 
 	memset(buf, 0, SSDFS_DUMPFS_PATH_LEN);
 
@@ -61,6 +61,9 @@ int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env)
 
 void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env)
 {
+	if (!env->dump_into_files)
+		return;
+
 	fclose(env->stream);
 	close(env->fd);
 }
@@ -71,17 +74,14 @@ int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	u64 offset;
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "peb_id: %llu, peb_size %u\n",
 		  peb_id, peb_size);
 
-	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
-		offset = peb_id * peb_size;
-
-	offset += log_index * log_size;
+	offset = peb_id * peb_size;
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
@@ -102,17 +102,14 @@ int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	u64 offset;
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "peb_id: %llu, peb_size %u\n",
 		  peb_id, peb_size);
 
-	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
-		offset = peb_id * peb_size;
-
-	offset += log_index * log_size;
+	offset = peb_id * peb_size;
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
@@ -133,17 +130,14 @@ int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	u64 offset;
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "peb_id: %llu, peb_size %u\n",
 		  peb_id, peb_size);
 
-	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
-		offset = peb_id * peb_size;
-
-	offset += log_index * log_size;
+	offset = peb_id * peb_size;
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
@@ -164,17 +158,14 @@ int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	u64 offset;
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "peb_id: %llu, peb_size %u\n",
 		  peb_id, peb_size);
 
-	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
-		offset = peb_id * peb_size;
-
-	offset += log_index * log_size;
+	offset = peb_id * peb_size;
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,

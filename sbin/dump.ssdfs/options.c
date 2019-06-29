@@ -40,8 +40,8 @@ void print_usage(void)
 	SSDFS_INFO("\t [-g|--granularity]\t\t  show key volume's details.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
 	SSDFS_INFO("\t [-o|--output-folder]\t\t  define output folder.\n");
-	SSDFS_INFO("\t [-p|--peb id=value,size=value,"
-		   "log_index=value,log_size=value,"
+	SSDFS_INFO("\t [-p|--peb id=value,peb_count=value,size=value,"
+		   "log_index=value,log_count=value,log_size=value,"
 		   "parse_header,parse_log_footer,parse_block_bitmap,"
 		   "parse_blk2off_table,parse_block_state_area,parse_all,"
 		   "raw_dump]\t  "
@@ -83,8 +83,10 @@ void parse_options(int argc, char *argv[],
 	};
 	enum {
 		PEB_ID_OPT = 0,
+		PEB_COUNT_OPT,
 		PEB_SIZE_OPT,
 		PEB_LOG_INDEX_OPT,
+		PEB_LOG_COUNT_OPT,
 		PEB_LOG_SIZE_OPT,
 		PEB_PARSE_HEADER_OPT,
 		PEB_PARSE_LOG_FOOTER_OPT,
@@ -96,8 +98,10 @@ void parse_options(int argc, char *argv[],
 	};
 	char *const peb_dump_tokens[] = {
 		[PEB_ID_OPT]			= "id",
+		[PEB_COUNT_OPT]			= "peb_count",
 		[PEB_SIZE_OPT]			= "size",
 		[PEB_LOG_INDEX_OPT]		= "log_index",
+		[PEB_LOG_COUNT_OPT]		= "log_count",
 		[PEB_LOG_SIZE_OPT]		= "log_size",
 		[PEB_PARSE_HEADER_OPT]		= "parse_header",
 		[PEB_PARSE_LOG_FOOTER_OPT]	= "parse_log_footer",
@@ -168,6 +172,10 @@ void parse_options(int argc, char *argv[],
 					count = atoll(value);
 					peb->id = count;
 					break;
+				case PEB_COUNT_OPT:
+					count = atoll(value);
+					peb->pebs_count = count;
+					break;
 				case PEB_SIZE_OPT:
 					count = atol(value);
 					peb->size = (u32)count;
@@ -176,7 +184,14 @@ void parse_options(int argc, char *argv[],
 					count = atoi(value);
 					ssdfs_check_log_index(count);
 					peb->log_index = (u16)count;
-					peb->show_all_logs = SSDFS_FALSE;
+					break;
+				case PEB_LOG_COUNT_OPT:
+					count = atoi(value);
+					peb->logs_count = (u16)count;
+					if (peb->logs_count > 1)
+						peb->show_all_logs = SSDFS_TRUE;
+					else
+						peb->show_all_logs = SSDFS_FALSE;
 					break;
 				case PEB_LOG_SIZE_OPT:
 					count = atol(value);

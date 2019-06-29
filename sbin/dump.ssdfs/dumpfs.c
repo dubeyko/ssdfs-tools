@@ -40,12 +40,14 @@
 static struct ssdfs_dumpfs_environment environment = {
 	.base.show_debug = SSDFS_FALSE,
 	.base.show_info = SSDFS_TRUE,
-	.base.erase_size = SSDFS_8MB,
+	.base.erase_size = SSDFS_128KB,
 	.base.fs_size = 0,
 	.peb.id = U64_MAX,
+	.peb.pebs_count = U64_MAX,
 	.peb.size = U32_MAX,
 	.peb.show_all_logs = SSDFS_TRUE,
 	.peb.log_index = 0,
+	.peb.logs_count = U16_MAX,
 	.peb.log_size = U32_MAX,
 	.peb.parse_flags = 0,
 	.raw_dump.offset = U64_MAX,
@@ -113,6 +115,19 @@ int main(int argc, char *argv[])
 
 	SSDFS_DUMPFS_INFO(env_ptr->base.show_info,
 			  "[001]\t[SUCCESS]\n");
+
+	if (env_ptr->peb.id >= U64_MAX)
+		env_ptr->peb.id = 0;
+
+	if (env_ptr->peb.pebs_count >= U64_MAX) {
+		env_ptr->peb.pebs_count =
+			env_ptr->base.fs_size / env_ptr->base.erase_size;
+	}
+
+	if (env_ptr->peb.logs_count >= U16_MAX) {
+		env_ptr->peb.logs_count =
+			env_ptr->base.erase_size / SSDFS_512B;
+	}
 
 	switch (env_ptr->command) {
 	case SSDFS_DUMP_GRANULARITY_COMMAND:

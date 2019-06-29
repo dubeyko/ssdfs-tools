@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.1.07 [June 29, 2019]
+    (*) [dumpfs] implement PEB's dump functionality (step 4).
+
 v.1.06 [June 28, 2019]
     (*) [dumpfs] implement PEB's dump functionality (step 3).
 

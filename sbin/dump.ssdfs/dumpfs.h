@@ -61,18 +61,22 @@ enum SSDFS_DUMPFS_PARSE_FLAGS {
 /*
  * struct ssdfs_peb_dump_environment - PEB dump environment
  * @id: PEB's identification number
+ * @pebs_count: count of PEBs in the range
  * @size: PEB size in bytes
  * @show_all_logs: should all logs be shown?
  * @log_index: index of extracting log
+ * @logs_count: count of logs in the range
  * @log_size: full log's size in bytes
  * @parse_flags: what should be parsed?
  */
 struct ssdfs_peb_dump_environment {
 	u64 id;
+	u64 pebs_count;
 	u32 size;
 
 	int show_all_logs;
 	u16 log_index;
+	u16 logs_count;
 	u32 log_size;
 
 	u32 parse_flags;
@@ -119,6 +123,16 @@ struct ssdfs_dumpfs_environment {
 	const char *output_folder;
 };
 
+#define SSDFS_DUMPFS_DUMP(env, fmt, ...)({ \
+	int res; \
+	if (env->dump_into_files) { \
+		res = fprintf(env->stream, fmt, ##__VA_ARGS__); \
+	} else { \
+		res = fprintf(stdout, fmt, ##__VA_ARGS__); \
+	} \
+	res; \
+})
+
 /* common.c */
 int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env);
 void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env);
@@ -164,7 +178,8 @@ int ssdfs_dumpfs_show_granularity(struct ssdfs_dumpfs_environment *env);
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env);
 
 /* show_raw_dump.c */
-int ssdfs_dumpfs_show_raw_string(u64 offset, const u8 *ptr, u32 len);
+int ssdfs_dumpfs_show_raw_string(struct ssdfs_dumpfs_environment *env,
+				 u64 offset, const u8 *ptr, u32 len);
 int ssdfs_dumpfs_show_raw_dump(struct ssdfs_dumpfs_environment *env);
 
 #endif /* _SSDFS_UTILS_DUMPFS_H */

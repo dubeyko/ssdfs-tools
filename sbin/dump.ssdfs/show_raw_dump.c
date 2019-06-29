@@ -30,14 +30,19 @@
 #define IS_PRINT(ptr) \
 	(isprint(*(ptr)) ? *(ptr) : '.')
 
-int ssdfs_dumpfs_show_raw_string(u64 offset, const u8 *ptr, u32 len)
+int ssdfs_dumpfs_show_raw_string(struct ssdfs_dumpfs_environment *env,
+				 u64 offset, const u8 *ptr, u32 len)
 {
 	ssize_t printed = 0;
 	int res = 0;
 	int i;
 
 	/* Show offset */
-	res = printf("%08llX  ", offset);
+	if (env->dump_into_files)
+		res = fprintf(env->stream, "%08llX  ", offset);
+	else
+		res = printf("%08llX  ", offset);
+
 	if (res < 0)
 		return res;
 
@@ -45,17 +50,29 @@ int ssdfs_dumpfs_show_raw_string(u64 offset, const u8 *ptr, u32 len)
 
 	for (i = 0; i < SSDFS_DUMPFS_RAW_STRING_LEN; i++) {
 		if (i == SSDFS_DUMPFS_RAW_STRING_LEN / 2) {
-			res = printf(" ");
+			if (env->dump_into_files)
+				res = fprintf(env->stream, " ");
+			else
+				res = printf(" ");
+
 			if (res < 0)
 				return res;
 		}
 
 		if (i >= len) {
-			res = printf("   ");
+			if (env->dump_into_files)
+				res = fprintf(env->stream, "   ");
+			else
+				res = printf("   ");
+
 			if (res < 0)
 				return res;
 		} else {
-			res = printf("%02x ", *(ptr + i));
+			if (env->dump_into_files)
+				res = fprintf(env->stream, "%02x ", *(ptr + i));
+			else
+				res = printf("%02x ", *(ptr + i));
+
 			if (res < 0)
 				return res;
 		}
@@ -63,23 +80,40 @@ int ssdfs_dumpfs_show_raw_string(u64 offset, const u8 *ptr, u32 len)
 		printed++;
 	}
 
-	res = printf(" |");
+	if (env->dump_into_files)
+		res = fprintf(env->stream, " |");
+	else
+		res = printf(" |");
+
 	if (res < 0)
 		return res;
 
 	for (i = 0; i < SSDFS_DUMPFS_RAW_STRING_LEN; i++) {
 		if (i >= len) {
-			res = printf(" ");
+			if (env->dump_into_files)
+				res = fprintf(env->stream, " ");
+			else
+				res = printf(" ");
+
 			if (res < 0)
 				return res;
 		} else {
-			res = printf("%c", IS_PRINT(ptr + i));
+			if (env->dump_into_files) {
+				res = fprintf(env->stream,
+						"%c", IS_PRINT(ptr + i));
+			} else
+				res = printf("%c", IS_PRINT(ptr + i));
+
 			if (res < 0)
 				return res;
 		}
 	}
 
-	res = printf("|\n");
+	if (env->dump_into_files)
+		res = fprintf(env->stream, "|\n");
+	else
+		res = printf("|\n");
+
 	if (res < 0)
 		return res;
 
@@ -133,7 +167,7 @@ int ssdfs_dumpfs_show_raw_dump(struct ssdfs_dumpfs_environment *env)
 		do {
 			u8 *ptr = env->raw_dump.buf + displayed_bytes;
 
-			res = ssdfs_dumpfs_show_raw_string(offset, ptr,
+			res = ssdfs_dumpfs_show_raw_string(env, offset, ptr,
 							   size - displayed_bytes);
 			if (res < 0) {
 				SSDFS_ERR("fail to show raw dump's string: "
