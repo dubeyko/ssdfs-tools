@@ -54,6 +54,7 @@ static struct ssdfs_volume_layout volume_layout = {
 	.blkbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
 	.blk2off_tbl.has_backup_copy = SSDFS_FALSE,
 	.blk2off_tbl.compression = SSDFS_UNKNOWN_COMPRESSION,
+	.blk2off_tbl.pages_per_seg = U16_MAX,
 	.segbmap.has_backup_copy = SSDFS_FALSE,
 	.segbmap.segs_per_chain = SSDFS_SEGBMAP_SEGS_PER_CHAIN_DEFAULT,
 	.segbmap.fragments_per_peb = SSDFS_SEGBMAP_FRAG_PER_PEB_DEFAULT,
@@ -264,6 +265,7 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 	u32 page_size = layout->page_size;
 	u64 segs_count;
 	u32 pebs_per_seg;
+	u32 pages_per_seg;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "BEFORE_CHECK: fs_size %llu, seg_size %u, "
@@ -319,6 +321,15 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 			   layout->migration_threshold, pebs_per_seg);
 		layout->migration_threshold = pebs_per_seg;
 	}
+
+	pages_per_seg = seg_size / page_size;
+	if (pages_per_seg >= U16_MAX) {
+		SSDFS_ERR("pages_per_seg %u is too huge\n",
+			  pages_per_seg);
+		return -EINVAL;
+	}
+
+	layout->blk2off_tbl.pages_per_seg = pages_per_seg;
 
 	if (layout->blkbmap.compression == SSDFS_UNKNOWN_COMPRESSION)
 		layout->blkbmap.compression = layout->compression;

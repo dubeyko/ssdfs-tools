@@ -190,13 +190,18 @@ int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
-		  "peb_id: %llu, peb_size %u\n",
-		  peb_id, peb_size);
+		  "peb_id %llu, peb_size %u, "
+		  "log_index %d, log_size %u\n",
+		  peb_id, peb_size, log_index, log_size);
 
 	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
 		offset = peb_id * peb_size;
 
 	offset += log_index * log_size;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "offset %llu, size %zu\n",
+		  offset, sg_size);
 
 	err = env->base.dev_ops->read(env->base.fd, offset, sg_size,
 				      hdr);

@@ -151,11 +151,13 @@ struct ssdfs_blkbmap_layout {
  * struct ssdfs_blk2off_table_layout - offsets table creation structure
  * @has_backup_copy: backup copy is present?
  * @compression: compression type
+ * @pages_per_seg: number of pages per segment
  */
 struct ssdfs_blk2off_table_layout {
 	/* creation options */
 	int has_backup_copy;
 	int compression;
+	u16 pages_per_seg;
 };
 
 /*
@@ -369,21 +371,21 @@ struct ssdfs_mkfs_operations {
 	int (*commit)(struct ssdfs_volume_layout *ptr);
 };
 
-#define BLK2OFF_DESC_PER_FRAGMENT() \
-	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_phys_offset_table_header)) / \
+#define OFF_DESC_PER_FRAGMENT() \
+	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_blk2off_table_header) - \
+	 sizeof(struct ssdfs_phys_offset_table_header)) / \
 	 sizeof(struct ssdfs_phys_offset_descriptor))
 
-#define BLK_STATE_PER_FRAGMENT() \
-	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_block_state_descriptor) - \
-	 sizeof(struct ssdfs_fragment_desc)) / \
+#define OFF_DESC_HEADER_SIZE(fragments_count) \
+	(sizeof(struct ssdfs_block_state_descriptor) + \
+	 (fragments_count * sizeof(struct ssdfs_fragment_desc)))
+
+#define BLK_DESC_PER_FRAGMENT() \
+	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_area_block_table)) / \
 	 sizeof(struct ssdfs_block_descriptor))
 
 #define BLK_DESC_TABLE_FRAGMENTS(blks_count) \
-	((blks_count + BLK_STATE_PER_FRAGMENT() - 1) / BLK_STATE_PER_FRAGMENT())
-
-#define BLK_DESC_HEADER_SIZE(fragments_count) \
-	(sizeof(struct ssdfs_block_state_descriptor) + \
-	 (fragments_count * sizeof(struct ssdfs_fragment_desc)))
+	((blks_count + BLK_DESC_PER_FRAGMENT() - 1) / BLK_DESC_PER_FRAGMENT())
 
 /* options.c */
 void print_version(void);

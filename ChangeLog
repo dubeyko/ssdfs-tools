@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.1.08 [June 30, 2019]
+    (*) [mkfs] fix bugs in offset translation table creation.
+
 v.1.07 [June 29, 2019]
     (*) [dumpfs] implement PEB's dump functionality (step 4).
 
