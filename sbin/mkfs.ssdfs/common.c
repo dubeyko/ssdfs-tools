@@ -1044,6 +1044,7 @@ static void prepare_offsets_table_fragment(u8 *fragment, u16 pages_per_seg,
 					   int peb_index,
 					   u16 sequence_id, u8 area_type,
 					   u32 logical_start_page,
+					   u16 logical_blk,
 					   u16 start_id, u16 valid_blks,
 					   u16 rest_blks, u16 *processed_blks)
 {
@@ -1073,9 +1074,10 @@ static void prepare_offsets_table_fragment(u8 *fragment, u16 pages_per_seg,
 		u32 byte_offset = define_block_descriptor_offset(blk_id,
 							blk_desc_fragments);
 		u32 peb_page = logical_start_page + i;
+		u16 blk = logical_blk + i;
 
 		offsets[i].page_desc.logical_offset = cpu_to_le32(peb_page);
-		offsets[i].page_desc.peb_index = cpu_to_le16((u16)peb_index);
+		offsets[i].page_desc.logical_blk = cpu_to_le16(blk);
 		offsets[i].page_desc.peb_page = cpu_to_le16(blk_id);
 
 		offsets[i].blk_state.log_start_page = 0;
@@ -1122,6 +1124,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 				     int peb_index,
 				     struct ssdfs_extent_desc *extent,
 				     u64 logical_byte_offset,
+				     u32 start_logical_blk,
 				     u16 valid_blks)
 {
 	struct ssdfs_blk2off_table_header *tbl_hdr;
@@ -1137,6 +1140,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	u16 rest_blks;
 	u64 logical_start_page;
 	u16 processed_blks = 0;
+	u32 logical_blk;
 	u16 i;
 
 	BUG_ON(!layout || !extent);
@@ -1146,6 +1150,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 		  "layout %p, peb_index %d, extent %p, valid_blks %u\n",
 		  layout, peb_index, extent, valid_blks);
 
+	BUG_ON(start_logical_blk >= U16_MAX);
 	BUG_ON(layout->page_size == 0);
 	BUG_ON(layout->page_size > layout->env.erase_size);
 	pages_per_seg = layout->blk2off_tbl.pages_per_seg;
@@ -1181,7 +1186,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	tbl_hdr->offset_table_off = cpu_to_le16(tbl_hdr_size);
 	tbl_hdr->fragments_count = cpu_to_le16(fragments_count);
 
-	tbl_hdr->sequence[0].logical_blk = 0;
+	tbl_hdr->sequence[0].logical_blk = cpu_to_le16((u16)start_logical_blk);
 	tbl_hdr->sequence[0].offset_id = 0;
 	tbl_hdr->sequence[0].len = cpu_to_le16(valid_blks);
 	tbl_hdr->sequence[0].sequence_id = 0;
@@ -1191,6 +1196,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	rest_blks = valid_blks;
 	logical_start_page = logical_byte_offset / layout->page_size;
 	BUG_ON(logical_start_page >= U32_MAX);
+	logical_blk = start_logical_blk;
 	for (i = 0; i < fragments_count; i++) {
 		u8 *fragment;
 
@@ -1202,12 +1208,15 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 						peb_index, i,
 						SSDFS_LOG_BLK_DESC_AREA,
 						(u32)logical_start_page,
+						(u16)logical_blk,
 						start_id, valid_blks,
 						rest_blks, &processed_blks);
 
 		start_id += processed_blks;
 		rest_blks -= processed_blks;
 		logical_start_page += processed_blks;
+		logical_blk += processed_blks;
+		BUG_ON(start_logical_blk >= U16_MAX);
 	}
 
 	extent->bytes_count = allocation_size;
@@ -1218,6 +1227,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
 			    u64 logical_byte_offset,
+			    u32 start_logical_blk,
 			    u16 valid_blks)
 {
 	struct ssdfs_segment_desc *seg_desc;
@@ -1247,12 +1257,15 @@ int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	extent = &peb_desc->extents[SSDFS_OFFSET_TABLE];
 
 	return __pre_commit_offset_table(layout, peb_index, extent,
-					 logical_byte_offset, valid_blks);
+					 logical_byte_offset,
+					 start_logical_blk,
+					 valid_blks);
 }
 
 int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
 				   u64 logical_byte_offset,
+				   u32 start_logical_blk,
 				   u16 valid_blks)
 {
 	struct ssdfs_segment_desc *seg_desc;
@@ -1282,7 +1295,9 @@ int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 	extent = &peb_desc->extents[SSDFS_OFFSET_TABLE_BACKUP];
 
 	return __pre_commit_offset_table(layout, peb_index, extent,
-					 logical_byte_offset, valid_blks);
+					 logical_byte_offset,
+					 start_logical_blk,
+					 valid_blks);
 }
 
 static void __commit_offset_table(struct ssdfs_volume_layout *layout,

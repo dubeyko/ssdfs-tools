@@ -1633,13 +1633,13 @@ enum {
 /*
  * struct ssdfs_peb_page_descriptor - PEB's page descriptor
  * @logical_offset: logical offset from file's begin in pages
- * @peb_index: PEB's index
+ * @logical_blk: logical block number in the segment
  * @peb_page: PEB's page index
  */
 struct ssdfs_peb_page_descriptor {
 /* 0x0000 */
 	__le32 logical_offset;
-	__le16 peb_index;
+	__le16 logical_blk;
 	__le16 peb_page;
 
 /* 0x0008 */

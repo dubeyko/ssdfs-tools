@@ -426,12 +426,14 @@ void commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
 			    u64 logical_byte_offset,
+			    u32 start_logical_blk,
 			    u16 valid_blks);
 void commit_offset_table(struct ssdfs_volume_layout *layout,
 			 int seg_index, int peb_index);
 int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
 				   u64 logical_byte_offset,
+				   u32 start_logical_blk,
 				   u16 valid_blks);
 void commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				int seg_index, int peb_index);

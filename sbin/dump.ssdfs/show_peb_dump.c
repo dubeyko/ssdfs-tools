@@ -752,8 +752,6 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 	u8 *magic_common;
 	int i;
 
-	*parsed_bytes = 0;
-
 	if (area_size < pot_desc_size) {
 		SSDFS_ERR("area_size %u, pot_desc_size %zu\n",
 			  area_size, pot_desc_size);
@@ -838,11 +836,11 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 							pot_desc_size +
 							(off_desc_size * i));
 
-		SSDFS_DUMPFS_DUMP(env, "BLOCK: %u\n", start_id + i);
+		SSDFS_DUMPFS_DUMP(env, "OFFSET ID: %u\n", start_id + i);
 		SSDFS_DUMPFS_DUMP(env, "LOGICAL OFFSET: %u page(s)\n",
 			    le32_to_cpu(off_desc->page_desc.logical_offset));
-		SSDFS_DUMPFS_DUMP(env, "PEB_INDEX: %u\n",
-			    le16_to_cpu(off_desc->page_desc.peb_index));
+		SSDFS_DUMPFS_DUMP(env, "LOGICAL BLOCK: %u\n",
+			    le16_to_cpu(off_desc->page_desc.logical_blk));
 		SSDFS_DUMPFS_DUMP(env, "PEB_PAGE: %u\n",
 			    le16_to_cpu(off_desc->page_desc.peb_page));
 

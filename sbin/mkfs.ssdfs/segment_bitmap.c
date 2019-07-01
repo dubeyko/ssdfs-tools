@@ -610,6 +610,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	int fragment_index = 0;
 	u32 log_pages = 0;
 	u32 payload_offset_in_bytes = 0;
+	u32 start_logical_blk;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -642,6 +643,8 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	valid_blks = (peb_buffer_size + page_size - 1) / page_size;
 
 	for (i = 0; i < segs_count; i++) {
+		start_logical_blk = 0;
+
 		for (j = 0; j < pebs_per_seg; j++) {
 			struct ssdfs_peb_content *peb_desc;
 			struct ssdfs_extent_desc *extent;
@@ -698,6 +701,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			err = pre_commit_offset_table(layout, seg_index, j,
 							logical_byte_offset,
+							start_logical_blk,
 							valid_blks);
 			if (err)
 				return err;
@@ -785,6 +789,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				err = pre_commit_offset_table_backup(layout,
 							seg_index, j,
 							logical_byte_offset,
+							start_logical_blk,
 							valid_blks);
 				if (err)
 					return err;
@@ -795,6 +800,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			fragment_index++;
 			payload_offset_in_bytes += peb_buffer_size;
+			start_logical_blk += valid_blks;
 		}
 
 		seg_index++;
