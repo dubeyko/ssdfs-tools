@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.2.01 [July 10, 2019]
+    (*) On-disk layout has version 1.0.
+
 v.2.00 [July 01, 2019]
     (*) [mkfs] fix bugs in offset translation table creation (step 2).
 

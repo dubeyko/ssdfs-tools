@@ -49,8 +49,8 @@
 #define SSDFS_DICTIONARY_BNODE_MAGIC		0x534E		/* SN */
 
 /* SSDFS revision */
-#define SSDFS_MAJOR_REVISION		0
-#define SSDFS_MINOR_REVISION		6
+#define SSDFS_MAJOR_REVISION		1
+#define SSDFS_MINOR_REVISION		0
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255

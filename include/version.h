@@ -2,6 +2,6 @@
 #ifndef _SSDFS_UTILS_VERSION_H
 #define _SSDFS_UTILS_VERSION_H
 
-#define SSDFS_UTILS_VERSION "ssdfs-utils v.2.00"
+#define SSDFS_UTILS_VERSION "ssdfs-utils v.2.01"
 
 #endif /* _SSDFS_UTILS_VERSION_H */
