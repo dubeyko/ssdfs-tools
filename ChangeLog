@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.2.02 [July 15, 2019]
+    (*) Release of ssdfs-utils v.2.02.
+
 v.2.01 [July 10, 2019]
     (*) On-disk layout has version 1.0.
 
