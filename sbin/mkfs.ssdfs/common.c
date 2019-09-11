@@ -4,11 +4,11 @@
  *
  * sbin/mkfs.ssdfs/common.c - common creation functionality.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -70,6 +70,9 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 			    struct ssdfs_peb_content *desc,
 			    int extent_index)
 {
+	size_t hdr_size = sizeof(struct ssdfs_segment_header);
+	u32 inline_capacity = PAGE_CACHE_SIZE - hdr_size;
+	u32 bytes_count;
 	u32 offset = desc->extents[SSDFS_SEG_HEADER].offset;
 
 	switch (extent_index) {
@@ -122,7 +125,9 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 		/* pass through */
 
 	case SSDFS_LOG_PAYLOAD:
-		offset += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
+		bytes_count = desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
+		if (bytes_count > inline_capacity)
+			offset += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
 		offset += layout->page_size - 1;
 		offset = (offset / layout->page_size) * layout->page_size;
 		break;
@@ -160,6 +165,8 @@ set_extent_offset:
 u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 			struct ssdfs_peb_content *desc)
 {
+	size_t hdr_size = sizeof(struct ssdfs_segment_header);
+	u32 inline_capacity = PAGE_CACHE_SIZE - hdr_size;
 	u32 bytes_count = 0;
 	u32 pages_count;
 
@@ -167,8 +174,11 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE].bytes_count;
 
-	bytes_count += layout->page_size - 1;
-	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+	if (desc->extents[SSDFS_MAPTBL_CACHE].bytes_count > inline_capacity) {
+		bytes_count += layout->page_size - 1;
+		bytes_count =
+			(bytes_count / layout->page_size) * layout->page_size;
+	}
 
 	bytes_count += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
 
@@ -188,11 +198,6 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 	BUG_ON(bytes_count > layout->env.erase_size);
 
 	pages_count = bytes_count / layout->page_size;
-
-	/* TODO: temporary alignment */
-	pages_count++;
-	while (layout->env.erase_size % (pages_count * layout->page_size))
-		pages_count++;
 
 	return pages_count;
 }
@@ -487,6 +492,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 	struct ssdfs_segment_header *hdr;
 	size_t hdr_len = sizeof(struct ssdfs_segment_header);
 	char *begin_ptr;
+	u32 pages_per_peb;
 	u16 log_pages;
 	u32 seg_flags = 0;
 
@@ -497,29 +503,34 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 	seg_desc = &layout->segs[seg_index];
 	peb_desc = &seg_desc->pebs[peb_index];
 	hdr_ext = &peb_desc->extents[SSDFS_SEG_HEADER];
+	pages_per_peb = layout->env.erase_size / layout->page_size;
+	log_pages = pages_per_peb;
 
 	BUG_ON(!hdr_ext->buf);
 	BUG_ON(blks_count >= USHRT_MAX);
+	BUG_ON(log_pages >= U16_MAX);
 
 	begin_ptr = hdr_ext->buf;
 	hdr = (struct ssdfs_segment_header *)begin_ptr;
 
 	switch (seg_desc->seg_type) {
 	case SSDFS_INITIAL_SNAPSHOT:
-		/* do nothing */
+		log_pages = blks_count;
+		BUG_ON(log_pages == 0);
+		BUG_ON(log_pages >= U16_MAX);
 		break;
 
 	case SSDFS_SUPERBLOCK:
 		log_pages = layout->sb.log_pages;
 		BUG_ON(log_pages == 0);
-		BUG_ON(log_pages == U16_MAX);
+		BUG_ON(log_pages >= U16_MAX);
 		BUG_ON(log_pages != blks_count);
 		break;
 
 	case SSDFS_SEGBMAP:
 		log_pages = layout->segbmap.log_pages;
 		BUG_ON(log_pages == 0);
-		BUG_ON(log_pages == U16_MAX);
+		BUG_ON(log_pages >= U16_MAX);
 		if (log_pages != blks_count)
 			seg_flags |= SSDFS_LOG_IS_PARTIAL;
 		break;
@@ -527,7 +538,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 	case SSDFS_PEB_MAPPING_TABLE:
 		log_pages = layout->maptbl.log_pages;
 		BUG_ON(log_pages == 0);
-		BUG_ON(log_pages == U16_MAX);
+		BUG_ON(log_pages >= U16_MAX);
 		if (log_pages != blks_count)
 			seg_flags |= SSDFS_LOG_IS_PARTIAL;
 		break;
@@ -537,7 +548,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 			   seg_index);
 	}
 
-	hdr->log_pages = cpu_to_le16((u16)blks_count);
+	hdr->log_pages = cpu_to_le16((u16)log_pages);
 
 	if (peb_desc->extents[SSDFS_BLOCK_BITMAP].bytes_count > 0) {
 		extent = &peb_desc->extents[SSDFS_BLOCK_BITMAP];
@@ -588,7 +599,10 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 		extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
 		meta_desc = &hdr->desc_array[SSDFS_LOG_FOOTER_INDEX];
 		prepare_footer_metadata_descriptor(layout, extent, meta_desc);
-		seg_flags |= SSDFS_LOG_HAS_FOOTER;
+		if (seg_flags & SSDFS_LOG_IS_PARTIAL)
+			seg_flags |= SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER;
+		else
+			seg_flags |= SSDFS_LOG_HAS_FOOTER;
 	}
 
 	hdr->seg_flags = cpu_to_le32(seg_flags);
@@ -1742,7 +1756,9 @@ int define_log_footer_layout(struct ssdfs_volume_layout *layout,
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
 	struct ssdfs_extent_desc *extent;
-	size_t footer_len = sizeof(struct ssdfs_log_footer);
+	size_t footer_len = max_t(size_t,
+				sizeof(struct ssdfs_log_footer),
+				sizeof(struct ssdfs_partial_log_header));
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d\n",
@@ -1786,7 +1802,6 @@ int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
 	struct ssdfs_extent_desc *extent;
-	struct ssdfs_log_footer *footer;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d\n",
@@ -1810,6 +1825,43 @@ int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 	extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
 
 	BUG_ON(!extent->buf);
+
+	return 0;
+}
+
+static
+void __commit_log_footer(struct ssdfs_volume_layout *layout,
+			 int seg_index, int peb_index,
+			 u32 blks_count)
+{
+	struct ssdfs_segment_desc *seg_desc;
+	struct ssdfs_peb_content *peb_desc;
+	struct ssdfs_extent_desc *extent;
+	struct ssdfs_log_footer *footer;
+	size_t footer_len = sizeof(struct ssdfs_log_footer);
+	struct ssdfs_metadata_descriptor *meta_desc;
+	u32 log_flags = 0;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "seg_index %d, peb_index %d, blks_count %u\n",
+		  seg_index, peb_index, blks_count);
+
+	if (seg_index >= layout->segs_capacity) {
+		SSDFS_WARN("seg_index %d >= segs_capacity %d\n",
+			   seg_index, layout->segs_capacity);
+	}
+
+	seg_desc = &layout->segs[seg_index];
+
+	if (peb_index >= seg_desc->pebs_capacity) {
+		SSDFS_WARN("peb_index %d >= pebs_capacity %d\n",
+			   peb_index, seg_desc->pebs_capacity);
+	}
+
+	peb_desc = &seg_desc->pebs[peb_index];
+	extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
+
+	BUG_ON(!extent->buf);
 	memcpy(extent->buf, (char *)&layout->sb.vs, sizeof(layout->sb.vs));
 
 	footer = (struct ssdfs_log_footer *)extent->buf;
@@ -1817,59 +1869,7 @@ int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 	footer->timestamp = cpu_to_le64(layout->create_timestamp);
 	footer->cno = cpu_to_le64(layout->create_cno);
 
-	return 0;
-}
-
-void commit_log_footer(struct ssdfs_volume_layout *layout,
-		       int seg_index, int peb_index,
-		       u32 blks_count)
-{
-	struct ssdfs_segment_desc *seg_desc;
-	struct ssdfs_peb_content *peb_desc;
-	struct ssdfs_metadata_descriptor *meta_desc;
-	struct ssdfs_extent_desc *lf_extent, *extent;
-	struct ssdfs_log_footer *footer;
-	size_t footer_len = sizeof(struct ssdfs_log_footer);
-	u32 log_flags = 0;
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "seg_index %d, blks_count %u\n",
-		  seg_index, blks_count);
-
-	seg_desc = &layout->segs[seg_index];
-	peb_desc = &seg_desc->pebs[peb_index];
-	lf_extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
-
-	BUG_ON(!lf_extent->buf);
-	BUG_ON(blks_count > (UINT_MAX / layout->page_size));
-
-	footer = (struct ssdfs_log_footer *)lf_extent->buf;
-
 	footer->log_bytes = cpu_to_le32(blks_count * layout->page_size);
-
-	switch (seg_desc->seg_type) {
-	case SSDFS_INITIAL_SNAPSHOT:
-		/* do nothing */
-		break;
-
-	case SSDFS_SUPERBLOCK:
-		/* do nothing */
-		break;
-
-	case SSDFS_SEGBMAP:
-		if (layout->segbmap.log_pages != blks_count)
-			log_flags |= SSDFS_PARTIAL_LOG_FOOTER;
-		break;
-
-	case SSDFS_PEB_MAPPING_TABLE:
-		if (layout->maptbl.log_pages != blks_count)
-			log_flags |= SSDFS_PARTIAL_LOG_FOOTER;
-		break;
-
-	default:
-		SSDFS_WARN("unprocessed type of segment: %#x\n",
-			   seg_index);
-	}
 
 	if (layout->blkbmap.has_backup_copy &&
 	    peb_desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count > 0) {
@@ -1894,4 +1894,218 @@ void commit_log_footer(struct ssdfs_volume_layout *layout,
 	footer->volume_state.check.flags = cpu_to_le16(SSDFS_CRC32);
 	footer->volume_state.check.csum = 0;
 	footer->volume_state.check.csum = ssdfs_crc32_le(footer, footer_len);
+}
+
+static
+void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
+				 int seg_index, int peb_index,
+				 u32 blks_count)
+{
+	struct ssdfs_segment_desc *seg_desc;
+	struct ssdfs_peb_content *peb_desc;
+	struct ssdfs_extent_desc *extent;
+	struct ssdfs_partial_log_header *pl_footer;
+	size_t footer_len = sizeof(struct ssdfs_partial_log_header);
+	struct ssdfs_metadata_descriptor *meta_desc;
+	u32 pages_per_peb;
+	u16 log_pages;
+	u32 log_flags = 0;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "seg_index %d, peb_index %d, blks_count %u\n",
+		  seg_index, peb_index, blks_count);
+
+	pages_per_peb = layout->env.erase_size / layout->page_size;
+	BUG_ON(pages_per_peb >= U16_MAX);
+	log_pages = (u16)pages_per_peb;
+
+	if (seg_index >= layout->segs_capacity) {
+		SSDFS_WARN("seg_index %d >= segs_capacity %d\n",
+			   seg_index, layout->segs_capacity);
+	}
+
+	seg_desc = &layout->segs[seg_index];
+
+	if (peb_index >= seg_desc->pebs_capacity) {
+		SSDFS_WARN("peb_index %d >= pebs_capacity %d\n",
+			   peb_index, seg_desc->pebs_capacity);
+	}
+
+	peb_desc = &seg_desc->pebs[peb_index];
+	extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
+
+	BUG_ON(!extent->buf);
+	pl_footer = (struct ssdfs_partial_log_header *)extent->buf;
+
+	memset(pl_footer, 0, footer_len);
+
+	pl_footer->magic.common = cpu_to_le32(SSDFS_SUPER_MAGIC);
+	pl_footer->magic.key = cpu_to_le16(SSDFS_PARTIAL_LOG_HDR_MAGIC);
+	pl_footer->magic.version.major = cpu_to_le8(SSDFS_MAJOR_REVISION);
+	pl_footer->magic.version.minor = cpu_to_le8(SSDFS_MINOR_REVISION);
+
+	pl_footer->timestamp = cpu_to_le64(layout->create_timestamp);
+	pl_footer->cno = cpu_to_le64(layout->create_cno);
+
+	BUG_ON(blks_count >= USHRT_MAX);
+
+	switch (seg_desc->seg_type) {
+	case SSDFS_INITIAL_SNAPSHOT:
+		log_pages = blks_count;
+		BUG_ON(log_pages == 0);
+		BUG_ON(log_pages >= U16_MAX);
+		break;
+
+	case SSDFS_SUPERBLOCK:
+		log_pages = layout->sb.log_pages;
+		BUG_ON(log_pages == 0);
+		BUG_ON(log_pages >= U16_MAX);
+		BUG_ON(log_pages != blks_count);
+		break;
+
+	case SSDFS_SEGBMAP:
+		log_pages = layout->segbmap.log_pages;
+		BUG_ON(log_pages == 0);
+		BUG_ON(log_pages >= U16_MAX);
+		if (log_pages != blks_count) {
+			log_flags |= SSDFS_LOG_IS_PARTIAL |
+					SSDFS_LOG_HAS_PARTIAL_HEADER |
+					SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER;
+		}
+		break;
+
+	case SSDFS_PEB_MAPPING_TABLE:
+		log_pages = layout->maptbl.log_pages;
+		BUG_ON(log_pages == 0);
+		BUG_ON(log_pages >= U16_MAX);
+		if (log_pages != blks_count) {
+			log_flags |= SSDFS_LOG_IS_PARTIAL |
+					SSDFS_LOG_HAS_PARTIAL_HEADER |
+					SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER;
+		}
+		break;
+
+	default:
+		SSDFS_WARN("unprocessed type of segment: %#x\n",
+			   seg_index);
+	}
+
+	pl_footer->log_pages = cpu_to_le16((u16)log_pages);
+	pl_footer->seg_type =
+		cpu_to_le16((u16)META2SEG_TYPE(seg_desc->seg_type));
+
+	pl_footer->log_bytes = cpu_to_le32(blks_count * layout->page_size);
+	memcpy(&pl_footer->flags, &layout->sb.vs.flags,
+		sizeof(pl_footer->flags));
+
+	if (layout->blkbmap.has_backup_copy &&
+	    peb_desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count > 0) {
+		extent = &peb_desc->extents[SSDFS_BLOCK_BITMAP_BACKUP];
+		meta_desc = &pl_footer->desc_array[SSDFS_BLK_BMAP_INDEX];
+		prepare_blkbmap_metadata_descriptor(layout, extent, meta_desc);
+		log_flags |= SSDFS_SEG_HDR_HAS_BLK_BMAP;
+	}
+
+	if (layout->blk2off_tbl.has_backup_copy &&
+	    peb_desc->extents[SSDFS_OFFSET_TABLE_BACKUP].bytes_count > 0) {
+		extent = &peb_desc->extents[SSDFS_OFFSET_TABLE_BACKUP];
+		meta_desc = &pl_footer->desc_array[SSDFS_OFF_TABLE_INDEX];
+		prepare_offset_table_metadata_descriptor(layout, extent,
+							 meta_desc);
+		log_flags |= SSDFS_SEG_HDR_HAS_OFFSET_TABLE;
+	}
+
+	memcpy(&pl_footer->nsegs, &layout->sb.vs.nsegs,
+		sizeof(pl_footer->nsegs));
+	memcpy(&pl_footer->free_pages, &layout->sb.vs.free_pages,
+		sizeof(pl_footer->free_pages));
+
+	memcpy(&pl_footer->root_folder, &layout->sb.vs.root_folder,
+		sizeof(pl_footer->root_folder));
+	memcpy(&pl_footer->inodes_btree, &layout->sb.vs.inodes_btree,
+		sizeof(pl_footer->inodes_btree));
+	memcpy(&pl_footer->shared_extents_btree,
+		&layout->sb.vs.shared_extents_btree,
+		sizeof(pl_footer->shared_extents_btree));
+	memcpy(&pl_footer->shared_dict_btree,
+		&layout->sb.vs.shared_dict_btree,
+		sizeof(pl_footer->shared_dict_btree));
+
+	pl_footer->sequence_id = 0;
+
+	pl_footer->log_pagesize = layout->sb.vh.log_pagesize;
+	pl_footer->log_erasesize = layout->sb.vh.log_erasesize;
+	pl_footer->log_segsize = layout->sb.vh.log_segsize;
+	pl_footer->log_pebs_per_seg = layout->sb.vh.log_pebs_per_seg;
+
+	pl_footer->pl_flags = cpu_to_le32(log_flags);
+
+	pl_footer->check.bytes = cpu_to_le16(footer_len);
+	pl_footer->check.flags = cpu_to_le16(SSDFS_CRC32);
+	pl_footer->check.csum = 0;
+	pl_footer->check.csum = ssdfs_crc32_le(pl_footer, footer_len);
+}
+
+void commit_log_footer(struct ssdfs_volume_layout *layout,
+		       int seg_index, int peb_index,
+		       u32 blks_count)
+{
+	struct ssdfs_segment_desc *seg_desc;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "seg_index %d, blks_count %u\n",
+		  seg_index, blks_count);
+
+	BUG_ON(blks_count > (UINT_MAX / layout->page_size));
+
+	if (seg_index >= layout->segs_capacity) {
+		SSDFS_WARN("seg_index %d >= segs_capacity %d\n",
+			   seg_index, layout->segs_capacity);
+	}
+
+	seg_desc = &layout->segs[seg_index];
+
+	switch (seg_desc->seg_type) {
+	case SSDFS_INITIAL_SNAPSHOT:
+		__commit_log_footer(layout, seg_index,
+				    peb_index, blks_count);
+		break;
+
+	case SSDFS_SUPERBLOCK:
+		__commit_log_footer(layout, seg_index,
+				    peb_index, blks_count);
+		break;
+
+	case SSDFS_SEGBMAP:
+		SSDFS_DBG(layout->env.show_debug,
+			  "log_pages %u, blks_count %u\n",
+			  layout->segbmap.log_pages,
+			  blks_count);
+		if (layout->segbmap.log_pages != blks_count) {
+			__commit_partial_log_header(layout, seg_index,
+						    peb_index, blks_count);
+		} else {
+			__commit_log_footer(layout, seg_index,
+					    peb_index, blks_count);
+		}
+		break;
+
+	case SSDFS_PEB_MAPPING_TABLE:
+		SSDFS_DBG(layout->env.show_debug,
+			  "log_pages %u, blks_count %u\n",
+			  layout->maptbl.log_pages,
+			  blks_count);
+		if (layout->maptbl.log_pages != blks_count) {
+			__commit_partial_log_header(layout, seg_index,
+						    peb_index, blks_count);
+		} else {
+			__commit_log_footer(layout, seg_index,
+					    peb_index, blks_count);
+		}
+		break;
+
+	default:
+		SSDFS_WARN("unprocessed type of segment: %#x\n",
+			   seg_index);
+	}
 }

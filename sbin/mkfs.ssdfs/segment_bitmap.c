@@ -4,11 +4,11 @@
  *
  * sbin/mkfs.ssdfs/segment_bitmap.c - bitmap of segments creation functionality.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -553,13 +553,14 @@ static void segbmap_set_log_pages(struct ssdfs_volume_layout *layout,
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages = 0;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pages %u, blks_count %u\n",
 		  layout->segbmap.log_pages, blks);
 
 	BUG_ON(blks == 0);
-	BUG_ON(blks == U16_MAX);
+	BUG_ON(blks >= U16_MAX);
 
 	erasesize = layout->env.erase_size;
 	pagesize = layout->page_size;
@@ -567,31 +568,44 @@ static void segbmap_set_log_pages(struct ssdfs_volume_layout *layout,
 
 	BUG_ON((blks / 2) > pages_per_peb);
 
-	if (layout->segbmap.log_pages == U16_MAX)
-		layout->segbmap.log_pages = blks;
-
 	if (pages_per_peb % blks) {
 		SSDFS_WARN("pages_per_peb %u, blks %u\n",
 			   pages_per_peb, blks);
 	}
 
-	if (pages_per_peb % layout->segbmap.log_pages) {
+	if (layout->segbmap.log_pages == U16_MAX)
+		log_pages = blks;
+	else {
+		log_pages = layout->segbmap.log_pages;
+
+		if (log_pages < blks) {
+			SSDFS_WARN("log_pages is corrected from %u to %u\n",
+				   log_pages, blks);
+			log_pages = blks;
+		} else if (log_pages % blks) {
+			SSDFS_WARN("log_pages %u, blks %u\n",
+				   log_pages,
+				   blks);
+		}
+	}
+
+try_align_log_pages:
+	while (layout->env.erase_size % (log_pages * layout->page_size))
+		log_pages++;
+
+	if ((log_pages - blks) < 3) {
+		log_pages += 3;
+		goto try_align_log_pages;
+	}
+
+	if (pages_per_peb % log_pages) {
 		SSDFS_WARN("pages_per_peb %u, log_pages %u\n",
-			   pages_per_peb,
-			   layout->segbmap.log_pages);
+			   pages_per_peb, log_pages);
 	}
 
-	if (layout->segbmap.log_pages < blks) {
-		SSDFS_WARN("log_pages is corrected from %u to %u\n",
-			   layout->segbmap.log_pages, blks);
-		layout->segbmap.log_pages = blks;
-	} else if (layout->segbmap.log_pages % blks) {
-		SSDFS_WARN("log_pages %u, blks %u\n",
-			   layout->segbmap.log_pages,
-			   blks);
-	}
-
-	layout->sb.vh.segbmap_log_pages = cpu_to_le16(blks);
+	layout->segbmap.log_pages = log_pages;
+	BUG_ON(log_pages >= U16_MAX);
+	layout->sb.vh.segbmap_log_pages = cpu_to_le16((u16)log_pages);
 }
 
 int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)

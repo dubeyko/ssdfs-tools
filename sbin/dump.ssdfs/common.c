@@ -4,11 +4,11 @@
  *
  * sbin/dump.ssdfs/common.c - common dumpfs primitives.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -68,37 +68,9 @@ void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env)
 	close(env->fd);
 }
 
-int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
-				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
-				   u32 area_offset, u32 size,
-				   void *buf)
-{
-	u64 offset;
-	int err;
-
-	SSDFS_DBG(env->base.show_debug,
-		  "peb_id: %llu, peb_size %u\n",
-		  peb_id, peb_size);
-
-	offset = peb_id * peb_size;
-	offset += area_offset;
-
-	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
-	if (err) {
-		SSDFS_ERR("fail to read log footer: "
-			  "offset %llu, err %d\n",
-			  offset, err);
-		return err;
-	}
-
-	return 0;
-}
-
 int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
@@ -126,7 +98,7 @@ int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 
 int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
@@ -154,7 +126,7 @@ int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 
 int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf)
 {
@@ -180,33 +152,123 @@ int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 	return 0;
 }
 
+int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   u32 log_offset, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read log footer: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_dumpfs_read_partial_log_footer(struct ssdfs_dumpfs_environment *env,
+					 u64 peb_id, u32 peb_size,
+					 u32 log_offset, u32 log_size,
+					 u32 area_offset, u32 size,
+					 void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read partial log footer: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
 int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 				     u64 peb_id, u32 peb_size,
-				     int log_index, u32 log_size,
-				     struct ssdfs_segment_header *hdr)
+				     u32 log_offset, u32 size,
+				     void *buf)
 {
-	size_t sg_size = sizeof(struct ssdfs_segment_header);
+	size_t sg_size = max_t(size_t,
+				sizeof(struct ssdfs_segment_header),
+				sizeof(struct ssdfs_partial_log_header));
 	u64 offset = SSDFS_RESERVED_VBR_SIZE;
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "peb_id %llu, peb_size %u, "
-		  "log_index %d, log_size %u\n",
-		  peb_id, peb_size, log_index, log_size);
+		  "log_offset %u, size %u\n",
+		  peb_id, peb_size, log_offset, size);
 
 	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
 		offset = peb_id * peb_size;
 
-	offset += log_index * log_size;
+	offset += log_offset;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "offset %llu, size %zu\n",
 		  offset, sg_size);
 
 	err = env->base.dev_ops->read(env->base.fd, offset, sg_size,
-				      hdr);
+				      buf);
 	if (err) {
 		SSDFS_ERR("fail to read segment header: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	SSDFS_DBG(env->base.show_debug,
+		  "successful read\n");
+
+	return 0;
+}
+
+int ssdfs_dumpfs_read_partial_log_header(struct ssdfs_dumpfs_environment *env,
+					 u64 peb_id, u32 peb_size,
+					 u32 log_offset, u32 size,
+					 void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u, "
+		  "log_offset %u, size %u\n",
+		  peb_id, peb_size,
+		  log_offset, size);
+
+	offset = peb_id * peb_size;
+	offset += log_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf);
+	if (err) {
+		SSDFS_ERR("fail to read partial log header: "
 			  "offset %llu, err %d\n",
 			  offset, err);
 		return err;

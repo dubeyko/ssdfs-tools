@@ -4,11 +4,11 @@
  *
  * sbin/dump.ssdfs/show_peb_dump.c - show PEB dump command.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -22,6 +22,12 @@
 /************************************************************************
  *                     Show PEB dump command                            *
  ************************************************************************/
+
+union ssdfs_log_header {
+	struct ssdfs_segment_header seg_hdr;
+	struct ssdfs_partial_log_header pl_hdr;
+	struct ssdfs_signature magic;
+};
 
 static
 int is_ssdfs_dumpfs_area_valid(struct ssdfs_metadata_descriptor *desc)
@@ -681,8 +687,8 @@ int ssdfs_dumpfs_parse_block_bitmap_area(struct ssdfs_dumpfs_environment *env,
 
 		err = ssdfs_dumpfs_read_block_bitmap(env,
 						     env->peb.id,
-						     env->peb.size,
-						     env->peb.log_index,
+						     env->peb.peb_size,
+						     env->peb.log_offset,
 						     env->peb.log_size,
 						     area_offset,
 						     area_size,
@@ -691,7 +697,7 @@ int ssdfs_dumpfs_parse_block_bitmap_area(struct ssdfs_dumpfs_environment *env,
 			SSDFS_ERR("fail to read block bitmap: "
 				  "peb_id %llu, peb_size %u, "
 				  "log_index %u, err %d\n",
-				  env->peb.id, env->peb.size,
+				  env->peb.id, env->peb.peb_size,
 				  env->peb.log_index, err);
 			goto finish_parse_block_bitmap;
 		}
@@ -714,7 +720,7 @@ finish_parse_block_bitmap:
 		SSDFS_DUMPFS_DUMP(env, "\n");
 
 		if (env->is_raw_dump_requested) {
-			offset = env->peb.id * env->peb.size;
+			offset = env->peb.id * env->peb.peb_size;
 			env->raw_dump.offset = offset + area_offset;
 			env->raw_dump.size = area_size;
 
@@ -1047,8 +1053,8 @@ int ssdfs_dumpfs_parse_blk2off_area(struct ssdfs_dumpfs_environment *env,
 
 		err = ssdfs_dumpfs_read_blk2off_table(env,
 						     env->peb.id,
-						     env->peb.size,
-						     env->peb.log_index,
+						     env->peb.peb_size,
+						     env->peb.log_offset,
 						     env->peb.log_size,
 						     area_offset,
 						     area_size,
@@ -1057,7 +1063,7 @@ int ssdfs_dumpfs_parse_blk2off_area(struct ssdfs_dumpfs_environment *env,
 			SSDFS_ERR("fail to read blk2off table: "
 				  "peb_id %llu, peb_size %u, "
 				  "log_index %u, err %d\n",
-				  env->peb.id, env->peb.size,
+				  env->peb.id, env->peb.peb_size,
 				  env->peb.log_index, err);
 			goto finish_parse_blk2off_table;
 		}
@@ -1081,7 +1087,7 @@ finish_parse_blk2off_table:
 		SSDFS_DUMPFS_DUMP(env, "\n");
 
 		if (env->is_raw_dump_requested) {
-			offset = env->peb.id * env->peb.size;
+			offset = env->peb.id * env->peb.peb_size;
 			env->raw_dump.offset = offset + area_offset;
 			env->raw_dump.size = area_size;
 
@@ -1103,9 +1109,9 @@ finish_parse_blk2off_area:
 }
 
 static
-int ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
-				  u32 area_offset,
-				  void *area_buf, u32 area_size)
+int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
+				    u32 area_offset,
+				    void *area_buf, u32 area_size)
 {
 	struct ssdfs_log_footer *log_footer = NULL;
 	size_t lf_size = sizeof(struct ssdfs_log_footer);
@@ -1478,13 +1484,13 @@ int ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
 	if (env->is_raw_dump_requested) {
-		offset = env->peb.id * env->peb.size;
+		offset = env->peb.id * env->peb.peb_size;
 		env->raw_dump.offset = offset + area_offset;
 		env->raw_dump.size = area_size;
 
 		err = ssdfs_dumpfs_show_raw_dump(env);
 		if (err) {
-			SSDFS_ERR("fail to make blk desc array "
+			SSDFS_ERR("fail to make log footer "
 				  "raw dump: "
 				  "peb_id %llu, err %d\n",
 				  env->peb.id, err);
@@ -1831,6 +1837,9 @@ void ssdfs_dumpfs_parse_segbmap_sb_header(struct ssdfs_dumpfs_environment *env,
 	u16 segs_count = le16_to_cpu(segbmap->segs_count);
 	int i;
 
+	SSDFS_DBG(env->base.show_debug,
+		  "parse segbmap sb header\n");
+
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT BITMAP HEADER:\n");
 
 	SSDFS_DUMPFS_DUMP(env, "FRAGMENTS_COUNT: %u\n", fragments_count);
@@ -1887,6 +1896,9 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	const char *seg_type_str = NULL;
 	u32 seg_flags;
 	struct ssdfs_metadata_descriptor *desc;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse segment header\n");
 
 	page_size = 1 << vh->log_pagesize;
 	erase_size = 1 << vh->log_erasesize;
@@ -2034,6 +2046,12 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	if (seg_flags & SSDFS_LOG_IS_PARTIAL)
 		SSDFS_DUMPFS_DUMP(env, "LOG_IS_PARTIAL ");
 
+	if (seg_flags & SSDFS_LOG_HAS_PARTIAL_HEADER)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_PARTIAL_HEADER ");
+
+	if (seg_flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER)
+		SSDFS_DUMPFS_DUMP(env, "PARTIAL_HEADER_INSTEAD_FOOTER ");
+
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
 	desc = &hdr->desc_array[SSDFS_BLK_BMAP_INDEX];
@@ -2104,20 +2122,920 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	ssdfs_dumpfs_parse_xattr_btree_descriptor(env, &vh->xattr_btree);
 }
 
-int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
+static
+int ssdfs_dumpfs_read_footer_log_bytes(struct ssdfs_dumpfs_environment *env,
+					union ssdfs_log_header *buf)
 {
-	struct ssdfs_segment_header sg_buf;
-	struct ssdfs_signature *magic;
+	struct ssdfs_partial_log_header *pl_hdr;
+	struct ssdfs_log_footer *footer;
+	struct ssdfs_metadata_descriptor *desc;
+	void *area_buf = NULL;
+	u32 area_offset;
+	u32 area_size;
+	u32 seg_flags;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "read footer log bytes\n");
+
+	desc = &buf->seg_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+	seg_flags = le32_to_cpu(buf->seg_hdr.seg_flags);
+
+	if (is_ssdfs_dumpfs_area_valid(desc)) {
+		area_buf = malloc(area_size);
+		if (!area_buf) {
+			SSDFS_ERR("fail to allocate memory: "
+				  "size %u\n", area_size);
+			return -ENOMEM;
+		}
+
+		memset(area_buf, 0, area_size);
+
+		if (seg_flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER) {
+			err = ssdfs_dumpfs_read_partial_log_footer(env,
+							   env->peb.id,
+							   env->peb.peb_size,
+							   env->peb.log_offset,
+							   env->peb.log_size,
+							   area_offset,
+							   area_size,
+							   area_buf);
+			if (err) {
+				SSDFS_ERR("fail to read partial log footer: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_index %u, log_offset %u, "
+					  "err %d\n",
+					  env->peb.id, env->peb.peb_size,
+					  env->peb.log_index,
+					  env->peb.log_offset, err);
+				goto finish_read_log_size;
+			}
+
+			pl_hdr = (struct ssdfs_partial_log_header *)area_buf;
+			env->peb.log_size = le32_to_cpu(pl_hdr->log_bytes);
+		} else if (seg_flags & SSDFS_LOG_HAS_FOOTER) {
+			err = ssdfs_dumpfs_read_log_footer(env,
+							   env->peb.id,
+							   env->peb.peb_size,
+							   env->peb.log_offset,
+							   env->peb.log_size,
+							   area_offset,
+							   area_size,
+							   area_buf);
+			if (err) {
+				SSDFS_ERR("fail to read log footer: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_offset %u, err %d\n",
+					  env->peb.id, env->peb.peb_size,
+					  env->peb.log_offset, err);
+				goto finish_read_log_size;
+			}
+
+			footer = (struct ssdfs_log_footer *)area_buf;
+			env->peb.log_size = le32_to_cpu(footer->log_bytes);
+		} else {
+			err = -EIO;
+			SSDFS_ERR("segment header is corrupted\n");
+		}
+
+finish_read_log_size:
+		free(area_buf);
+		area_buf = NULL;
+	}
+
+	return err;
+}
+
+static
+int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
+				union ssdfs_log_header *buf)
+{
+	u16 key;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "read log bytes\n");
+
+	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
+						env->peb.peb_size,
+						env->peb.log_offset,
+						env->peb.log_size,
+						&buf->magic);
+	if (err) {
+		SSDFS_ERR("fail to read PEB's header: "
+			  "peb_id %llu, peb_size %u, "
+			  "log_offset %u, err %d\n",
+			  env->peb.id, env->peb.peb_size,
+			  env->peb.log_offset, err);
+		return err;
+	}
+
+	if (le32_to_cpu(buf->magic.common) == SSDFS_SUPER_MAGIC) {
+		key = le16_to_cpu(buf->magic.key);
+
+		if (key == SSDFS_SEGMENT_HDR_MAGIC) {
+			err = ssdfs_dumpfs_read_footer_log_bytes(env, buf);
+			if (err) {
+				SSDFS_ERR("fail to read footer log bytes: "
+					  "err %d\n", err);
+				return err;
+			}
+		} else if (key == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
+			env->peb.log_size =
+				le32_to_cpu(buf->pl_hdr.log_bytes);
+		} else
+			BUG();
+	} else {
+		if (env->peb.log_size == U32_MAX) {
+			SSDFS_INFO("PLEASE, DEFINE LOG SIZE\n");
+			print_usage();
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int
+__ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
+					u32 area_offset,
+					void *area_buf, u32 area_size)
+{
+	struct ssdfs_partial_log_header *pl_hdr = NULL;
+	size_t plh_size = sizeof(struct ssdfs_partial_log_header);
+	struct ssdfs_metadata_descriptor *desc;
+	u32 flags;
+	u32 page_size;
+	u32 erase_size;
+	u32 seg_size;
+	u16 seg_type;
+	const char *seg_type_str = NULL;
+	u64 offset;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse partial log header: "
+		  "area_offset %u, area_size %u\n",
+		  area_offset, area_size);
+
+	if (area_size < plh_size) {
+		SSDFS_ERR("area_size %u < partial log hdr size %zu\n",
+			  area_size, plh_size);
+		return -EINVAL;
+	}
+
+	pl_hdr = (struct ssdfs_partial_log_header *)area_buf;
+
+	page_size = 1 << pl_hdr->log_pagesize;
+	erase_size = 1 << pl_hdr->log_erasesize;
+	seg_size = 1 << pl_hdr->log_segsize;
+	seg_type = le16_to_cpu(pl_hdr->seg_type);
+
+	SSDFS_DUMPFS_DUMP(env, "PARTIAL LOG HEADER:\n");
+
+	ssdfs_dumpfs_parse_magic(env, &pl_hdr->magic);
+
+	SSDFS_DUMPFS_DUMP(env, "METADATA CHECK:\n");
+	SSDFS_DUMPFS_DUMP(env, "BYTES: %u\n", le16_to_cpu(pl_hdr->check.bytes));
+
+	flags = le16_to_cpu(pl_hdr->check.flags);
+
+	SSDFS_DUMPFS_DUMP(env, "METADATA CHECK FLAGS: ");
+
+	if (flags & SSDFS_CRC32)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_CRC32 ");
+
+	if (flags == 0)
+		SSDFS_DUMPFS_DUMP(env, "NONE");
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "CHECKSUM: %#x\n", le32_to_cpu(pl_hdr->check.csum));
+
+	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
+			  pl_hdr->sequence_id);
+	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
+	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes\n", erase_size);
+	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
+			  1 << pl_hdr->log_pebs_per_seg);
+	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
+
+	SSDFS_DUMPFS_DUMP(env, "SEGMENT NUMBERS: %llu\n",
+						le64_to_cpu(pl_hdr->nsegs));
+	SSDFS_DUMPFS_DUMP(env, "FREE PAGES: %llu\n",
+						le64_to_cpu(pl_hdr->free_pages));
+	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_TIME: %s\n",
+		   ssdfs_nanoseconds_to_time(le64_to_cpu(pl_hdr->timestamp)));
+	SSDFS_DUMPFS_DUMP(env, "CHECKPOINT: %llu\n", le64_to_cpu(pl_hdr->cno));
+	SSDFS_DUMPFS_DUMP(env, "LOG_PAGES: %u\n",
+			  le16_to_cpu(pl_hdr->log_pages));
+
+	switch (seg_type) {
+	case SSDFS_UNKNOWN_SEG_TYPE:
+		seg_type_str = "SSDFS_UNKNOWN_SEG_TYPE";
+		break;
+	case SSDFS_SB_SEG_TYPE:
+		seg_type_str = "SSDFS_SB_SEG_TYPE";
+		break;
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
+		seg_type_str = "SSDFS_INITIAL_SNAPSHOT_SEG_TYPE";
+		break;
+	case SSDFS_SEGBMAP_SEG_TYPE:
+		seg_type_str = "SSDFS_SEGBMAP_SEG_TYPE";
+		break;
+	case SSDFS_MAPTBL_SEG_TYPE:
+		seg_type_str = "SSDFS_MAPTBL_SEG_TYPE";
+		break;
+	case SSDFS_LEAF_NODE_SEG_TYPE:
+		seg_type_str = "SSDFS_LEAF_NODE_SEG_TYPE";
+		break;
+	case SSDFS_HYBRID_NODE_SEG_TYPE:
+		seg_type_str = "SSDFS_HYBRID_NODE_SEG_TYPE";
+		break;
+	case SSDFS_INDEX_NODE_SEG_TYPE:
+		seg_type_str = "SSDFS_INDEX_NODE_SEG_TYPE";
+		break;
+	case SSDFS_USER_DATA_SEG_TYPE:
+		seg_type_str = "SSDFS_USER_DATA_SEG_TYPE";
+		break;
+	default:
+		BUG();
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "SEG_TYPE: %s\n", seg_type_str);
+
+	flags = le32_to_cpu(pl_hdr->flags);
+
+	SSDFS_DUMPFS_DUMP(env, "VOLUME STATE FLAGS: ");
+
+	if (flags & SSDFS_HAS_INLINE_INODES_TREE)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_HAS_INLINE_INODES_TREE ");
+
+	if (flags == 0)
+		SSDFS_DUMPFS_DUMP(env, "NONE");
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "LOG BYTES: %u bytes\n",
+				le32_to_cpu(pl_hdr->log_bytes));
+
+	flags = le32_to_cpu(pl_hdr->pl_flags);
+
+	SSDFS_DUMPFS_DUMP(env, "PARTIAL HEADER FLAGS: ");
+
+	if (flags & SSDFS_SEG_HDR_HAS_BLK_BMAP)
+		SSDFS_DUMPFS_DUMP(env, "SEG_HDR_HAS_BLK_BMAP ");
+
+	if (flags & SSDFS_SEG_HDR_HAS_OFFSET_TABLE)
+		SSDFS_DUMPFS_DUMP(env, "SEG_HDR_HAS_OFFSET_TABLE ");
+
+	if (flags & SSDFS_LOG_HAS_COLD_PAYLOAD)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_COLD_PAYLOAD ");
+
+	if (flags & SSDFS_LOG_HAS_WARM_PAYLOAD)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_WARM_PAYLOAD ");
+
+	if (flags & SSDFS_LOG_HAS_HOT_PAYLOAD)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_HOT_PAYLOAD ");
+
+	if (flags & SSDFS_LOG_HAS_BLK_DESC_CHAIN)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_BLK_DESC_CHAIN ");
+
+	if (flags & SSDFS_LOG_HAS_MAPTBL_CACHE)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_MAPTBL_CACHE ");
+
+	if (flags & SSDFS_LOG_HAS_FOOTER)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_FOOTER ");
+
+	if (flags & SSDFS_LOG_IS_PARTIAL)
+		SSDFS_DUMPFS_DUMP(env, "LOG_IS_PARTIAL ");
+
+	if (flags & SSDFS_LOG_HAS_PARTIAL_HEADER)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_PARTIAL_HEADER ");
+
+	if (flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER)
+		SSDFS_DUMPFS_DUMP(env, "PARTIAL_HEADER_INSTEAD_FOOTER ");
+
+	if (flags == 0)
+		SSDFS_DUMPFS_DUMP(env, "NONE");
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	desc = &pl_hdr->desc_array[SSDFS_BLK_BMAP_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "BLOCK_BITMAP: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_OFF_TABLE_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "OFFSETS_TABLE: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_COLD_PAYLOAD_AREA_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "COLD_PAYLOAD_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_WARM_PAYLOAD_AREA_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "WARM_PAYLOAD_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_HOT_PAYLOAD_AREA_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "HOT_PAYLOAD_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_BLK_DESC_AREA_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "BLOCK_DESCRIPTOR_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_MAPTBL_CACHE_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "MAPTBL_CACHE_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_LOG_FOOTER_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "LOG_FOOTER: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "ROOT FOLDER:\n");
+	ssdfs_dumpfs_parse_raw_inode(env, &pl_hdr->root_folder);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "INODES B-TREE HEADER:\n");
+	ssdfs_dumpfs_parse_btree_descriptor(env, &pl_hdr->inodes_btree.desc);
+	SSDFS_DUMPFS_DUMP(env, "ALLOCATED INODES: %llu\n",
+		   le64_to_cpu(pl_hdr->inodes_btree.allocated_inodes));
+	SSDFS_DUMPFS_DUMP(env, "FREE INODES: %llu\n",
+		   le64_to_cpu(pl_hdr->inodes_btree.free_inodes));
+	SSDFS_DUMPFS_DUMP(env, "INODES CAPACITY: %llu\n",
+		   le64_to_cpu(pl_hdr->inodes_btree.inodes_capacity));
+	SSDFS_DUMPFS_DUMP(env, "LEAF NODES: %u\n",
+		   le32_to_cpu(pl_hdr->inodes_btree.leaf_nodes));
+	SSDFS_DUMPFS_DUMP(env, "NODES COUNT: %u\n",
+		   le32_to_cpu(pl_hdr->inodes_btree.nodes_count));
+	SSDFS_DUMPFS_DUMP(env, "UPPER_ALLOCATED_INO: %llu\n",
+		   le64_to_cpu(pl_hdr->inodes_btree.upper_allocated_ino));
+	ssdfs_dumpfs_parse_inline_root_node(env, &pl_hdr->inodes_btree.root_node);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "SHARED EXTENTS B-TREE HEADER:\n");
+	ssdfs_dumpfs_parse_btree_descriptor(env,
+				&pl_hdr->shared_extents_btree.desc);
+	ssdfs_dumpfs_parse_inline_root_node(env,
+				&pl_hdr->shared_extents_btree.root_node);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "SHARED DICTIONARY B-TREE HEADER:\n");
+	ssdfs_dumpfs_parse_btree_descriptor(env,
+				&pl_hdr->shared_dict_btree.desc);
+	ssdfs_dumpfs_parse_inline_root_node(env,
+				&pl_hdr->shared_dict_btree.root_node);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	if (env->is_raw_dump_requested) {
+		offset = env->peb.id * env->peb.peb_size;
+		env->raw_dump.offset = offset + area_offset;
+		env->raw_dump.size = area_size;
+
+		err = ssdfs_dumpfs_show_raw_dump(env);
+		if (err) {
+			SSDFS_ERR("fail to make partial log header "
+				  "raw dump: "
+				  "peb_id %llu, err %d\n",
+				  env->peb.id, err);
+			return err;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
+	return 0;
+}
+
+static
+int ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
+				  union ssdfs_log_header *buf)
+{
+	struct ssdfs_metadata_descriptor *desc;
+	void *area_buf = NULL;
+	u32 area_offset;
+	u32 area_size;
+	int is_log_partial = SSDFS_FALSE;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse log footer\n");
+
+	is_log_partial =
+		le32_to_cpu(buf->seg_hdr.seg_flags) & SSDFS_LOG_IS_PARTIAL;
+
+	desc = &buf->seg_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+
+	if (is_ssdfs_dumpfs_area_valid(desc)) {
+		area_buf = malloc(area_size);
+		if (!area_buf) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory: "
+				  "size %u\n", area_size);
+			goto fail_parse_log_footer;
+		}
+
+		memset(area_buf, 0, area_size);
+
+		if (is_log_partial) {
+			err = ssdfs_dumpfs_read_partial_log_footer(env,
+							   env->peb.id,
+							   env->peb.peb_size,
+							   env->peb.log_offset,
+							   env->peb.log_size,
+							   area_offset,
+							   area_size,
+							   area_buf);
+			if (err) {
+				SSDFS_ERR("fail to read partial log footer: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_index %u, log_offset %u, "
+					  "err %d\n",
+					  env->peb.id, env->peb.peb_size,
+					  env->peb.log_index,
+					  env->peb.log_offset, err);
+				goto finish_parse_log_footer;
+			}
+
+			err = __ssdfs_dumpfs_parse_partial_log_header(env,
+								area_offset,
+								area_buf,
+								area_size);
+			if (err) {
+				SSDFS_ERR("fail to parse partial log footer: "
+					  "peb_id %llu, log_index %u, "
+					  "log_offset %u, err %d\n",
+					  env->peb.id, env->peb.log_index,
+					  env->peb.log_offset, err);
+				goto finish_parse_log_footer;
+			}
+		} else {
+			err = ssdfs_dumpfs_read_log_footer(env,
+							   env->peb.id,
+							   env->peb.peb_size,
+							   env->peb.log_offset,
+							   env->peb.log_size,
+							   area_offset,
+							   area_size,
+							   area_buf);
+			if (err) {
+				SSDFS_ERR("fail to read log footer: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_index %u, log_offset %u, "
+					  "err %d\n",
+					  env->peb.id, env->peb.peb_size,
+					  env->peb.log_index,
+					  env->peb.log_offset, err);
+				goto finish_parse_log_footer;
+			}
+
+			err = __ssdfs_dumpfs_parse_log_footer(env,
+							      area_offset,
+							      area_buf,
+							      area_size);
+			if (err) {
+				SSDFS_ERR("fail to parse log footer: "
+					  "peb_id %llu, log_index %u, "
+					  "log_offset %u, err %d\n",
+					  env->peb.id, env->peb.log_index,
+					  env->peb.log_offset, err);
+				goto finish_parse_log_footer;
+			}
+		}
+
+finish_parse_log_footer:
+		free(area_buf);
+		area_buf = NULL;
+
+		if (err)
+			goto fail_parse_log_footer;
+	}
+
+fail_parse_log_footer:
+	return err;
+}
+
+static
+int ssdfs_dumpfs_parse_full_log(struct ssdfs_dumpfs_environment *env,
+				union ssdfs_log_header *buf)
+{
 	struct ssdfs_metadata_descriptor *desc;
 	void *area_buf = NULL;
 	u64 offset;
 	u32 area_offset;
 	u32 area_size;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse full log\n");
+
+	offset = env->peb.id * env->peb.peb_size;
+
+	err = ssdfs_dumpfs_open_file(env);
+	if (err) {
+		SSDFS_ERR("unable to open output file: "
+			  "PEB %llu, log_index %u, "
+			  "log_offset %u, err %d\n",
+			  env->peb.id, env->peb.log_index,
+			  env->peb.log_offset, err);
+		goto finish_parse_full_log;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "PEB_ID %llu, LOG_INDEX %u, LOG_OFFSET %u\n\n",
+			  env->peb.id, env->peb.log_index,
+			  env->peb.log_offset);
+
+	if (!(env->peb.parse_flags & SSDFS_PARSE_HEADER))
+		goto parse_block_bitmap;
+
+	ssdfs_dumpfs_parse_segment_header(env, &buf->seg_hdr);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	if (env->is_raw_dump_requested) {
+		if (env->peb.id == SSDFS_INITIAL_SNAPSHOT_SEG &&
+		    env->peb.log_index == 0) {
+			env->raw_dump.offset = SSDFS_RESERVED_VBR_SIZE;
+		} else {
+			env->raw_dump.offset = offset;
+			env->raw_dump.offset += env->peb.log_offset;
+		}
+
+		env->raw_dump.size =
+			sizeof(struct ssdfs_segment_header);
+
+		err = ssdfs_dumpfs_show_raw_dump(env);
+		if (err) {
+			SSDFS_ERR("fail to make segment header dump: "
+				  "peb_id %llu, err %d\n",
+				  env->peb.id, err);
+			goto close_opened_file;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
+parse_block_bitmap:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_BITMAP))
+		goto parse_blk2off_table;
+
+	err = ssdfs_dumpfs_parse_block_bitmap_area(env,
+			&buf->seg_hdr.desc_array[SSDFS_BLK_BMAP_INDEX]);
+	if (err) {
+		SSDFS_ERR("fail to parse block bitmap: err %d\n", err);
+		goto close_opened_file;
+	}
+
+parse_blk2off_table:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_BLK2OFF_TABLE))
+		goto parse_block_state_area;
+
+	err = ssdfs_dumpfs_parse_blk2off_area(env,
+			&buf->seg_hdr.desc_array[SSDFS_OFF_TABLE_INDEX]);
+	if (err) {
+		SSDFS_ERR("fail to parse blk2 off table: err %d\n",
+			  err);
+		goto close_opened_file;
+	}
+
+parse_block_state_area:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_STATE_AREA))
+		goto parse_log_footer;
+
+	desc = &buf->seg_hdr.desc_array[SSDFS_BLK_DESC_AREA_INDEX];
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+
+	if (is_ssdfs_dumpfs_area_valid(desc)) {
+		area_buf = malloc(area_size);
+		if (!area_buf) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory: "
+				  "size %u\n", area_size);
+			goto close_opened_file;
+		}
+
+		memset(area_buf, 0, area_size);
+
+		err = ssdfs_dumpfs_read_blk_desc_array(env,
+						     env->peb.id,
+						     env->peb.peb_size,
+						     env->peb.log_offset,
+						     env->peb.log_size,
+						     area_offset,
+						     area_size,
+						     area_buf);
+		if (err) {
+			SSDFS_ERR("fail to read block descriptors: "
+				  "peb_id %llu, peb_size %u, "
+				  "log_index %u, log_offset %u, err %d\n",
+				  env->peb.id, env->peb.peb_size,
+				  env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_blk_desc_array;
+		}
+
+		err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
+							area_size);
+		if (err) {
+			SSDFS_ERR("fail to parse block descriptors: "
+				  "peb_id %llu, log_index %u, "
+				  "log_offset %u, err %d\n",
+				  env->peb.id, env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_blk_desc_array;
+		}
+
+finish_parse_blk_desc_array:
+		free(area_buf);
+		area_buf = NULL;
+
+		if (err)
+			goto close_opened_file;
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+
+		if (env->is_raw_dump_requested) {
+			env->raw_dump.offset = offset + area_offset;
+			env->raw_dump.size = area_size;
+
+			err = ssdfs_dumpfs_show_raw_dump(env);
+			if (err) {
+				SSDFS_ERR("fail to make blk desc array "
+					  "raw dump: "
+					  "peb_id %llu, err %d\n",
+					  env->peb.id, err);
+				goto close_opened_file;
+			}
+
+			SSDFS_DUMPFS_DUMP(env, "\n");
+		}
+	}
+
+parse_log_footer:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_LOG_FOOTER))
+		goto close_opened_file;
+
+	err = ssdfs_dumpfs_parse_log_footer(env, buf);
+	if (err) {
+		SSDFS_ERR("fail to parse log footer: err %d\n", err);
+		goto close_opened_file;
+	}
+
+close_opened_file:
+	ssdfs_dumpfs_close_file(env);
+
+finish_parse_full_log:
+	return err;
+}
+
+static
+int ssdfs_dumpfs_parse_partial_log(struct ssdfs_dumpfs_environment *env,
+				   union ssdfs_log_header *buf)
+{
+	struct ssdfs_metadata_descriptor *desc;
+	size_t hdr_size = sizeof(struct ssdfs_partial_log_header);
+	void *area_buf = NULL;
+	u64 offset;
+	u32 area_offset;
+	u32 area_size;
+	int has_footer = SSDFS_FALSE;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse partial log\n");
+
+	offset = env->peb.id * env->peb.peb_size;
+
+	has_footer =
+		le32_to_cpu(buf->pl_hdr.pl_flags) & SSDFS_LOG_HAS_FOOTER;
+
+	err = ssdfs_dumpfs_open_file(env);
+	if (err) {
+		SSDFS_ERR("unable to open output file: "
+			  "PEB %llu, log_index %u, "
+			  "log_offset %u, err %d\n",
+			  env->peb.id, env->peb.log_index,
+			  env->peb.log_offset, err);
+		goto finish_parse_partial_log;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "PEB_ID %llu, LOG_INDEX %u, LOG_OFFSET %u\n\n",
+			  env->peb.id, env->peb.log_index,
+			  env->peb.log_offset);
+
+	if (!(env->peb.parse_flags & SSDFS_PARSE_HEADER))
+		goto parse_block_bitmap;
+
+	err = __ssdfs_dumpfs_parse_partial_log_header(env,
+						      env->peb.log_offset,
+						      &buf->pl_hdr,
+						      hdr_size);
+	if (err) {
+		SSDFS_ERR("fail to parse partial log footer: "
+			  "peb_id %llu, log_index %u, "
+			  "log_offset %u, err %d\n",
+			  env->peb.id, env->peb.log_index,
+			  env->peb.log_offset, err);
+		goto close_opened_file;
+	}
+
+parse_block_bitmap:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_BITMAP))
+		goto parse_blk2off_table;
+
+	err = ssdfs_dumpfs_parse_block_bitmap_area(env,
+			&buf->pl_hdr.desc_array[SSDFS_BLK_BMAP_INDEX]);
+	if (err) {
+		SSDFS_ERR("fail to parse block bitmap: err %d\n", err);
+		goto close_opened_file;
+	}
+
+parse_blk2off_table:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_BLK2OFF_TABLE))
+		goto parse_block_state_area;
+
+	err = ssdfs_dumpfs_parse_blk2off_area(env,
+			&buf->pl_hdr.desc_array[SSDFS_OFF_TABLE_INDEX]);
+	if (err) {
+		SSDFS_ERR("fail to parse blk2 off table: err %d\n",
+			  err);
+		goto close_opened_file;
+	}
+
+parse_block_state_area:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_STATE_AREA))
+		goto parse_log_footer;
+
+	desc = &buf->pl_hdr.desc_array[SSDFS_BLK_DESC_AREA_INDEX];
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+
+	if (is_ssdfs_dumpfs_area_valid(desc)) {
+		area_buf = malloc(area_size);
+		if (!area_buf) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory: "
+				  "size %u\n", area_size);
+			goto close_opened_file;
+		}
+
+		memset(area_buf, 0, area_size);
+
+		err = ssdfs_dumpfs_read_blk_desc_array(env,
+						     env->peb.id,
+						     env->peb.peb_size,
+						     env->peb.log_offset,
+						     env->peb.log_size,
+						     area_offset,
+						     area_size,
+						     area_buf);
+		if (err) {
+			SSDFS_ERR("fail to read block descriptors: "
+				  "peb_id %llu, peb_size %u, "
+				  "log_index %u, log_offset %u, err %d\n",
+				  env->peb.id, env->peb.peb_size,
+				  env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_blk_desc_array;
+		}
+
+		err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
+							area_size);
+		if (err) {
+			SSDFS_ERR("fail to parse block descriptors: "
+				  "peb_id %llu, log_index %u, "
+				  "log_offset %u, err %d\n",
+				  env->peb.id, env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_blk_desc_array;
+		}
+
+finish_parse_blk_desc_array:
+		free(area_buf);
+		area_buf = NULL;
+
+		if (err)
+			goto close_opened_file;
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+
+		if (env->is_raw_dump_requested) {
+			env->raw_dump.offset = offset + area_offset;
+			env->raw_dump.size = area_size;
+
+			err = ssdfs_dumpfs_show_raw_dump(env);
+			if (err) {
+				SSDFS_ERR("fail to make blk desc array "
+					  "raw dump: "
+					  "peb_id %llu, err %d\n",
+					  env->peb.id, err);
+				goto close_opened_file;
+			}
+
+			SSDFS_DUMPFS_DUMP(env, "\n");
+		}
+	}
+
+parse_log_footer:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_LOG_FOOTER))
+		goto close_opened_file;
+
+	if (!has_footer)
+		goto close_opened_file;
+
+	desc = &buf->pl_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+
+	if (is_ssdfs_dumpfs_area_valid(desc)) {
+		area_buf = malloc(area_size);
+		if (!area_buf) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory: "
+				  "size %u\n", area_size);
+			goto close_opened_file;
+		}
+
+		memset(area_buf, 0, area_size);
+
+		err = ssdfs_dumpfs_read_log_footer(env,
+						   env->peb.id,
+						   env->peb.peb_size,
+						   env->peb.log_offset,
+						   env->peb.log_size,
+						   area_offset,
+						   area_size,
+						   area_buf);
+		if (err) {
+			SSDFS_ERR("fail to read log footer: "
+				  "peb_id %llu, peb_size %u, "
+				  "log_index %u, "
+				  "log_offset %u err %d\n",
+				  env->peb.id, env->peb.peb_size,
+				  env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_log_footer;
+		}
+
+		err = __ssdfs_dumpfs_parse_log_footer(env,
+						      area_offset,
+						      area_buf,
+						      area_size);
+		if (err) {
+			SSDFS_ERR("fail to parse log footer: "
+				  "peb_id %llu, log_index %u, "
+				  "log_offset %u, err %d\n",
+				  env->peb.id, env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_log_footer;
+		}
+
+finish_parse_log_footer:
+		free(area_buf);
+		area_buf = NULL;
+
+		if (err)
+			goto close_opened_file;
+	}
+
+close_opened_file:
+	ssdfs_dumpfs_close_file(env);
+
+finish_parse_partial_log:
+	return err;
+}
+
+int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
+{
+	union ssdfs_log_header buf;
 	u64 peb_id;
 	u64 pebs_count;
-	u16 log_index;
+	int log_index;
 	u16 logs_count;
 	int step = 2;
+	int i;
 	int err = 0;
 
 	SSDFS_DBG(env->base.show_debug,
@@ -2131,12 +3049,12 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		goto finish_peb_dump;
 	}
 
-	if (env->peb.size == U32_MAX) {
+	if (env->peb.peb_size == U32_MAX) {
 		SSDFS_DUMPFS_INFO(env->base.show_info,
 				  "[00%d]\tFIND FIRST VALID PEB...\n",
 				  step);
 
-		err = ssdfs_dumpfs_find_any_valid_peb(env, &sg_buf);
+		err = ssdfs_dumpfs_find_any_valid_peb(env, &buf.seg_hdr);
 		if (err) {
 			SSDFS_INFO("PLEASE, DEFINE PEB SIZE\n");
 			print_usage();
@@ -2148,7 +3066,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 				  step);
 
 		step++;
-		env->peb.size = 1 << sg_buf.volume_hdr.log_erasesize;
+		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
 	}
 
 	SSDFS_DUMPFS_INFO(env->base.show_info,
@@ -2156,52 +3074,15 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			  step);
 
 	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
-						env->peb.size,
-						0, env->peb.size,
-						&sg_buf);
+						env->peb.peb_size,
+						0, env->peb.peb_size,
+						&buf.magic);
 	if (err) {
 		SSDFS_ERR("fail to read PEB's header: "
 			  "peb_id %llu, peb_size %u, err %d\n",
-			  env->peb.id, env->peb.size, err);
+			  env->peb.id, env->peb.peb_size, err);
 		goto finish_peb_dump;
 	}
-
-	magic = &sg_buf.volume_hdr.magic;
-
-	peb_id = env->peb.id;
-	pebs_count = env->peb.pebs_count;
-	log_index = env->peb.log_index;
-	logs_count = env->peb.logs_count;
-
-try_read_segment_header:
-	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
-						env->peb.size,
-						env->peb.log_index,
-						env->peb.log_size,
-						&sg_buf);
-	if (err) {
-		SSDFS_ERR("fail to read PEB's header: "
-			  "peb_id %llu, peb_size %u, "
-			  "log_index %u, err %d\n",
-			  env->peb.id, env->peb.size,
-			  env->peb.log_index, err);
-		goto finish_peb_dump;
-	}
-
-	if (le32_to_cpu(magic->common) != SSDFS_SUPER_MAGIC ||
-	    le16_to_cpu(magic->key) != SSDFS_SEGMENT_HDR_MAGIC) {
-		if (env->peb.log_size == U32_MAX) {
-			err = -EINVAL;
-			SSDFS_INFO("PLEASE, DEFINE LOG SIZE\n");
-			print_usage();
-			goto finish_peb_dump;
-		}
-	} else {
-		env->peb.log_size = le16_to_cpu(sg_buf.log_pages);
-		env->peb.log_size <<= sg_buf.volume_hdr.log_pagesize;
-	}
-
-	offset = env->peb.id * env->peb.size;
 
 	if (env->peb.log_index == U16_MAX) {
 		err = -EINVAL;
@@ -2210,238 +3091,85 @@ try_read_segment_header:
 		goto finish_peb_dump;
 	}
 
-	if ((env->peb.log_index * env->peb.log_size) >= env->peb.size) {
-		err = -EINVAL;
-		SSDFS_ERR("log_index %u is huge\n",
-			  env->peb.log_index);
+	peb_id = env->peb.id;
+	pebs_count = env->peb.pebs_count;
+	log_index = env->peb.log_index;
+	logs_count = env->peb.logs_count;
+
+try_find_start_log:
+	for (i = 0; i < (env->peb.log_index - 1); i++) {
+		err = ssdfs_dumpfs_read_log_bytes(env, &buf);
+		if (err) {
+			SSDFS_ERR("fail to read log's size in bytes: "
+				  "peb_id %llu, peb_size %u, "
+				  "log_offset %u, err %d\n",
+				  env->peb.id, env->peb.peb_size,
+				  env->peb.log_offset, err);
+			goto finish_peb_dump;
+		}
+
+		env->peb.log_offset += env->peb.log_size;
+	}
+
+try_read_segment_header:
+	err = ssdfs_dumpfs_read_log_bytes(env, &buf);
+	if (err) {
+		SSDFS_ERR("fail to read log's size in bytes: "
+			  "peb_id %llu, peb_size %u, "
+			  "log_offset %u, err %d\n",
+			  env->peb.id, env->peb.peb_size,
+			  env->peb.log_offset, err);
 		goto finish_peb_dump;
 	}
 
-	if (le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
-	    le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC) {
-		err = ssdfs_dumpfs_open_file(env);
+	if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
+	    le16_to_cpu(buf.magic.key) == SSDFS_SEGMENT_HDR_MAGIC) {
+		err = ssdfs_dumpfs_parse_full_log(env, &buf);
 		if (err) {
-			SSDFS_ERR("unable to open output file: "
-				  "PEB %llu, log_index %u, err %d\n",
-				  env->peb.id, env->peb.log_index, err);
+			SSDFS_ERR("fail to parse the full log: "
+				  "err %d\n", err);
 			goto finish_peb_dump;
 		}
-
-		SSDFS_DUMPFS_DUMP(env, "PEB_ID %llu, LOG_INDEX %u\n\n",
-				  env->peb.id, env->peb.log_index);
-
-		if (!(env->peb.parse_flags & SSDFS_PARSE_HEADER))
-			goto parse_block_bitmap;
-
-		ssdfs_dumpfs_parse_segment_header(env, &sg_buf);
-
-		SSDFS_DUMPFS_DUMP(env, "\n");
-
-		if (env->is_raw_dump_requested) {
-			if (env->peb.id == SSDFS_INITIAL_SNAPSHOT_SEG &&
-			    env->peb.log_index == 0) {
-				env->raw_dump.offset = SSDFS_RESERVED_VBR_SIZE;
-			} else {
-				env->raw_dump.offset = offset;
-				env->raw_dump.offset +=
-					env->peb.log_index * env->peb.log_size;
-			}
-
-			env->raw_dump.size =
-				sizeof(struct ssdfs_segment_header);
-
-			err = ssdfs_dumpfs_show_raw_dump(env);
-			if (err) {
-				SSDFS_ERR("fail to make segment header dump: "
-					  "peb_id %llu, err %d\n",
-					  env->peb.id, err);
-				goto check_necessity_parse_next_log;
-			}
-
-			SSDFS_DUMPFS_DUMP(env, "\n");
-		}
-
-parse_block_bitmap:
-		if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_BITMAP))
-			goto parse_blk2off_table;
-
-		err = ssdfs_dumpfs_parse_block_bitmap_area(env,
-				&sg_buf.desc_array[SSDFS_BLK_BMAP_INDEX]);
+	} else if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
+		   le16_to_cpu(buf.magic.key) == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
+		err = ssdfs_dumpfs_parse_partial_log(env, &buf);
 		if (err) {
-			SSDFS_ERR("fail to parse block bitmap: err %d\n", err);
-			goto check_necessity_parse_next_log;
-		}
-
-parse_blk2off_table:
-		if (!(env->peb.parse_flags & SSDFS_PARSE_BLK2OFF_TABLE))
-			goto parse_block_state_area;
-
-		err = ssdfs_dumpfs_parse_blk2off_area(env,
-				&sg_buf.desc_array[SSDFS_OFF_TABLE_INDEX]);
-		if (err) {
-			SSDFS_ERR("fail to parse blk2 off table: err %d\n",
-				  err);
-			goto check_necessity_parse_next_log;
-		}
-
-parse_block_state_area:
-		if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_STATE_AREA))
-			goto parse_log_footer;
-
-		desc = &sg_buf.desc_array[SSDFS_BLK_DESC_AREA_INDEX];
-		area_offset = le32_to_cpu(desc->offset);
-		area_size = le32_to_cpu(desc->size);
-
-		if (is_ssdfs_dumpfs_area_valid(desc)) {
-			area_buf = malloc(area_size);
-			if (!area_buf) {
-				err = -ENOMEM;
-				SSDFS_ERR("fail to allocate memory: "
-					  "size %u\n", area_size);
-				goto check_necessity_parse_next_log;
-			}
-
-			memset(area_buf, 0, area_size);
-
-			err = ssdfs_dumpfs_read_blk_desc_array(env,
-							     env->peb.id,
-							     env->peb.size,
-							     env->peb.log_index,
-							     env->peb.log_size,
-							     area_offset,
-							     area_size,
-							     area_buf);
-			if (err) {
-				SSDFS_ERR("fail to read block descriptors: "
-					  "peb_id %llu, peb_size %u, "
-					  "log_index %u, err %d\n",
-					  env->peb.id, env->peb.size,
-					  env->peb.log_index, err);
-				goto finish_parse_blk_desc_array;
-			}
-
-			err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
-								area_size);
-			if (err) {
-				SSDFS_ERR("fail to parse block descriptors: "
-					  "peb_id %llu, log_index %u, err %d\n",
-					  env->peb.id, env->peb.log_index, err);
-				goto finish_parse_blk_desc_array;
-			}
-
-finish_parse_blk_desc_array:
-			free(area_buf);
-			area_buf = NULL;
-
-			if (err)
-				goto check_necessity_parse_next_log;
-
-			SSDFS_DUMPFS_DUMP(env, "\n");
-
-			if (env->is_raw_dump_requested) {
-				env->raw_dump.offset = offset + area_offset;
-				env->raw_dump.size = area_size;
-
-				err = ssdfs_dumpfs_show_raw_dump(env);
-				if (err) {
-					SSDFS_ERR("fail to make blk desc array "
-						  "raw dump: "
-						  "peb_id %llu, err %d\n",
-						  env->peb.id, err);
-					goto check_necessity_parse_next_log;
-				}
-
-				SSDFS_DUMPFS_DUMP(env, "\n");
-			}
-		}
-
-parse_log_footer:
-		if (!(env->peb.parse_flags & SSDFS_PARSE_LOG_FOOTER))
-			goto check_necessity_parse_next_log;
-
-		desc = &sg_buf.desc_array[SSDFS_LOG_FOOTER_INDEX];
-		area_offset = le32_to_cpu(desc->offset);
-		area_size = le32_to_cpu(desc->size);
-
-		if (is_ssdfs_dumpfs_area_valid(desc)) {
-			area_buf = malloc(area_size);
-			if (!area_buf) {
-				err = -ENOMEM;
-				SSDFS_ERR("fail to allocate memory: "
-					  "size %u\n", area_size);
-				goto check_necessity_parse_next_log;
-			}
-
-			memset(area_buf, 0, area_size);
-
-			err = ssdfs_dumpfs_read_log_footer(env,
-							   env->peb.id,
-							   env->peb.size,
-							   env->peb.log_index,
-							   env->peb.log_size,
-							   area_offset,
-							   area_size,
-							   area_buf);
-			if (err) {
-				SSDFS_ERR("fail to read log footer: "
-					  "peb_id %llu, peb_size %u, "
-					  "log_index %u, err %d\n",
-					  env->peb.id, env->peb.size,
-					  env->peb.log_index, err);
-				goto finish_parse_log_footer;
-			}
-
-			err = ssdfs_dumpfs_parse_log_footer(env,
-							    area_offset,
-							    area_buf,
-							    area_size);
-			if (err) {
-				SSDFS_ERR("fail to parse log footer: "
-					  "peb_id %llu, log_index %u, err %d\n",
-					  env->peb.id, env->peb.log_index, err);
-				goto finish_parse_log_footer;
-			}
-
-finish_parse_log_footer:
-			free(area_buf);
-			area_buf = NULL;
-
-			if (err)
-				goto check_necessity_parse_next_log;
-		}
-
-check_necessity_parse_next_log:
-		ssdfs_dumpfs_close_file(env);
-
-		if (err)
+			SSDFS_ERR("fail to parse the partial log: "
+				  "err %d\n", err);
 			goto finish_peb_dump;
-
-		if (env->peb.show_all_logs) {
-			env->peb.log_index++;
-			env->peb.logs_count--;
-
-			if (((u64)env->peb.log_size * env->peb.log_index) <
-								env->peb.size) {
-				if (env->peb.logs_count > 0)
-					goto try_read_segment_header;
-			}
 		}
 	} else {
 		SSDFS_DBG(env->base.show_debug,
-			  "LOG ABSENT: peb_id: %llu, log_index %u\n",
-			  env->peb.id, env->peb.log_index);
+			  "LOG ABSENT: peb_id: %llu, log_index %u, "
+			  "log_offset %u\n",
+			  env->peb.id, env->peb.log_index,
+			  env->peb.log_offset);
+			goto try_next_peb;
 	}
 
+	if (env->peb.show_all_logs) {
+		env->peb.log_index++;
+		env->peb.logs_count--;
+		env->peb.log_offset += env->peb.log_size;
+
+		if (env->peb.log_offset < env->peb.peb_size) {
+			if (env->peb.logs_count > 0)
+				goto try_read_segment_header;
+		}
+	}
+
+try_next_peb:
 	if (env->peb.pebs_count > 0) {
 		env->peb.id++;
 		env->peb.pebs_count--;
 
-		if (env->peb.id < (env->base.fs_size / env->peb.size)) {
+		if (env->peb.id < (env->base.fs_size / env->peb.peb_size)) {
 			env->peb.log_index = log_index;
 			env->peb.logs_count = logs_count;
+			env->peb.log_offset = 0;
 
 			if (env->peb.pebs_count > 0)
-				goto try_read_segment_header;
+				goto try_find_start_log;
 		}
 	}
 
@@ -2449,6 +3177,7 @@ check_necessity_parse_next_log:
 	env->peb.pebs_count = pebs_count;
 	env->peb.log_index = log_index;
 	env->peb.logs_count = logs_count;
+	env->peb.log_offset = 0;
 
 	SSDFS_DUMPFS_INFO(env->base.show_info,
 			  "[00%d]\t[SUCCESS]\n",

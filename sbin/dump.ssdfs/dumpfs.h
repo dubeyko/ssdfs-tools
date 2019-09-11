@@ -4,11 +4,11 @@
  *
  * sbin/dump.ssdfs/mkfs.h - declarations of dump.ssdfs utility.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -62,22 +62,24 @@ enum SSDFS_DUMPFS_PARSE_FLAGS {
  * struct ssdfs_peb_dump_environment - PEB dump environment
  * @id: PEB's identification number
  * @pebs_count: count of PEBs in the range
- * @size: PEB size in bytes
+ * @peb_size: PEB size in bytes
  * @show_all_logs: should all logs be shown?
+ * @log_offset: log offset in bytes
+ * @log_size: log's size in bytes
  * @log_index: index of extracting log
  * @logs_count: count of logs in the range
- * @log_size: full log's size in bytes
  * @parse_flags: what should be parsed?
  */
 struct ssdfs_peb_dump_environment {
 	u64 id;
 	u64 pebs_count;
-	u32 size;
+	u32 peb_size;
 
 	int show_all_logs;
+	u32 log_offset;
+	u32 log_size;
 	u16 log_index;
 	u16 logs_count;
-	u32 log_size;
 
 	u32 parse_flags;
 };
@@ -138,28 +140,37 @@ int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env);
 void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env);
 int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 				     u64 peb_id, u32 peb_size,
-				     int log_index, u32 log_size,
-				     struct ssdfs_segment_header *hdr);
+				     u32 log_offset, u32 size,
+				     void *buf);
+int ssdfs_dumpfs_read_partial_log_header(struct ssdfs_dumpfs_environment *env,
+					 u64 peb_id, u32 peb_size,
+					 u32 log_offset, u32 size,
+					 void *buf);
 int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf);
 int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf);
 int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf);
 int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
-				   int log_index, u32 log_size,
+				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf);
+int ssdfs_dumpfs_read_partial_log_footer(struct ssdfs_dumpfs_environment *env,
+					 u64 peb_id, u32 peb_size,
+					 u32 log_offset, u32 log_size,
+					 u32 area_offset, u32 size,
+					 void *buf);
 int ssdfs_dumpfs_find_any_valid_peb(struct ssdfs_dumpfs_environment *env,
 				    struct ssdfs_segment_header *hdr);
 void ssdfs_dumpfs_show_key_volume_details(struct ssdfs_dumpfs_environment *env,

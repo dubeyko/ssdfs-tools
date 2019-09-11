@@ -4,11 +4,11 @@
  *
  * sbin/mkfs.ssdfs/mapping_table_cache.c - PEB mapping table cache creation.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -73,6 +73,7 @@ int maptbl_cache_create_fragments_array(struct ssdfs_volume_layout *layout)
 
 	layout->maptbl_cache.fragment_size = fragment_size;
 	layout->maptbl_cache.fragments_count = fragments_count;
+	layout->maptbl_cache.bytes_count = 0;
 
 	return 0;
 
@@ -348,7 +349,8 @@ struct ssdfs_maptbl_cache_peb_state *FIRST_PEB_STATE(u8 *fragment)
 }
 
 static
-int add_leb2peb_pair(u8 *fragment,
+int add_leb2peb_pair(struct ssdfs_volume_layout *layout,
+		     u8 *fragment,
 		     struct ssdfs_leb2peb_pair *new_pair,
 		     struct ssdfs_leb2peb_pair *moving_pair,
 		     struct ssdfs_maptbl_cache_peb_state *new_state,
@@ -454,12 +456,19 @@ int add_leb2peb_pair(u8 *fragment,
 	memcpy(&hdr->end_leb, &leb2peb_pairs[items_count].leb_id,
 		sizeof(hdr->end_leb));
 
+	if (items_count == 0) {
+		layout->maptbl_cache.bytes_count +=
+			SSDFS_MAPTBL_CACHE_HDR_SIZE + magic_size;
+	}
+
 	items_count++;
 	hdr->items_count = cpu_to_le16(items_count);
 
 	bytes_count = SSDFS_MAPTBL_CACHE_HDR_SIZE + magic_size;
 	bytes_count += items_count * (pair_size + peb_state_size);
 	hdr->bytes_count = cpu_to_le16(bytes_count);
+
+	layout->maptbl_cache.bytes_count += pair_size + peb_state_size;
 
 	return need_moving ? -EAGAIN : 0;
 }
@@ -499,7 +508,7 @@ int cache_leb2peb_pair(struct ssdfs_volume_layout *layout,
 		memcpy(&new_pair, &moving_pair, pair_size);
 		memcpy(&new_state, &moving_state, peb_state_size);
 
-		res = add_leb2peb_pair(ptr, &new_pair, &moving_pair,
+		res = add_leb2peb_pair(layout, ptr, &new_pair, &moving_pair,
 					&new_state, &moving_state);
 
 		if (res == -EAGAIN) {

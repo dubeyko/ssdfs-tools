@@ -4,11 +4,11 @@
  *
  * sbin/mkfs.ssdfs/superblock_segment.c - superblock segment creation.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -1149,6 +1149,8 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	int peb_index = 0;
 	u32 fragments;
 	u32 log_pages = 0;
+	size_t hdr_size = sizeof(struct ssdfs_segment_header);
+	u32 inline_capacity = PAGE_CACHE_SIZE - hdr_size;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1248,7 +1250,17 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				memcpy(dptr, sptr, PAGE_CACHE_SIZE);
 			}
 
-			extent->bytes_count = peb_buffer_size;
+			extent->bytes_count = layout->maptbl_cache.bytes_count;
+
+			if (extent->bytes_count <= inline_capacity) {
+				struct ssdfs_extent_desc *sh_extent;
+
+				sh_extent =
+					&peb_desc->extents[SSDFS_SEG_HEADER];
+
+				extent->offset = sh_extent->offset +
+							sh_extent->bytes_count;
+			}
 
 			err = set_extent_start_offset(layout, peb_desc,
 							SSDFS_LOG_FOOTER);

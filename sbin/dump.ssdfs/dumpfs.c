@@ -4,11 +4,11 @@
  *
  * sbin/dump.ssdfs/dumpfs.c - implementation of dumpfs.ssdfs (volume dumping).
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -44,11 +44,12 @@ static struct ssdfs_dumpfs_environment environment = {
 	.base.fs_size = 0,
 	.peb.id = U64_MAX,
 	.peb.pebs_count = U64_MAX,
-	.peb.size = U32_MAX,
+	.peb.peb_size = U32_MAX,
 	.peb.show_all_logs = SSDFS_TRUE,
+	.peb.log_offset = 0,
+	.peb.log_size = U32_MAX,
 	.peb.log_index = 0,
 	.peb.logs_count = U16_MAX,
-	.peb.log_size = U32_MAX,
 	.peb.parse_flags = 0,
 	.raw_dump.offset = U64_MAX,
 	.raw_dump.size = 0,

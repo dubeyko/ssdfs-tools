@@ -4,11 +4,11 @@
  *
  * sbin/mkfs.ssdfs/mkfs.h - declarations of mkfs.ssdfs (creation) utility.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -234,12 +234,14 @@ struct ssdfs_maptbl_layout {
  * struct ssdfs_maptbl_cache_layout - PEB mapping table cache creation structure
  * @fragments_count: count of fragments in the maptbl cache
  * @fragment_size: size of fragment in bytes
+ * @bytes_count: number of bytes in the whole maptbl cache
  * @fragments_array: array of pointers on buffers
  */
 struct ssdfs_maptbl_cache_layout {
 	/* layout */
 	u32 fragments_count;
 	size_t fragment_size;
+	u32 bytes_count;
 	void **fragments_array;
 };
 
@@ -386,6 +388,26 @@ struct ssdfs_mkfs_operations {
 
 #define BLK_DESC_TABLE_FRAGMENTS(blks_count) \
 	((blks_count + BLK_DESC_PER_FRAGMENT() - 1) / BLK_DESC_PER_FRAGMENT())
+
+static inline
+int META2SEG_TYPE(int meta_index)
+{
+	switch (meta_index) {
+	case SSDFS_INITIAL_SNAPSHOT:
+		return SSDFS_INITIAL_SNAPSHOT_SEG_TYPE;
+
+	case SSDFS_SUPERBLOCK:
+		return SSDFS_SB_SEG_TYPE;
+
+	case SSDFS_SEGBMAP:
+		return SSDFS_SEGBMAP_SEG_TYPE;
+
+	case SSDFS_PEB_MAPPING_TABLE:
+		return SSDFS_MAPTBL_SEG_TYPE;
+	}
+
+	return SSDFS_UNKNOWN_SEG_TYPE;
+}
 
 /* options.c */
 void print_version(void);

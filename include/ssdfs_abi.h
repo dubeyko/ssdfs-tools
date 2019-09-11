@@ -4,11 +4,11 @@
  *
  * include/ssdfs_abi.h - SSDFS on-disk structures and common declarations.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -24,6 +24,7 @@
 #define SSDFS_SUPER_MAGIC			0x53734466	/* SsDf */
 #define SSDFS_SEGMENT_HDR_MAGIC			0x5348		/* SH */
 #define SSDFS_LOG_FOOTER_MAGIC			0x4C46		/* LF */
+#define SSDFS_PARTIAL_LOG_HDR_MAGIC		0x5048		/* PH */
 #define SSDFS_BLK_BMAP_MAGIC			0x424D		/* BM */
 #define SSDFS_FRAGMENT_DESC_MAGIC		0x66		/* f */
 #define SSDFS_CHAIN_HDR_MAGIC			0x63		/* c */
@@ -50,7 +51,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		0
+#define SSDFS_MINOR_REVISION		1
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1384,6 +1385,9 @@ struct ssdfs_segment_header {
 #define SSDFS_MAPTBL_CACHE_BIT			(6)
 #define SSDFS_FOOTER_BIT			(7)
 #define SSDFS_PARTIAL_LOG_BIT			(8)
+#define SSDFS_PARTIAL_LOG_HEADER_BIT		(9)
+#define SSDFS_PLH_INSTEAD_FOOTER_BIT		(10)
+
 
 /* Segment flags */
 #define SSDFS_SEG_HDR_HAS_BLK_BMAP		(1 << SSDFS_BLK_BMAP_BIT)
@@ -1395,7 +1399,9 @@ struct ssdfs_segment_header {
 #define SSDFS_LOG_HAS_MAPTBL_CACHE		(1 << SSDFS_MAPTBL_CACHE_BIT)
 #define SSDFS_LOG_HAS_FOOTER			(1 << SSDFS_FOOTER_BIT)
 #define SSDFS_LOG_IS_PARTIAL			(1 << SSDFS_PARTIAL_LOG_BIT)
-#define SSDFS_SEG_HDR_FLAG_MASK			0x1FF
+#define SSDFS_LOG_HAS_PARTIAL_HEADER		(1 << SSDFS_PARTIAL_LOG_HEADER_BIT)
+#define SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER	(1 << SSDFS_PLH_INSTEAD_FOOTER_BIT)
+#define SSDFS_SEG_HDR_FLAG_MASK			0x7FF
 
 /*
  * struct ssdfs_log_footer - footer of partial log
@@ -1405,8 +1411,7 @@ struct ssdfs_segment_header {
  * @log_bytes: payload size in bytes
  * @log_flags: flags of log
  * @reserved1: reserved field
- * @blk_bmap_desc: descriptor of block bitmap place
- * @offsets_table_desc: descriptor of segment's offset translation table
+ * @desc_array: array of footer's metadata descriptors
  * @payload: space for log footer's payload
  */
 struct ssdfs_log_footer {
@@ -1443,6 +1448,90 @@ struct ssdfs_log_footer {
 #define SSDFS_PARTIAL_LOG_FOOTER		(1 << __SSDFS_PARTIAL_LOG_BIT)
 #define SSDFS_ENDING_LOG_FOOTER			(1 << __SSDFS_ENDING_LOG_BIT)
 #define SSDFS_LOG_FOOTER_FLAG_MASK		0xF
+
+/*
+ * struct ssdfs_partial_log_header - header of partial log
+ * @magic: magic signature + revision
+ * @check: metadata checksum
+ * @timestamp: writing timestamp
+ * @cno: writing checkpoint
+ * @log_pages: size of log in pages count
+ * @seg_type: type of segment
+ * @pl_flags: flags of log
+ * @log_bytes: payload size in bytes
+ * @flags: volume flags
+ * @desc_array: array of log's metadata descriptors
+ * @nsegs: segments count
+ * @free_pages: free pages count
+ * @root_folder: copy of root folder's inode
+ * @inodes_btree: inodes btree root
+ * @shared_extents_btree: shared extents btree root
+ * @shared_dict_btree: shared dictionary btree root
+ * @sequence_id: index of partial log in the sequence
+ * @log_pagesize: log2(page size)
+ * @log_erasesize: log2(erase block size)
+ * @log_segsize: log2(segment size)
+ * @log_pebs_per_seg: log2(erase blocks per segment)
+ *
+ * This header is used when the full log needs to be built from several
+ * partial logs. The header represents the combination of the most
+ * essential fields of segment header and log footer. The first partial
+ * log starts from the segment header and partial log header. The next
+ * every partial log starts from the partial log header. Only the latest
+ * log ends with the log footer.
+ */
+struct ssdfs_partial_log_header {
+/* 0x0000 */
+	struct ssdfs_signature magic;
+
+/* 0x0008 */
+	struct ssdfs_metadata_check check;
+
+/* 0x0010 */
+	__le64 timestamp;
+	__le64 cno;
+
+/* 0x0020 */
+	__le16 log_pages;
+	__le16 seg_type;
+	__le32 pl_flags;
+
+/* 0x0028 */
+	__le32 log_bytes;
+	__le32 flags;
+
+/* 0x0030 */
+	struct ssdfs_metadata_descriptor desc_array[SSDFS_SEG_HDR_DESC_MAX];
+
+/* 0x00B0 */
+	__le64 nsegs;
+	__le64 free_pages;
+
+/* 0x00C0 */
+	struct ssdfs_inode root_folder;
+
+/* 0x01C0 */
+	struct ssdfs_inodes_btree inodes_btree;
+
+/* 0x0240 */
+	struct ssdfs_shared_extents_btree shared_extents_btree;
+
+/* 0x02C0 */
+	struct ssdfs_shared_dictionary_btree shared_dict_btree;
+
+/* 0x0340 */
+	__le8 sequence_id;
+	__le8 log_pagesize;
+	__le8 log_erasesize;
+	__le8 log_segsize;
+	__le8 log_pebs_per_seg;
+	__le8 reserved[0xB];
+
+/* 0x0350 */
+	__le8 payload[0xB0];
+
+/* 0x0400 */
+} __attribute__((packed));
 
 /*
  * struct ssdfs_fragments_chain_header - header of fragments' chain
@@ -1633,7 +1722,7 @@ enum {
 /*
  * struct ssdfs_peb_page_descriptor - PEB's page descriptor
  * @logical_offset: logical offset from file's begin in pages
- * @logical_blk: logical block number in the segment
+ * @logical_blk: logical number of the block in segment
  * @peb_page: PEB's page index
  */
 struct ssdfs_peb_page_descriptor {

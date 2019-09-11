@@ -4,11 +4,11 @@
  *
  * sbin/dump.ssdfs/options.c - parsing command line options functionality.
  *
- * Copyright (c) 2014-2018 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2009-2018, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -155,7 +155,6 @@ void parse_options(int argc, char *argv[],
 			case SSDFS_DUMP_PEB_COMMAND:
 				/* do nothing */
 				break;
-
 			default:
 				BUG();
 			}
@@ -178,7 +177,7 @@ void parse_options(int argc, char *argv[],
 					break;
 				case PEB_SIZE_OPT:
 					count = atol(value);
-					peb->size = (u32)count;
+					peb->peb_size = (u32)count;
 					break;
 				case PEB_LOG_INDEX_OPT:
 					count = atoi(value);
