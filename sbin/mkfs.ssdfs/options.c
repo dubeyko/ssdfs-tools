@@ -62,7 +62,7 @@ void print_usage(void)
 		   "compression=(none|zlib|lzo)]\t  "
 		   "offsets table options.\n");
 	SSDFS_INFO("\t [-p|--pagesize size]\t  page size of target device "
-		   "(512|2048|4096|8192|16384 bytes).\n");
+		   "(4096|8192|16384|32768 bytes).\n");
 	SSDFS_INFO("\t [-q|--quiet]\t\t  quiet execution "
 		   "(useful for scripts).\n");
 	SSDFS_INFO("\t [-S|--segbmap has_copy,segs_per_chain=value,"
@@ -70,7 +70,7 @@ void print_usage(void)
 		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
 		   "segment bitmap options.\n");
 	SSDFS_INFO("\t [-s|--segsize size]\t  segment size of target device "
-		   "(128KB|256KB|512KB|2MB|8MB).\n");
+		   "(128KB|256KB|512KB|2MB|8MB|16MB|32MB|64MB|...).\n");
 	SSDFS_INFO("\t [-T|--btree node_size=value,min_index_area_size=value,"
 		   "leaf_node_log_pages=value,hybrid_node_log_pages=value,"
 		   "index_node_log_pages=value]\t  "
@@ -84,11 +84,10 @@ void print_usage(void)
 static void check_pagesize(int pagesize)
 {
 	switch (pagesize) {
-	case SSDFS_512B:
-	case SSDFS_2KB:
 	case SSDFS_4KB:
 	case SSDFS_8KB:
 	case SSDFS_16KB:
+	case SSDFS_32KB:
 		/* do nothing: proper value */
 		break;
 
@@ -106,6 +105,13 @@ static void check_segsize(long segsize)
 	case SSDFS_512KB:
 	case SSDFS_2MB:
 	case SSDFS_8MB:
+	case SSDFS_16MB:
+	case SSDFS_32MB:
+	case SSDFS_64MB:
+	case SSDFS_128MB:
+	case SSDFS_256MB:
+	case SSDFS_512MB:
+	case SSDFS_1GB:
 		/* do nothing: proper value */
 		break;
 

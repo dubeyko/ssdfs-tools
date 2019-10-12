@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.3.01 [October 12, 2019]
+    (*) [mkfs] correct available granularities set.
+
 v.3.00 [September 11, 2019]
     (*) The partial logs support has been implemented.
 
