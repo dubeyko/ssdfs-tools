@@ -112,6 +112,11 @@ static void check_segsize(long segsize)
 	case SSDFS_256MB:
 	case SSDFS_512MB:
 	case SSDFS_1GB:
+	case SSDFS_2GB:
+	case SSDFS_8GB:
+	case SSDFS_16GB:
+	case SSDFS_32GB:
+	case SSDFS_64GB:
 		/* do nothing: proper value */
 		break;
 

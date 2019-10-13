@@ -323,6 +323,12 @@ void maptbl_prepare_leb_table(struct ssdfs_volume_layout *layout,
 		lebs_count = min_t(u64, lebs_count, lebs_per_portion);
 	}
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "start_leb %llu, pebs_per_volume %llu, "
+		  "lebs_per_portion %u, lebs_count %llu\n",
+		  start_leb, pebs_per_volume,
+		  lebs_per_portion, lebs_count);
+
 	bytes_count = hdr_size;
 	bytes_count += lebs_count * sizeof(struct ssdfs_leb_descriptor);
 
@@ -353,7 +359,7 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 {
 	struct ssdfs_peb_table_fragment_header *hdr;
 	size_t hdr_size = sizeof(struct ssdfs_peb_table_fragment_header);
-	u16 pebs_per_portion = layout->maptbl.pebs_per_portion;
+	u64 pebs_per_portion = layout->maptbl.pebs_per_portion;
 	u16 reserved_pebs_pct = layout->maptbl.reserved_pebs_per_fragment;
 	u64 reserved_pebs;
 	u16 stripes_per_portion;
@@ -362,31 +368,42 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 	u64 start_peb;
 	u64 pebs_count;
 	u32 bytes_count;
+	u64 rest_pebs;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "layout %p, ptr %p, portion_index %u, "
 		  "stripe_index %u\n",
 		  layout, ptr, portion_index, stripe_index);
 
+	pebs_per_volume = layout->env.fs_size / layout->env.erase_size;
 	stripes_per_portion = layout->maptbl.stripes_per_portion;
-	peb_desc_per_stripe = pebs_per_portion / stripes_per_portion;
 
 	BUG_ON(stripe_index >= stripes_per_portion);
 
+	rest_pebs = pebs_per_volume - (pebs_per_portion * portion_index);
+	rest_pebs = min_t(u64, rest_pebs, pebs_per_portion);
+	peb_desc_per_stripe = rest_pebs / stripes_per_portion;
+
 	start_peb = ((u64)pebs_per_portion * portion_index) +
 			((u64)peb_desc_per_stripe * stripe_index);
-
-	pebs_per_volume = layout->env.fs_size / layout->env.erase_size;
 
 	if (pebs_per_volume <= start_peb)
 		pebs_count = 0;
 	else {
 		pebs_count = pebs_per_volume -
-			((u64)pebs_per_portion * portion_index);
+			(pebs_per_portion * portion_index);
 		pebs_count = min_t(u64, pebs_count, pebs_per_portion);
 		pebs_count += pebs_count % stripes_per_portion;
 		pebs_count /= stripes_per_portion;
 	}
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "stripes_per_portion %u, peb_desc_per_stripe %u, "
+		  "pebs_per_portion %llu, start_peb %llu, "
+		  "pebs_per_volume %llu, pebs_count %llu\n",
+		  stripes_per_portion, peb_desc_per_stripe,
+		  pebs_per_portion, start_peb, pebs_per_volume,
+		  pebs_count);
 
 	bytes_count = hdr_size;
 	bytes_count += pebs_count * sizeof(struct ssdfs_peb_descriptor);
