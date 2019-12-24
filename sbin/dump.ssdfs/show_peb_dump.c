@@ -428,8 +428,9 @@ ssdfs_dumpfs_parse_inline_root_node(struct ssdfs_dumpfs_environment *env,
 
 	SSDFS_DUMPFS_DUMP(env, "UPPER NODE ID: %u\n",
 		le32_to_cpu(ptr->header.upper_node_id));
-	SSDFS_DUMPFS_DUMP(env, "CREATE_CNO: %llu\n",
-		le64_to_cpu(ptr->header.create_cno));
+	SSDFS_DUMPFS_DUMP(env, "NODE_ID: left %u, right %u\n",
+		le32_to_cpu(ptr->header.node_ids[0]),
+		le32_to_cpu(ptr->header.node_ids[1]));
 
 	for (i = 0; i < SSDFS_BTREE_ROOT_NODE_INDEX_COUNT; i++) {
 		SSDFS_DUMPFS_DUMP(env, "BTREE INDEX: #%d\n", i);

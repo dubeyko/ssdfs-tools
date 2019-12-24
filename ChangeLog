@@ -2,7 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
-v.3.02 [October 13 2019]
+v.3.03 [December 20, 2019]
+    (*) On-disk layout has version 1.2.
+
+v.3.02 [October 13, 2019]
     (*) [mkfs] fix bug of PEB mapping table creation.
 
 v.3.01 [October 12, 2019]

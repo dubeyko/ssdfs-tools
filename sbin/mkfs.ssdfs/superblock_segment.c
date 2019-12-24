@@ -574,7 +574,8 @@ static void sb_inodes_btree_prepare_root_node(struct ssdfs_volume_layout *layout
 	root_node->header.flags = cpu_to_le8(0);
 	root_node->header.type = cpu_to_le8(SSDFS_BTREE_ROOT_NODE);
 	root_node->header.upper_node_id = cpu_to_le32(SSDFS_BTREE_ROOT_NODE_ID);
-	root_node->header.create_cno = cpu_to_le64(SSDFS_CREATE_CNO);
+	root_node->header.node_ids[0] = cpu_to_le32(U32_MAX);
+	root_node->header.node_ids[1] = cpu_to_le32(U32_MAX);
 }
 
 static void sb_prepare_root_folder(struct ssdfs_volume_layout *layout)
@@ -780,7 +781,8 @@ sb_shared_extents_btree_prepare_root_node(struct ssdfs_volume_layout *layout)
 	root_node->header.flags = cpu_to_le8(0);
 	root_node->header.type = cpu_to_le8(SSDFS_BTREE_ROOT_NODE);
 	root_node->header.upper_node_id = cpu_to_le32(SSDFS_BTREE_ROOT_NODE_ID);
-	root_node->header.create_cno = cpu_to_le64(SSDFS_CREATE_CNO);
+	root_node->header.node_ids[0] = cpu_to_le32(U32_MAX);
+	root_node->header.node_ids[1] = cpu_to_le32(U32_MAX);
 }
 
 static int sb_prepare_shared_extents_btree(struct ssdfs_volume_layout *layout)
@@ -904,7 +906,8 @@ sb_shared_dict_btree_prepare_root_node(struct ssdfs_volume_layout *layout)
 	root_node->header.flags = cpu_to_le8(0);
 	root_node->header.type = cpu_to_le8(SSDFS_BTREE_ROOT_NODE);
 	root_node->header.upper_node_id = cpu_to_le32(SSDFS_BTREE_ROOT_NODE_ID);
-	root_node->header.create_cno = cpu_to_le64(SSDFS_CREATE_CNO);
+	root_node->header.node_ids[0] = cpu_to_le32(U32_MAX);
+	root_node->header.node_ids[1] = cpu_to_le32(U32_MAX);
 }
 
 static int sb_prepare_shared_dict_btree(struct ssdfs_volume_layout *layout)

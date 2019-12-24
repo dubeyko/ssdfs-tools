@@ -51,7 +51,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		1
+#define SSDFS_MINOR_REVISION		2
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -529,6 +529,8 @@ struct ssdfs_btree_index_key {
 /* 0x0020 */
 } __attribute__((packed));
 
+#define SSDFS_BTREE_ROOT_NODE_INDEX_COUNT	(2)
+
 /*
  * struct ssdfs_btree_root_node_header - root node header
  * @height: btree height
@@ -536,7 +538,7 @@ struct ssdfs_btree_index_key {
  * @flags: root node flags
  * @type: root node type
  * @upper_node_id: last allocated the node identification number
- * @create_cno: create checkpoint
+ * @node_ids: root node's children IDs
  */
 struct ssdfs_btree_root_node_header {
 /* 0x0000 */
@@ -548,12 +550,10 @@ struct ssdfs_btree_root_node_header {
 
 /* 0x0004 */
 #define SSDFS_BTREE_ROOT_NODE_ID		(0)
-#define SSDFS_BTREE_ROOT_NODE_LEFT_CHILD_ID	(1)
-#define SSDFS_BTREE_ROOT_NODE_RIGHT_CHILD_ID	(2)
 	__le32 upper_node_id;
 
 /* 0x0008 */
-	__le64 create_cno;
+	__le32 node_ids[SSDFS_BTREE_ROOT_NODE_INDEX_COUNT];
 
 /* 0x0010 */
 } __attribute__((packed));
