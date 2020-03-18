@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.3.04 [March 18, 2020]
+    (*) On-disk layout has version 1.3.
+
 v.3.03 [December 20, 2019]
     (*) On-disk layout has version 1.2.
 

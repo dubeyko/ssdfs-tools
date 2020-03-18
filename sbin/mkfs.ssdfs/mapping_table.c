@@ -422,7 +422,7 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 
 	reserved_pebs = (pebs_count * reserved_pebs_pct) / 100;
 	BUG_ON(reserved_pebs >= U16_MAX);
-	hdr->unused_pebs = cpu_to_le16((u16)(pebs_count - reserved_pebs));
+	hdr->last_selected_peb = cpu_to_le16(0);
 	hdr->reserved_pebs = cpu_to_le16((u16)reserved_pebs);
 
 	hdr->stripe_id = cpu_to_le16(stripe_index);
@@ -533,7 +533,6 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 	u32 peb_size = layout->env.erase_size;
 	u64 offset;
 	u8 flags;
-	u16 unused_pebs;
 	u16 i;
 	u8 *bmap;
 	int res;
@@ -577,11 +576,6 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 				flags |= SSDFS_PEBTBL_BADBLK_EXIST;
 				hdr->flags = cpu_to_le8(flags);
 
-				unused_pebs = le16_to_cpu(hdr->unused_pebs);
-				BUG_ON(unused_pebs == 0);
-				unused_pebs--;
-				hdr->unused_pebs = cpu_to_le16(unused_pebs);
-
 				bmap = &hdr->bmaps[SSDFS_PEBTBL_USED_BMAP][0];
 				__set_bit(i, (unsigned long *)bmap);
 				bmap = &hdr->bmaps[SSDFS_PEBTBL_BADBLK_BMAP][0];
@@ -596,11 +590,6 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 				flags = le8_to_cpu(hdr->flags);
 				flags |= SSDFS_PEBTBL_UNDER_RECOVERING;
 				hdr->flags = cpu_to_le8(flags);
-
-				unused_pebs = le16_to_cpu(hdr->unused_pebs);
-				BUG_ON(unused_pebs == 0);
-				unused_pebs--;
-				hdr->unused_pebs = cpu_to_le16(unused_pebs);
 
 				bmap = &hdr->bmaps[SSDFS_PEBTBL_USED_BMAP][0];
 				__set_bit(i, (unsigned long *)bmap);
@@ -752,17 +741,11 @@ u8 *get_pebtbl_fragment(struct ssdfs_volume_layout *layout,
 static
 u16 find_unused_peb(struct ssdfs_peb_table_fragment_header *hdr)
 {
-	u16 unused_pebs = le16_to_cpu(hdr->unused_pebs);
 	u16 pebs_count = le16_to_cpu(hdr->pebs_count);
 	u16 bmap_ulongs = (pebs_count + BITS_PER_LONG - 1) / BITS_PER_LONG;
 	unsigned long *bmap;
 	u16 index;
 	u16 peb_index;
-
-	if (unused_pebs == 0) {
-		SSDFS_ERR("unused_pebs == 0\n");
-		return U16_MAX;
-	}
 
 	bmap = (unsigned long *)&hdr->bmaps[SSDFS_PEBTBL_USED_BMAP][0];
 
@@ -794,7 +777,7 @@ void define_peb_as_used(u8 *pebtbl, u16 peb_index, int meta_index)
 	struct ssdfs_peb_descriptor *desc_array, *desc;
 	size_t desc_size = sizeof(struct ssdfs_peb_descriptor);
 	u16 pebs_count;
-	u16 unused_pebs;
+	u16 last_selected_peb;
 	int peb_type = SEG2PEB_TYPE(META2SEG_TYPE(meta_index));
 	unsigned long *bmap;
 	u32 bytes_count;
@@ -806,9 +789,8 @@ void define_peb_as_used(u8 *pebtbl, u16 peb_index, int meta_index)
 	hdr = (struct ssdfs_peb_table_fragment_header *)pebtbl;
 	BUG_ON(hdr->magic != cpu_to_le16(SSDFS_PEB_TABLE_MAGIC));
 	pebs_count = le16_to_cpu(hdr->pebs_count);
-	unused_pebs = le16_to_cpu(hdr->unused_pebs);
-	BUG_ON(unused_pebs == 0);
-	BUG_ON(unused_pebs > pebs_count);
+	last_selected_peb = le16_to_cpu(hdr->last_selected_peb);
+	BUG_ON(last_selected_peb >= pebs_count);
 	BUG_ON(peb_index >= pebs_count);
 	bytes_count = le32_to_cpu(hdr->bytes_count);
 
@@ -823,8 +805,7 @@ void define_peb_as_used(u8 *pebtbl, u16 peb_index, int meta_index)
 	desc->type = cpu_to_le8((u8)peb_type);
 	desc->state = cpu_to_le8(SSDFS_MAPTBL_USING_PEB_STATE);
 
-	unused_pebs--;
-	hdr->unused_pebs = cpu_to_le16(unused_pebs);
+	hdr->last_selected_peb = cpu_to_le16(last_selected_peb);
 
 	bmap = (unsigned long *)&hdr->bmaps[SSDFS_PEBTBL_USED_BMAP][0];
 	__set_bit(peb_index, bmap);
