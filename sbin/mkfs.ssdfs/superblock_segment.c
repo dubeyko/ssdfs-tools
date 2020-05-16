@@ -278,7 +278,7 @@ static int sb_dentries_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
 	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
 	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
-	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index));
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
 	desc->item_size = cpu_to_le16((u16)sizeof(struct ssdfs_dir_entry));
 
 	min_index_area_size = layout->btree.min_index_area_size;
@@ -310,7 +310,7 @@ static int sb_dentries_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
-		  sizeof(struct ssdfs_btree_index),
+		  sizeof(struct ssdfs_btree_index_key),
 		  sizeof(struct ssdfs_dir_entry),
 		  min_index_area_size);
 
@@ -361,7 +361,7 @@ static int sb_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
 	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
 	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
-	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index));
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
 	desc->item_size = cpu_to_le16((u16)sizeof(struct ssdfs_raw_fork));
 
 	min_index_area_size = layout->btree.min_index_area_size;
@@ -393,7 +393,7 @@ static int sb_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
-		  sizeof(struct ssdfs_btree_index),
+		  sizeof(struct ssdfs_btree_index_key),
 		  sizeof(struct ssdfs_raw_fork),
 		  min_index_area_size);
 
@@ -444,7 +444,7 @@ static int sb_xattrs_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
 	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
 	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
-	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index));
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
 	desc->item_size = cpu_to_le16((u16)sizeof(struct ssdfs_xattr_entry));
 
 	min_index_area_size = layout->btree.min_index_area_size;
@@ -476,7 +476,7 @@ static int sb_xattrs_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
-		  sizeof(struct ssdfs_btree_index),
+		  sizeof(struct ssdfs_btree_index_key),
 		  sizeof(struct ssdfs_xattr_entry),
 		  min_index_area_size);
 
@@ -524,7 +524,7 @@ static int sb_inodes_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
 	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
 	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
-	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index));
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
 	desc->item_size = cpu_to_le16((u16)inode_size);
 
 	min_index_area_size = layout->btree.min_index_area_size;
@@ -556,7 +556,7 @@ static int sb_inodes_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
-		  sizeof(struct ssdfs_btree_index),
+		  sizeof(struct ssdfs_btree_index_key),
 		  sizeof(struct ssdfs_inode),
 		  min_index_area_size);
 
@@ -730,7 +730,7 @@ int sb_shared_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
 	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
 	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
-	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index));
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
 	desc->item_size = cpu_to_le16((u16)sizeof(struct ssdfs_raw_fork));
 
 	min_index_area_size = layout->btree.min_index_area_size;
@@ -762,7 +762,7 @@ int sb_shared_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
-		  sizeof(struct ssdfs_btree_index),
+		  sizeof(struct ssdfs_btree_index_key),
 		  sizeof(struct ssdfs_raw_fork),
 		  min_index_area_size);
 
@@ -855,7 +855,7 @@ static int sb_shared_dict_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
 	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
 	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
-	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index));
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
 	desc->item_size = cpu_to_le16((u16)SSDFS_MAX_NAME_LEN);
 
 	min_index_area_size = layout->btree.min_index_area_size;
@@ -887,7 +887,7 @@ static int sb_shared_dict_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
-		  sizeof(struct ssdfs_btree_index),
+		  sizeof(struct ssdfs_btree_index_key),
 		  sizeof(struct ssdfs_raw_fork),
 		  min_index_area_size);
 
