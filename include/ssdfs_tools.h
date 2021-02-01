@@ -4,7 +4,7 @@
  *
  * include/ssdfs_tools.h - SSDFS tools' declarations.
  *
- * Copyright (c) 2020 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2020-2021 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>

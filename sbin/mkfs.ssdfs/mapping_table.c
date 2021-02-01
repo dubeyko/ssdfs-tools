@@ -4,11 +4,11 @@
  *
  * sbin/mkfs.ssdfs/mapping_table.c - PEB mapping table creation functionality.
  *
- * Copyright (c) 2014-2020 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2021 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2014-2020, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2021, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -206,6 +206,7 @@ define_stripes_per_portion:
 	layout->maptbl.lebtbl_portion_bytes = lebtbl_portion_bytes;
 	layout->maptbl.pebtbl_portion_bytes = pebtbl_portion_bytes;
 	BUG_ON(leb_desc_per_portion >= U16_MAX);
+
 	layout->maptbl.lebs_per_portion = (u16)leb_desc_per_portion;
 	BUG_ON(peb_desc_per_portion >= U16_MAX);
 	layout->maptbl.pebs_per_portion = (u16)peb_desc_per_portion;
@@ -382,7 +383,10 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 
 	rest_pebs = pebs_per_volume - (pebs_per_portion * portion_index);
 	rest_pebs = min_t(u64, rest_pebs, pebs_per_portion);
+
 	peb_desc_per_stripe = rest_pebs / stripes_per_portion;
+	if (rest_pebs % stripes_per_portion)
+		peb_desc_per_stripe++;
 
 	start_peb = ((u64)pebs_per_portion * portion_index) +
 			((u64)peb_desc_per_stripe * stripe_index);
