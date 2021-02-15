@@ -399,6 +399,9 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 		pebs_count = min_t(u64, pebs_count, pebs_per_portion);
 		pebs_count += pebs_count % stripes_per_portion;
 		pebs_count /= stripes_per_portion;
+
+		if ((start_peb + pebs_count) > pebs_per_volume)
+			pebs_count = pebs_per_volume - start_peb;
 	}
 
 	SSDFS_DBG(layout->env.show_debug,
