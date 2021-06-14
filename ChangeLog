@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.3.08 [June 13, 2021]
+    (*) [testfs] implement test.ssdfs tool.
+
 v.3.07 [February 15, 2021]
     (*) Fix bugs in PEB mapping table's creation logic (step 2).
 

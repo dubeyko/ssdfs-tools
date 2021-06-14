@@ -21,6 +21,8 @@
 
 #define pr_fmt(fmt) SSDFS_UTILS_VERSION ": " fmt
 
+#include <sys/ioctl.h>
+
 #include "kerncompat.h"
 #include "ssdfs_abi.h"
 #include "ssdfs_constants.h"
@@ -91,6 +93,35 @@ struct ssdfs_environment {
 	int fd;
 	const struct ssdfs_device_ops *dev_ops;
 };
+
+/*
+ * struct ssdfs_testing_environment - define testing environment
+ * @subsystems: enable testing particular subsystems
+ * @page_size: logical block size in bytes
+ *
+ * @files_number_threshold: maximum number of files
+ *
+ * @file_size_threshold: maximum size of file in bytes
+ * @extent_len_threshold: maximum extent length in logical blocks
+ */
+struct ssdfs_testing_environment {
+	u64 subsystems;
+	u32 page_size;
+
+	u64 files_number_threshold;
+
+	u64 file_size_threshold;
+	u16 extent_len_threshold;
+};
+
+/* Subsystem tests */
+#define SSDFS_ENABLE_EXTENTS_TREE_TESTING	(1 << 0)
+#define SSDFS_ENABLE_DENTRIES_TREE_TESTING	(1 << 1)
+
+#define SSDFS_IOCTL_MAGIC 0xdf
+
+#define SSDFS_IOC_DO_TESTING _IOW(SSDFS_IOCTL_MAGIC, 1, \
+				  struct ssdfs_testing_environment)
 
 /* lib/ssdfs_common.c */
 const char *uuid_string(const unsigned char *uuid);
