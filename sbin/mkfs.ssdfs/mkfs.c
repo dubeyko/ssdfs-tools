@@ -1077,7 +1077,7 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 	int err = 0;
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "device %s, segs_count %u, seg_size %u, "
+		  "device %s, segs_count %u, seg_size %llu, "
 		  "need_erase_device %d, is_volume_erased %d\n",
 		  layout->env.dev_name, layout->segs_count,
 		  layout->seg_size, layout->need_erase_device,

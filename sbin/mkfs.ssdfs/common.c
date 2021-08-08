@@ -2031,7 +2031,7 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 		&layout->sb.vs.shared_dict_btree,
 		sizeof(pl_footer->shared_dict_btree));
 
-	pl_footer->sequence_id = 0;
+	pl_footer->sequence_id = cpu_to_le32(0);
 
 	pl_footer->log_pagesize = layout->sb.vh.log_pagesize;
 	pl_footer->log_erasesize = layout->sb.vh.log_erasesize;

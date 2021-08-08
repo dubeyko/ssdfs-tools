@@ -321,7 +321,7 @@ struct ssdfs_volume_layout {
 	int force_overwrite;
 	int need_erase_device;
 
-	u32 seg_size;
+	u64 seg_size;
 	u32 page_size;
 	u32 nand_dies_count;
 	char volume_label[SSDFS_VOLUME_LABEL_MAX];

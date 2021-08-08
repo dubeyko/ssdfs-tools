@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.3.09 [August 08, 2021]
+    (*) On-disk layout has version 1.4.
+
 v.3.08 [June 13, 2021]
     (*) [testfs] implement test.ssdfs tool.
 

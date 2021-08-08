@@ -51,7 +51,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		3
+#define SSDFS_MINOR_REVISION		4
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1520,12 +1520,12 @@ struct ssdfs_partial_log_header {
 	struct ssdfs_shared_dictionary_btree shared_dict_btree;
 
 /* 0x0340 */
-	__le8 sequence_id;
+	__le32 sequence_id;
 	__le8 log_pagesize;
 	__le8 log_erasesize;
 	__le8 log_segsize;
 	__le8 log_pebs_per_seg;
-	__le8 reserved[0xB];
+	__le8 reserved[0x8];
 
 /* 0x0350 */
 	__le8 payload[0xB0];

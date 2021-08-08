@@ -2316,7 +2316,7 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "CHECKSUM: %#x\n", le32_to_cpu(pl_hdr->check.csum));
 
 	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
-			  pl_hdr->sequence_id);
+			  le32_to_cpu(pl_hdr->sequence_id));
 	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
 	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes\n", erase_size);
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
