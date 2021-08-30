@@ -404,12 +404,15 @@ prepare_payload_metadata_descriptor(struct ssdfs_volume_layout *layout,
 	desc->offset = cpu_to_le32(extent->offset);
 	desc->size = cpu_to_le32(extent->bytes_count);
 
-	BUG_ON(extent->bytes_count >= U16_MAX);
+	if (extent->bytes_count >= PAGE_CACHE_SIZE)
+		desc->check.bytes = cpu_to_le16((u16)PAGE_CACHE_SIZE);
+	else
+		desc->check.bytes = cpu_to_le16((u16)extent->bytes_count);
 
-	desc->check.bytes = cpu_to_le16((u16)extent->bytes_count);
 	desc->check.flags = cpu_to_le16(SSDFS_CRC32);
 	desc->check.csum = 0;
-	desc->check.csum = ssdfs_crc32_le(extent->buf, extent->bytes_count);
+	desc->check.csum = ssdfs_crc32_le(extent->buf,
+					  le16_to_cpu(desc->check.bytes));
 }
 
 static void
