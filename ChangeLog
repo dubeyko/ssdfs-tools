@@ -2,6 +2,11 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.3.11 [September 14, 2021]
+    (*) [testfs] add test cases (block bitmap, offset translation table,
+                 PEB mapping table, segment bitmap, shared dictionary,
+                 xattr tree).
+
 v.3.10 [August 29, 2021]
     (*) [mkfs] fix bugs in segment bitmap creation logic.
 

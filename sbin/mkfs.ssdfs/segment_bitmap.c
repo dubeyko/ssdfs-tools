@@ -189,7 +189,7 @@ static int segbmap_prepare_fragment(struct ssdfs_volume_layout *layout,
 
 	fragments_per_seg = pebs_per_seg * fragments_per_peb;
 	seg_index = index / fragments_per_seg;
-	peb_index = index / fragments_per_peb;
+	peb_index = (seg_index - index) / fragments_per_peb;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "fragments_per_seg %u, fragments_per_peb %u, "
