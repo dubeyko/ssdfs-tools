@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.3.12 [November 08, 2021]
+    (*) [snapshotfs] implement basic logic of the tool.
+
 v.3.11 [September 14, 2021]
     (*) [testfs] add test cases (block bitmap, offset translation table,
                  PEB mapping table, segment bitmap, shared dictionary,

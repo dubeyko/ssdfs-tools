@@ -4,6 +4,6 @@
 AM_CFLAGS = -Wall
 AM_CPPFLAGS = -I$(top_srcdir)/include
 
-sbin_PROGRAMS = snap.ssdfs
+sbin_PROGRAMS = snapshotfs.ssdfs
 
-snap_ssdfs_SOURCES = snapfs.c snapfs.h
+snapshotfs_ssdfs_SOURCES = options.c snapshotfs.c snapshotfs.h
