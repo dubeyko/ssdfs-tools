@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.00 [November 11, 2021]
+    (*) [snapshotfs] implement snapshot requests support.
+
 v.3.12 [November 08, 2021]
     (*) [snapshotfs] implement basic logic of the tool.
 

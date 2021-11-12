@@ -33,7 +33,7 @@ void print_usage(void)
 		   "mode=value (READ_ONLY|READ_WRITE), "
 		   "type=value (PERIODIC|ONE_TIME), "
 		   "expiration=value (WEEK|MONTH|YEAR|NEVER), "
-		   "frequency=value (FSYNC|HOUR|DAY|WEEK|MONTH), "
+		   "frequency=value (SYNCFS|HOUR|DAY|WEEK|MONTH), "
 		   "existing-snapshots=value]\t\t  create snapshot.\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
@@ -45,7 +45,7 @@ void print_usage(void)
 		   "mode=value (READ_ONLY|READ_WRITE), "
 		   "type=value (PERIODIC|ONE_TIME), "
 		   "expiration=value (WEEK|MONTH|YEAR|NEVER), "
-		   "frequency=value (FSYNC|HOUR|DAY|WEEK), "
+		   "frequency=value (SYNCFS|HOUR|DAY|WEEK), "
 		   "existing-snapshots=value]\t\t  change snapshot's properties.\n");
 	SSDFS_INFO("\t [-r|--remove name=value, "
 		   "id=value]\t\t  delete snapshot.\n");
@@ -143,8 +143,8 @@ void check_expiration(int expiration)
 static inline
 int convert_string2frequency(const char *str)
 {
-	if (strcmp(str, SSDFS_FSYNC_FREQUENCY_STR) == 0)
-		return SSDFS_FSYNC_FREQUENCY;
+	if (strcmp(str, SSDFS_SYNCFS_FREQUENCY_STR) == 0)
+		return SSDFS_SYNCFS_FREQUENCY;
 	else if (strcmp(str, SSDFS_HOUR_FREQUENCY_STR) == 0)
 		return SSDFS_HOUR_FREQUENCY;
 	else if (strcmp(str, SSDFS_DAY_FREQUENCY_STR) == 0)
@@ -161,7 +161,7 @@ static inline
 void check_frequency(int frequency)
 {
 	switch (frequency) {
-	case SSDFS_FSYNC_FREQUENCY:
+	case SSDFS_SYNCFS_FREQUENCY:
 	case SSDFS_HOUR_FREQUENCY:
 	case SSDFS_DAY_FREQUENCY:
 	case SSDFS_WEEK_FREQUENCY:

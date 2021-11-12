@@ -19,6 +19,7 @@
 
 #define _LARGEFILE64_SOURCE
 #define __USE_FILE_OFFSET64
+#define _GNU_SOURCE
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -208,6 +209,13 @@ int main(int argc, char *argv[])
 		err = ioctl(fd, SSDFS_IOC_CREATE_SNAPSHOT, &info);
 		if (err) {
 			SSDFS_ERR("ioctl failed for %s: %s\n",
+				  argv[optind], strerror(errno));
+			goto snapshotfs_failed;
+		}
+
+		err = syncfs(fd);
+		if (err) {
+			SSDFS_ERR("syncfs failed for %s: %s\n",
 				  argv[optind], strerror(errno));
 			goto snapshotfs_failed;
 		}

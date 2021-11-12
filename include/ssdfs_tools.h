@@ -256,7 +256,7 @@ struct ssdfs_time_range {
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
- * @frequency: taking snapshot frequency (FSYNC|HOUR|DAY|WEEK)
+ * @frequency: taking snapshot frequency (SYNCFS|HOUR|DAY|WEEK)
  * @existing_snapshots: max number of simultaneously available snapshots
  * @time_range: time range to select/modify/delete snapshots
  */
@@ -312,7 +312,7 @@ enum {
 /* Snapshot creation frequency */
 enum {
 	SSDFS_UNKNOWN_FREQUENCY,
-	SSDFS_FSYNC_FREQUENCY,
+	SSDFS_SYNCFS_FREQUENCY,
 	SSDFS_HOUR_FREQUENCY,
 	SSDFS_DAY_FREQUENCY,
 	SSDFS_WEEK_FREQUENCY,
@@ -320,7 +320,7 @@ enum {
 	SSDFS_CREATION_FREQUENCY_MAX
 };
 
-#define SSDFS_FSYNC_FREQUENCY_STR		"FSYNC"
+#define SSDFS_SYNCFS_FREQUENCY_STR		"SYNCFS"
 #define SSDFS_HOUR_FREQUENCY_STR		"HOUR"
 #define SSDFS_DAY_FREQUENCY_STR			"DAY"
 #define SSDFS_WEEK_FREQUENCY_STR		"WEEK"

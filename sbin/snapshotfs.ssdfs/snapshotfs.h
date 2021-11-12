@@ -36,7 +36,7 @@
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
- * @frequency: taking snapshot frequency (FSYNC|HOUR|DAY|WEEK)
+ * @frequency: taking snapshot frequency (SYNCFS|HOUR|DAY|WEEK)
  * @existing_snapshots: max number of simultaneously available snapshots
  */
 struct ssdfs_snapshot_create_options {
@@ -69,7 +69,7 @@ struct ssdfs_snapshot_list_options {
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
- * @frequency: taking snapshot frequency (FSYNC|HOUR|DAY|WEEK)
+ * @frequency: taking snapshot frequency (SYNCFS|HOUR|DAY|WEEK)
  * @existing_snapshots: max number of simultaneously available snapshots
  */
 struct ssdfs_snapshot_modify_options {
