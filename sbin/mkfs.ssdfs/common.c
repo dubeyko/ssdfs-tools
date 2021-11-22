@@ -618,14 +618,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 
 static void set_blkbmap_compression_flag(struct ssdfs_volume_layout *layout)
 {
-	u64 feature_compat_ro = le64_to_cpu(layout->sb.vs.feature_compat_ro);
-
-	if (layout->blkbmap.compression == SSDFS_ZLIB_BLOB)
-		feature_compat_ro |= SSDFS_ZLIB_COMPAT_RO_FLAG;
-	else if (layout->blkbmap.compression == SSDFS_LZO_BLOB)
-		feature_compat_ro |= SSDFS_LZO_COMPAT_RO_FLAG;
-
-	layout->sb.vs.feature_compat_ro = cpu_to_le64(feature_compat_ro);
+	/* do nothing */
 }
 
 static int ssdfs_fragment_descriptor_init(struct ssdfs_fragment_desc *desc,
@@ -744,22 +737,23 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	switch (layout->blkbmap.compression) {
 	case SSDFS_UNCOMPRESSED_BLOB:
+		/* TODO: temporary compression is not supported */
+	case SSDFS_ZLIB_BLOB:
+	case SSDFS_LZO_BLOB:
 		type = SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB;
 		break;
 
+/*
 	case SSDFS_ZLIB_BLOB:
 		flags |= SSDFS_BLK_BMAP_COMPRESSED;
 		type = SSDFS_BLK_BMAP_ZLIB_BLOB;
-		/* TODO: temporary compression doesn't supported */
-		BUG();
 		break;
 
 	case SSDFS_LZO_BLOB:
 		flags |= SSDFS_BLK_BMAP_COMPRESSED;
 		type = SSDFS_BLK_BMAP_LZO_BLOB;
-		/* TODO: temporary compression doesn't supported */
-		BUG();
 		break;
+*/
 
 	default:
 		BUG();
@@ -802,7 +796,7 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	bmp_frag_hdr->chain_hdr.fragments_count =
 				cpu_to_le16((u16)fragments_count);
 
-	/* TODO: temporary compression doesn't supported */
+	/* TODO: temporary compression is not supported */
 	bmp_frag_hdr->chain_hdr.compr_bytes = cpu_to_le32(bmap_bytes);
 	bmp_frag_hdr->chain_hdr.uncompr_bytes = cpu_to_le32(bmap_bytes);
 

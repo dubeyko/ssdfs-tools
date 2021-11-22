@@ -44,6 +44,19 @@ int sb_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 }
 
 static inline
+void define_compression_option(struct ssdfs_volume_layout *layout)
+{
+	u64 feature_compat_ro = le64_to_cpu(layout->sb.vs.feature_compat_ro);
+
+	if (layout->compression == SSDFS_ZLIB_BLOB)
+		feature_compat_ro |= SSDFS_ZLIB_COMPAT_RO_FLAG;
+	else if (layout->compression == SSDFS_LZO_BLOB)
+		feature_compat_ro |= SSDFS_LZO_COMPAT_RO_FLAG;
+
+	layout->sb.vs.feature_compat_ro = cpu_to_le64(feature_compat_ro);
+}
+
+static inline
 int prepare_block_bitmap_options(struct ssdfs_volume_layout *layout)
 {
 	struct ssdfs_volume_state *vs = &layout->sb.vs;
@@ -1053,6 +1066,8 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	memset(vs->cur_segs, 0xFF, sizeof(__le64) * SSDFS_CUR_SEGS_COUNT);
 
 	vs->migration_threshold = cpu_to_le16(layout->migration_threshold);
+
+	define_compression_option(layout);
 
 	err = prepare_block_bitmap_options(layout);
 	if (err) {

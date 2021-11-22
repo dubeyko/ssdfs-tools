@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.01 [November 21, 2021]
+    (*) [mkfs] fix bugs in setting compression option.
+
 v.4.00 [November 11, 2021]
     (*) [snapshotfs] implement snapshot requests support.
 
