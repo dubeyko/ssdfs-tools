@@ -256,8 +256,8 @@ struct ssdfs_time_range {
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
- * @frequency: taking snapshot frequency (SYNCFS|HOUR|DAY|WEEK)
- * @existing_snapshots: max number of simultaneously available snapshots
+ * @frequency: taking snapshot frequency (FSYNC|HOUR|DAY|WEEK)
+ * @snapshots_threshold: max number of simultaneously available snapshots
  * @time_range: time range to select/modify/delete snapshots
  */
 struct ssdfs_snapshot_info {
@@ -268,7 +268,7 @@ struct ssdfs_snapshot_info {
 	int type;
 	int expiration;
 	int frequency;
-	u32 existing_snapshots;
+	u32 snapshots_threshold;
 	struct ssdfs_time_range time_range;
 };
 

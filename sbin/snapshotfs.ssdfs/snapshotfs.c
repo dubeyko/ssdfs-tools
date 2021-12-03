@@ -44,7 +44,7 @@ void ssdfs_set_default_create_options(struct ssdfs_snapshot_options *options)
 	options->create.type = SSDFS_ONE_TIME_SNAPSHOT;
 	options->create.expiration = SSDFS_NEVER_EXPIRED;
 	options->create.frequency = SSDFS_UNKNOWN_FREQUENCY;
-	options->create.existing_snapshots = SSDFS_INFINITE_SNAPSHOTS_NUMBER;
+	options->create.snapshots_threshold = SSDFS_INFINITE_SNAPSHOTS_NUMBER;
 }
 
 static
@@ -54,11 +54,14 @@ void ssdfs_prepare_create_snapshot_info(struct ssdfs_snapshot_options *options,
 	if (options->create.name)
 		memcpy(info->name, options->create.name, SSDFS_MAX_NAME_LEN);
 
+	/* set uuid using libuuid */
+	uuid_generate(info->uuid);
+
 	info->mode = options->create.mode;
 	info->type = options->create.type;
 	info->expiration = options->create.expiration;
 	info->frequency = options->create.frequency;
-	info->existing_snapshots = options->create.existing_snapshots;
+	info->snapshots_threshold = options->create.snapshots_threshold;
 }
 
 static
@@ -91,7 +94,7 @@ void ssdfs_set_default_modify_options(struct ssdfs_snapshot_options *options)
 	options->modify.type = SSDFS_UNKNOWN_SNAPSHOT_TYPE;
 	options->modify.expiration = SSDFS_UNKNOWN_EXPIRATION_POINT;
 	options->modify.frequency = SSDFS_UNKNOWN_FREQUENCY;
-	options->modify.existing_snapshots = SSDFS_UNDEFINED_SNAPSHOTS_NUMBER;
+	options->modify.snapshots_threshold = SSDFS_UNDEFINED_SNAPSHOTS_NUMBER;
 }
 
 static
@@ -108,7 +111,7 @@ void ssdfs_prepare_modify_snapshot_info(struct ssdfs_snapshot_options *options,
 	info->type = options->modify.type;
 	info->expiration = options->modify.expiration;
 	info->frequency = options->modify.frequency;
-	info->existing_snapshots = options->modify.existing_snapshots;
+	info->snapshots_threshold = options->modify.snapshots_threshold;
 }
 
 static

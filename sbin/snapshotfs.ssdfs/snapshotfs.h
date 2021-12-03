@@ -37,7 +37,7 @@
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
  * @frequency: taking snapshot frequency (SYNCFS|HOUR|DAY|WEEK)
- * @existing_snapshots: max number of simultaneously available snapshots
+ * @snapshots_threshold: max number of simultaneously available snapshots
  */
 struct ssdfs_snapshot_create_options {
 	const char *name;
@@ -45,7 +45,7 @@ struct ssdfs_snapshot_create_options {
 	int type;
 	int expiration;
 	int frequency;
-	u32 existing_snapshots;
+	u32 snapshots_threshold;
 };
 
 /*
@@ -70,7 +70,7 @@ struct ssdfs_snapshot_list_options {
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
  * @frequency: taking snapshot frequency (SYNCFS|HOUR|DAY|WEEK)
- * @existing_snapshots: max number of simultaneously available snapshots
+ * @snapshots_threshold: max number of simultaneously available snapshots
  */
 struct ssdfs_snapshot_modify_options {
 	char *name;
@@ -79,7 +79,7 @@ struct ssdfs_snapshot_modify_options {
 	int type;
 	int expiration;
 	int frequency;
-	u32 existing_snapshots;
+	u32 snapshots_threshold;
 };
 
 /*

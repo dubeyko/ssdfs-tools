@@ -34,7 +34,7 @@ void print_usage(void)
 		   "type=value (PERIODIC|ONE_TIME), "
 		   "expiration=value (WEEK|MONTH|YEAR|NEVER), "
 		   "frequency=value (SYNCFS|HOUR|DAY|WEEK|MONTH), "
-		   "existing-snapshots=value]\t\t  create snapshot.\n");
+		   "snapshots-threshold=value]\t\t  create snapshot.\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
 	SSDFS_INFO("\t [-l|--list day=value, month=value, year=value, "
@@ -46,7 +46,7 @@ void print_usage(void)
 		   "type=value (PERIODIC|ONE_TIME), "
 		   "expiration=value (WEEK|MONTH|YEAR|NEVER), "
 		   "frequency=value (SYNCFS|HOUR|DAY|WEEK), "
-		   "existing-snapshots=value]\t\t  change snapshot's properties.\n");
+		   "snapshots-threshold=value]\t\t  change snapshot's properties.\n");
 	SSDFS_INFO("\t [-r|--remove name=value, "
 		   "id=value]\t\t  delete snapshot.\n");
 	SSDFS_INFO("\t [-R|--remove-range day=value, month=value, "
@@ -241,7 +241,7 @@ void parse_options(int argc, char *argv[],
 		[SNAPSHOT_CREATE_TYPE_OPT]		= "type",
 		[SNAPSHOT_CREATE_EXPIRATION_OPT]	= "expiration",
 		[SNAPSHOT_CREATE_FREQUENCY_OPT]		= "frequency",
-		[SNAPSHOT_CREATE_EXISTING_NUMBER_OPTS]	= "existing-snapshots",
+		[SNAPSHOT_CREATE_EXISTING_NUMBER_OPTS]	= "snapshots-threshold",
 		NULL
 	};
 	enum {
@@ -277,7 +277,7 @@ void parse_options(int argc, char *argv[],
 		[SNAPSHOT_MODIFY_TYPE_OPT]		= "type",
 		[SNAPSHOT_MODIFY_EXPIRATION_OPT]	= "expiration",
 		[SNAPSHOT_MODIFY_FREQUENCY_OPT]		= "frequency",
-		[SNAPSHOT_MODIFY_EXISTING_NUMBER_OPTS]	= "existing-snapshots",
+		[SNAPSHOT_MODIFY_EXISTING_NUMBER_OPTS]	= "snapshots-threshold",
 		NULL
 	};
 	enum {
@@ -361,7 +361,7 @@ void parse_options(int argc, char *argv[],
 					check_frequency(create->frequency);
 					break;
 				case SNAPSHOT_CREATE_EXISTING_NUMBER_OPTS:
-					create->existing_snapshots =
+					create->snapshots_threshold =
 								atoi(value);
 					break;
 				default:
@@ -476,7 +476,7 @@ void parse_options(int argc, char *argv[],
 					check_frequency(modify->frequency);
 					break;
 				case SNAPSHOT_MODIFY_EXISTING_NUMBER_OPTS:
-					modify->existing_snapshots =
+					modify->snapshots_threshold =
 								atoi(value);
 					break;
 				default:
