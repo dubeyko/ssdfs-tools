@@ -2760,6 +2760,7 @@ parse_block_state_area:
 		err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
 							area_size);
 		if (err) {
+			err = 0;
 			SSDFS_ERR("fail to parse block descriptors: "
 				  "peb_id %llu, log_index %u, "
 				  "log_offset %u, err %d\n",
@@ -2925,6 +2926,7 @@ parse_block_state_area:
 		err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
 							area_size);
 		if (err) {
+			err = 0;
 			SSDFS_ERR("fail to parse block descriptors: "
 				  "peb_id %llu, log_index %u, "
 				  "log_offset %u, err %d\n",
