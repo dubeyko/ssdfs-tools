@@ -4,11 +4,11 @@
  *
  * include/ssdfs_abi.h - SSDFS on-disk structures and common declarations.
  *
- * Copyright (c) 2014-2021 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2022 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2014-2021, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2022, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
@@ -52,7 +52,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		5
+#define SSDFS_MINOR_REVISION		6
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -2772,6 +2772,64 @@ struct ssdfs_inodes_btree_node_header {
 
 /* 0x00C0 */
 	__le8 bmap[SSDFS_INODE_BMAP_SIZE];
+
+/* 0x0100 */
+} __attribute__((packed));
+
+/*
+ * struct ssdfs_shared_extent - shared extent
+ * @fingerprint: fingerprint of shared extent
+ * @extent: position of the extent on volume
+ * @fingerprint_len: length of fingerprint
+ * @fingerprint_type: type of fingerprint
+ * @flags: various flags
+ * @ref_count: reference counter of shared extent
+ */
+struct ssdfs_shared_extent {
+/* 0x0000 */
+#define SSDFS_FINGERPRINT_LENGTH_MAX	(32)
+	__le8 fingerprint[SSDFS_FINGERPRINT_LENGTH_MAX];
+
+/* 0x0020 */
+	struct ssdfs_raw_extent extent;
+
+/* 0x0030 */
+	__le8 fingerprint_len;
+	__le8 fingerprint_type;
+	__le16 flags;
+	__le8 padding[0x4];
+
+/* 0x0038 */
+	__le64 ref_count;
+
+/* 0x0040 */
+} __attribute__((packed));
+
+#define SSDFS_SHEXTREE_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_SHEXTREE_BMAP_SIZE \
+	(((SSDFS_SHEXTREE_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
+	  sizeof(struct ssdfs_shared_extent)) / BITS_PER_BYTE)
+
+/*
+ * struct ssdfs_shextree_node_header - shared extents btree node's header
+ * @node: generic btree node's header
+ * @shared_extents: number of shared extents in the node
+ * @lookup_table: table for clustering search in the node
+ *
+ * The @lookup_table has goal to provide the way of clustering
+ * the shared extents in the node with the goal to speed-up the search.
+ */
+struct ssdfs_shextree_node_header {
+/* 0x0000 */
+	struct ssdfs_btree_node_header node;
+
+/* 0x0040 */
+	__le32 shared_extents;
+	__le8 padding[0x0C];
+
+/* 0x0050 */
+#define SSDFS_SHEXTREE_LOOKUP_TABLE_SIZE		(22)
+	__le64 lookup_table[SSDFS_SHEXTREE_LOOKUP_TABLE_SIZE];
 
 /* 0x0100 */
 } __attribute__((packed));

@@ -4,7 +4,7 @@
  *
  * sbin/test.ssdfs/testing.c - implementation of testing utility.
  *
- * Copyright (c) 2021 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2021-2022 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
@@ -97,6 +97,13 @@ int main(int argc, char *argv[])
 				SSDFS_TESTFS_DEFAULT_XATTR_BLOB_LEN;
 	testing_env.xattr_tree.blob_pattern =
 				SSDFS_TESTFS_DEFAULT_XATTR_BLOB_PATTERN;
+
+	testing_env.shextree.extents_number_threshold =
+				SSDFS_TESTFS_DEFAULT_SHARED_EXTENTS_NUMBER;
+	testing_env.shextree.extent_len =
+				SSDFS_TESTFS_DEFAULT_SHARED_EXTENT_LENGTH;
+	testing_env.shextree.ref_count_threshold =
+				SSDFS_TESTFS_DEFAULT_SHARED_EXTENT_REFS_MAX;
 
 	parse_options(argc, argv, &testing_env);
 

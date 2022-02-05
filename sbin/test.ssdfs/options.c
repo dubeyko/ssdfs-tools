@@ -4,7 +4,7 @@
  *
  * sbin/test.ssdfs/options.c - parsing command line options functionality.
  *
- * Copyright (c) 2021 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2021-2022 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
@@ -36,6 +36,9 @@ void print_usage(void)
 	SSDFS_INFO("\t [-d|--shared-dictionary names_number=value,"
 		   "name_len=value,step_factor=value]\t  "
 		   "define shared dictionary testing options.\n");
+	SSDFS_INFO("\t [-D|--shared-extents-tree extents_number=value,"
+		   "extent_len=value,ref_count_max=value]\t  "
+		   "define shared extents tree testing options.\n");
 	SSDFS_INFO("\t [-e|--extent max_len=value]\t  "
 		   "define extent related thresholds.\n");
 	SSDFS_INFO("\t [-f|--file max_count=value,max_size=value]\t  "
@@ -52,7 +55,8 @@ void print_usage(void)
 		   "(4096|8192|16384|32768 bytes).\n");
 	SSDFS_INFO("\t [-s|--subsystem dentries_tree,extents_tree,"
 		   "block_bitmap,offset_table,mapping_table,"
-		   "segment_bitmap,shared_dictionary,xattr_tree]\t  "
+		   "segment_bitmap,shared_dictionary,xattr_tree, "
+		   "shared_extents_tree]\t  "
 		   "define testing subsystems.\n");
 	SSDFS_INFO("\t [-S|--segment-bitmap iterations=value,"
 		   "using_segs_per_iter=value,"
@@ -146,17 +150,25 @@ static void check_pagesize(int pagesize)
 #define XATTR_BLOB_PATTERN(env) \
 	(env->xattr_tree.blob_pattern)
 
+#define SHARED_EXTENTS_NUMBER(env) \
+	(env->shextree.extents_number_threshold)
+#define SHARED_EXTENT_LEN(env) \
+	(env->shextree.extent_len)
+#define SHARED_EXTENT_REF_COUNT_MAX(env) \
+	(env->shextree.ref_count_threshold)
+
 void parse_options(int argc, char *argv[],
 		   struct ssdfs_testing_environment *env)
 {
 	int c;
 	int oi = 1;
 	char *p;
-	char sopts[] = "ab:d:e:f:hm:o:p:s:S:Vx:";
+	char sopts[] = "ab:d:D:e:f:hm:o:p:s:S:Vx:";
 	static const struct option lopts[] = {
 		{"all", 0, NULL, 'a'},
 		{"block-bitmap", 1, NULL, 'b'},
 		{"shared-dictionary", 1, NULL, 'd'},
+		{"shared-extents-tree", 1, NULL, 'D'},
 		{"extent", 1, NULL, 'e'},
 		{"file", 1, NULL, 'f'},
 		{"help", 0, NULL, 'h'},
@@ -193,6 +205,17 @@ void parse_options(int argc, char *argv[],
 		[SHARED_DICT_NAMES_NUMBER_OPT]	= "names_number",
 		[SHARED_DICT_NAME_LEN_OPT]	= "name_len",
 		[SHARED_DICT_STEP_FACTOR_OPT]	= "step_factor",
+		NULL
+	};
+	enum {
+		SHEXTREE_EXTENTS_NUMBER_OPT = 0,
+		SHEXTREE_EXTENT_LEN_OPT,
+		SHEXTREE_REF_COUNT_MAX_OPT,
+	};
+	char *const shextree_tokens[] = {
+		[SHEXTREE_EXTENTS_NUMBER_OPT]	= "extents_number",
+		[SHEXTREE_EXTENT_LEN_OPT]	= "extent_len",
+		[SHEXTREE_REF_COUNT_MAX_OPT]	= "ref_count_max",
 		NULL
 	};
 	enum {
@@ -282,6 +305,7 @@ void parse_options(int argc, char *argv[],
 		SEGMENT_BITMAP_SUBSYSTEM_OPT,
 		SHARED_DICTIONARY_SUBSYSTEM_OPT,
 		XATTR_TREE_SUBSYSTEM_OPT,
+		SHEXTREE_SUBSYSTEM_OPT,
 	};
 	char *const subsystem_tokens[] = {
 		[DENTRIES_TREE_SUBSYSTEM_OPT]		= "dentries_tree",
@@ -292,6 +316,7 @@ void parse_options(int argc, char *argv[],
 		[SEGMENT_BITMAP_SUBSYSTEM_OPT]		= "segment_bitmap",
 		[SHARED_DICTIONARY_SUBSYSTEM_OPT]	= "shared_dictionary",
 		[XATTR_TREE_SUBSYSTEM_OPT]		= "xattr_tree",
+		[SHEXTREE_SUBSYSTEM_OPT]		= "shared_extents_tree",
 		NULL
 	};
 
@@ -308,6 +333,7 @@ void parse_options(int argc, char *argv[],
 			env->subsystems |=
 					SSDFS_ENABLE_SHARED_DICTIONARY_TESTING;
 			env->subsystems |= SSDFS_ENABLE_XATTR_TREE_TESTING;
+			env->subsystems |= SSDFS_ENABLE_SHEXTREE_TESTING;
 			break;
 		case 'b':
 			p = optarg;
@@ -352,6 +378,30 @@ void parse_options(int argc, char *argv[],
 					break;
 				case SHARED_DICT_STEP_FACTOR_OPT:
 					SHDICT_STEP_FACTOR(env) = atoi(value);
+					break;
+				default:
+					print_usage();
+					exit(EXIT_FAILURE);
+				};
+			};
+			break;
+		case 'D':
+			p = optarg;
+			while (*p != '\0') {
+				char *value;
+
+				switch (getsubopt(&p, shextree_tokens,
+						  &value)) {
+				case SHEXTREE_EXTENTS_NUMBER_OPT:
+					SHARED_EXTENTS_NUMBER(env) =
+								atoll(value);
+					break;
+				case SHEXTREE_EXTENT_LEN_OPT:
+					SHARED_EXTENT_LEN(env) = atoi(value);
+					break;
+				case SHEXTREE_REF_COUNT_MAX_OPT:
+					SHARED_EXTENT_REF_COUNT_MAX(env) =
+								atoi(value);
 					break;
 				default:
 					print_usage();
@@ -488,6 +538,10 @@ void parse_options(int argc, char *argv[],
 				case XATTR_TREE_SUBSYSTEM_OPT:
 					env->subsystems |=
 					    SSDFS_ENABLE_XATTR_TREE_TESTING;
+					break;
+				case SHEXTREE_SUBSYSTEM_OPT:
+					env->subsystems |=
+					    SSDFS_ENABLE_SHEXTREE_TESTING;
 					break;
 				default:
 					print_usage();

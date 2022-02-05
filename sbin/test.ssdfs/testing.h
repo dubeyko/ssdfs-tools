@@ -4,7 +4,7 @@
  *
  * sbin/test.ssdfs/testing.h - declarations of testing utility.
  *
- * Copyright (c) 2021 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2021-2022 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
@@ -55,6 +55,9 @@
 #define SSDFS_TESTFS_DEFAULT_XATTRS_NUMBER		(1000)
 #define SSDFS_TESTFS_DEFAULT_XATTR_BLOB_LEN		SSDFS_512B
 #define SSDFS_TESTFS_DEFAULT_XATTR_BLOB_PATTERN		SSDFS_SUPER_MAGIC
+#define SSDFS_TESTFS_DEFAULT_SHARED_EXTENTS_NUMBER	(1000)
+#define SSDFS_TESTFS_DEFAULT_SHARED_EXTENT_LENGTH	(16)
+#define SSDFS_TESTFS_DEFAULT_SHARED_EXTENT_REFS_MAX	(32)
 
 /* options.c */
 void print_usage(void);

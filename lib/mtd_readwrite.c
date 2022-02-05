@@ -4,11 +4,11 @@
  *
  * lib/mtd_readwrite.c - MTD read/write operations.
  *
- * Copyright (c) 2014-2021 HGST, a Western Digital Company.
+ * Copyright (c) 2014-2022 HGST, a Western Digital Company.
  *              http://www.hgst.com/
  *
  * HGST Confidential
- * (C) Copyright 2014-2021, HGST, Inc., All rights reserved.
+ * (C) Copyright 2014-2022, HGST, Inc., All rights reserved.
  *
  * Created by HGST, San Jose Research Center, Storage Architecture Group
  * Authors: Vyacheslav Dubeyko <slava@dubeyko.com>
