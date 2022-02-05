@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.05 [February 04, 2022]
+    (*) [dumpfs] correct logic of block state parsing.
+
 v.4.04 [February 04, 2022]
     (*) [testfs] add shared extents tree test-case.
 

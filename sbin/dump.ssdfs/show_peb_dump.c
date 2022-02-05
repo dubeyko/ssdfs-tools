@@ -1591,10 +1591,6 @@ int ssdfs_dumpfs_parse_blk_states(struct ssdfs_dumpfs_environment *env,
 			ssdfs_dumpfs_parse_blk_state_offset(env,
 						    &blk_desc->state[j]);
 		}
-
-		SSDFS_DUMPFS_DUMP(env, "PREV DESCRIPTOR:\n");
-		ssdfs_dumpfs_parse_blk_state_offset(env,
-						&blk_desc->prev_desc);
 	}
 
 	return 0;

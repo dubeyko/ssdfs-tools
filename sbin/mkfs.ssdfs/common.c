@@ -1480,6 +1480,8 @@ int prepare_block_descriptor_fragment(int fragment_index,
 		u32 logical_page;
 		u32 peb_page;
 
+		memset(blk_desc, 0xFF, sizeof(struct ssdfs_block_descriptor));
+
 		blk_desc->ino = cpu_to_le64(inode_id);
 		BUG_ON(peb_index >= U16_MAX);
 		blk_desc->peb_index = cpu_to_le16(peb_index);

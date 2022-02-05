@@ -734,6 +734,14 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				return err;
 			}
 
+			SSDFS_DBG(layout->env.show_debug,
+				  "fragment_index %d, "
+				  "start_logical_blk %u, "
+				  "payload_offset_in_bytes %u\n",
+				  fragment_index,
+				  start_logical_blk,
+				  payload_offset_in_bytes);
+
 			err = pre_commit_block_descriptors(layout, seg_index,
 							j, valid_blks,
 							SSDFS_SEG_BMAP_INO,
