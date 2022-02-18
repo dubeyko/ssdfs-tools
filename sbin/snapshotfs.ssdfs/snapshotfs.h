@@ -64,6 +64,7 @@ struct ssdfs_snapshot_list_options {
 
 /*
  * struct ssdfs_snapshot_modify_options - modify snapshot options
+ * @time_range: time range to search the snapshot
  * @name: snapshot name
  * @id: snapshot ID
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
@@ -73,6 +74,7 @@ struct ssdfs_snapshot_list_options {
  * @snapshots_threshold: max number of simultaneously available snapshots
  */
 struct ssdfs_snapshot_modify_options {
+	struct ssdfs_time_range time_range;
 	char *name;
 	u8 *id;
 	int mode;

@@ -49,14 +49,16 @@ void print_usage(void)
 		   "add_migrations_per_iter=value,"
 		   "exclude_migrations_per_iter=value]\t  "
 		   "define PEB mapping table testing options.\n");
+	SSDFS_INFO("\t [-n|--snapshots-tree snapshots_number=value]\t  "
+		   "define snapshots tree testing options.\n");
 	SSDFS_INFO("\t [-o|--offset-table capacity=value]\t\t  "
 		   "define offsets table testing options.\n");
 	SSDFS_INFO("\t [-p|--pagesize size]\t  page size of target device "
 		   "(4096|8192|16384|32768 bytes).\n");
 	SSDFS_INFO("\t [-s|--subsystem dentries_tree,extents_tree,"
 		   "block_bitmap,offset_table,mapping_table,"
-		   "segment_bitmap,shared_dictionary,xattr_tree, "
-		   "shared_extents_tree]\t  "
+		   "segment_bitmap,shared_dictionary,xattr_tree,"
+		   "shared_extents_tree,snapshots_tree]\t  "
 		   "define testing subsystems.\n");
 	SSDFS_INFO("\t [-S|--segment-bitmap iterations=value,"
 		   "using_segs_per_iter=value,"
@@ -157,13 +159,16 @@ static void check_pagesize(int pagesize)
 #define SHARED_EXTENT_REF_COUNT_MAX(env) \
 	(env->shextree.ref_count_threshold)
 
+#define SNAPSHOTS_NUMBER(env) \
+	(env->snapshots_tree.snapshots_number_threshold)
+
 void parse_options(int argc, char *argv[],
 		   struct ssdfs_testing_environment *env)
 {
 	int c;
 	int oi = 1;
 	char *p;
-	char sopts[] = "ab:d:D:e:f:hm:o:p:s:S:Vx:";
+	char sopts[] = "ab:d:D:e:f:hm:n:o:p:s:S:Vx:";
 	static const struct option lopts[] = {
 		{"all", 0, NULL, 'a'},
 		{"block-bitmap", 1, NULL, 'b'},
@@ -173,6 +178,7 @@ void parse_options(int argc, char *argv[],
 		{"file", 1, NULL, 'f'},
 		{"help", 0, NULL, 'h'},
 		{"mapping-table", 1, NULL, 'm'},
+		{"snapshots-tree", 1, NULL, 'n'},
 		{"offset-table", 1, NULL, 'o'},
 		{"pagesize", 1, NULL, 'p'},
 		{"subsystem", 1, NULL, 's'},
@@ -297,6 +303,13 @@ void parse_options(int argc, char *argv[],
 		NULL
 	};
 	enum {
+		SNAPSHOTS_NUMBER_OPT = 0,
+	};
+	char *const snapshots_tree_tokens[] = {
+		[SNAPSHOTS_NUMBER_OPT]		= "snapshots_number",
+		NULL
+	};
+	enum {
 		DENTRIES_TREE_SUBSYSTEM_OPT = 0,
 		EXTENTS_TREE_SUBSYSTEM_OPT,
 		BLOCK_BMAP_SUBSYSTEM_OPT,
@@ -306,6 +319,7 @@ void parse_options(int argc, char *argv[],
 		SHARED_DICTIONARY_SUBSYSTEM_OPT,
 		XATTR_TREE_SUBSYSTEM_OPT,
 		SHEXTREE_SUBSYSTEM_OPT,
+		SNAPSHOTS_TREE_SUBSYSTEM_OPT,
 	};
 	char *const subsystem_tokens[] = {
 		[DENTRIES_TREE_SUBSYSTEM_OPT]		= "dentries_tree",
@@ -317,6 +331,7 @@ void parse_options(int argc, char *argv[],
 		[SHARED_DICTIONARY_SUBSYSTEM_OPT]	= "shared_dictionary",
 		[XATTR_TREE_SUBSYSTEM_OPT]		= "xattr_tree",
 		[SHEXTREE_SUBSYSTEM_OPT]		= "shared_extents_tree",
+		[SNAPSHOTS_TREE_SUBSYSTEM_OPT]		= "snapshots_tree",
 		NULL
 	};
 
@@ -334,6 +349,7 @@ void parse_options(int argc, char *argv[],
 					SSDFS_ENABLE_SHARED_DICTIONARY_TESTING;
 			env->subsystems |= SSDFS_ENABLE_XATTR_TREE_TESTING;
 			env->subsystems |= SSDFS_ENABLE_SHEXTREE_TESTING;
+			env->subsystems |= SSDFS_ENABLE_SNAPSHOTS_TREE_TESTING;
 			break;
 		case 'b':
 			p = optarg;
@@ -480,6 +496,22 @@ void parse_options(int argc, char *argv[],
 				};
 			};
 			break;
+		case 'n':
+			p = optarg;
+			while (*p != '\0') {
+				char *value;
+
+				switch (getsubopt(&p, snapshots_tree_tokens,
+						  &value)) {
+				case SNAPSHOTS_NUMBER_OPT:
+					SNAPSHOTS_NUMBER(env) = atoll(value);
+					break;
+				default:
+					print_usage();
+					exit(EXIT_FAILURE);
+				};
+			};
+			break;
 		case 'o':
 			p = optarg;
 			while (*p != '\0') {
@@ -542,6 +574,10 @@ void parse_options(int argc, char *argv[],
 				case SHEXTREE_SUBSYSTEM_OPT:
 					env->subsystems |=
 					    SSDFS_ENABLE_SHEXTREE_TESTING;
+					break;
+				case SNAPSHOTS_TREE_SUBSYSTEM_OPT:
+					env->subsystems |=
+					    SSDFS_ENABLE_SNAPSHOTS_TREE_TESTING;
 					break;
 				default:
 					print_usage();

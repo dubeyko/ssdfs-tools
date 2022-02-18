@@ -105,6 +105,9 @@ int main(int argc, char *argv[])
 	testing_env.shextree.ref_count_threshold =
 				SSDFS_TESTFS_DEFAULT_SHARED_EXTENT_REFS_MAX;
 
+	testing_env.snapshots_tree.snapshots_number_threshold =
+				SSDFS_TESTFS_DEFAULT_SNAPSHOTS_NUMBER;
+
 	parse_options(argc, argv, &testing_env);
 
 	fd = open(argv[optind], O_RDWR | O_LARGEFILE);

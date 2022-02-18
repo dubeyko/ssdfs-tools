@@ -67,6 +67,8 @@ void ssdfs_prepare_create_snapshot_info(struct ssdfs_snapshot_options *options,
 static
 void ssdfs_set_default_list_options(struct ssdfs_snapshot_options *options)
 {
+	options->list.time_range.minute = SSDFS_ANY_MINUTE;
+	options->list.time_range.hour = SSDFS_ANY_HOUR;
 	options->list.time_range.day = SSDFS_ANY_DAY;
 	options->list.time_range.month = SSDFS_ANY_MONTH;
 	options->list.time_range.year = SSDFS_ANY_YEAR;
@@ -88,6 +90,11 @@ void ssdfs_prepare_list_snapshot_info(struct ssdfs_snapshot_options *options,
 static
 void ssdfs_set_default_modify_options(struct ssdfs_snapshot_options *options)
 {
+	options->modify.time_range.minute = SSDFS_ANY_MINUTE;
+	options->modify.time_range.hour = SSDFS_ANY_HOUR;
+	options->modify.time_range.day = SSDFS_ANY_DAY;
+	options->modify.time_range.month = SSDFS_ANY_MONTH;
+	options->modify.time_range.year = SSDFS_ANY_YEAR;
 	options->modify.name = NULL;
 	options->modify.id = NULL;
 	options->modify.mode = SSDFS_UNKNOWN_SNAPSHOT_MODE;
@@ -101,6 +108,9 @@ static
 void ssdfs_prepare_modify_snapshot_info(struct ssdfs_snapshot_options *options,
 					struct ssdfs_snapshot_info *info)
 {
+	memcpy(&info->time_range, &options->modify.time_range,
+		sizeof(struct ssdfs_time_range));
+
 	if (options->modify.name)
 		memcpy(info->name, options->modify.name, SSDFS_MAX_NAME_LEN);
 
@@ -135,6 +145,8 @@ void ssdfs_prepare_remove_snapshot_info(struct ssdfs_snapshot_options *options,
 static void
 ssdfs_set_default_remove_range_options(struct ssdfs_snapshot_options *options)
 {
+	options->remove_range.time_range.minute = SSDFS_ANY_MINUTE;
+	options->remove_range.time_range.hour = SSDFS_ANY_HOUR;
 	options->remove_range.time_range.day = SSDFS_ANY_DAY;
 	options->remove_range.time_range.month = SSDFS_ANY_MONTH;
 	options->remove_range.time_range.year = SSDFS_ANY_YEAR;

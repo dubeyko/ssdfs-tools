@@ -770,7 +770,7 @@ int sb_shared_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->index_area_min_size = cpu_to_le16(min_index_area_size);
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "inodes tree's descriptor: "
+		  "shared extents tree's descriptor: "
 		  "node_size %u, node_ptr_size %zu, "
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
@@ -895,7 +895,7 @@ static int sb_shared_dict_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	desc->index_area_min_size = cpu_to_le16(min_index_area_size);
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "inodes tree's descriptor: "
+		  "shared dictionary's descriptor: "
 		  "node_size %u, node_ptr_size %zu, "
 		  "index_size %zu, item_size %zu, "
 		  "min_index_area_size %u\n",
@@ -947,6 +947,132 @@ static int sb_prepare_shared_dict_btree(struct ssdfs_volume_layout *layout)
 
 	feature_compat = le64_to_cpu(layout->sb.vs.feature_compat);
 	feature_compat |= SSDFS_HAS_SHARED_DICT_COMPAT_FLAG;
+	layout->sb.vs.feature_compat = cpu_to_le64(feature_compat);
+
+	return 0;
+}
+
+static
+int sb_snapshots_btree_desc_prepare(struct ssdfs_volume_layout *layout)
+{
+	struct ssdfs_btree_descriptor *desc;
+	u32 erasesize;
+	u32 pagesize;
+	u32 node_size;
+	size_t hdr_size = sizeof(struct ssdfs_snapshots_btree_node_header);
+	size_t node_ptr_size = sizeof(struct ssdfs_btree_index_key);
+	u16 min_index_area_size;
+
+	desc = &layout->sb.vs.snapshots_btree.desc;
+
+	desc->magic = cpu_to_le32(SSDFS_SNAPSHOTS_BTREE_MAGIC);
+	desc->flags = cpu_to_le16(SSDFS_BTREE_DESC_INDEX_AREA_RESIZABLE);
+	desc->type = cpu_to_le8((u8)SSDFS_SNAPSHOTS_BTREE);
+
+	erasesize = layout->env.erase_size;
+	pagesize = layout->page_size;
+	node_size = layout->btree.node_size;
+
+	if (node_size <= 0 || node_size >= U16_MAX) {
+		SSDFS_ERR("invalid option: node_size %u\n",
+			  node_size);
+		return -ERANGE;
+	}
+
+	if (node_size < pagesize || node_size % pagesize) {
+		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
+			  node_size, pagesize);
+		return -ERANGE;
+	}
+
+	if (node_size >= erasesize || erasesize % node_size) {
+		SSDFS_ERR("invalid option: node_size %u, erasesize %u \n",
+			  node_size, erasesize);
+		return -ERANGE;
+	}
+
+	desc->log_node_size = cpu_to_le8((u8)ilog2(node_size));
+	desc->pages_per_node = cpu_to_le8((u8)(node_size / pagesize));
+	desc->node_ptr_size = cpu_to_le8((u8)node_ptr_size);
+	desc->index_size = cpu_to_le16((u16)sizeof(struct ssdfs_btree_index_key));
+	desc->item_size = cpu_to_le16((u16)sizeof(struct ssdfs_snapshot));
+
+	min_index_area_size = layout->btree.min_index_area_size;
+
+	if (min_index_area_size == 0)
+		min_index_area_size = (u16)hdr_size;
+
+	if (min_index_area_size <= node_ptr_size ||
+	    min_index_area_size % node_ptr_size) {
+		SSDFS_ERR("invalid option: min_index_area_size %u, "
+			  "node_ptr_size %zu\n",
+			  min_index_area_size, node_ptr_size);
+		return -ERANGE;
+	}
+
+	if (min_index_area_size >= (node_size / 2)) {
+		SSDFS_ERR("invalid option: min_index_area_size %u, "
+			  "node_size %u\n",
+			  min_index_area_size,
+			  node_size);
+		return -ERANGE;
+	}
+
+	desc->index_area_min_size = cpu_to_le16(min_index_area_size);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "snapshots tree's descriptor: "
+		  "node_size %u, node_ptr_size %zu, "
+		  "index_size %zu, item_size %zu, "
+		  "min_index_area_size %u\n",
+		  node_size, node_ptr_size,
+		  sizeof(struct ssdfs_btree_index_key),
+		  sizeof(struct ssdfs_raw_fork),
+		  min_index_area_size);
+
+	return 0;
+}
+
+static void
+sb_snapshots_btree_prepare_root_node(struct ssdfs_volume_layout *layout)
+{
+	struct ssdfs_btree_inline_root_node *root_node;
+
+	root_node = &layout->sb.vs.snapshots_btree.root_node;
+
+	root_node->header.height = cpu_to_le8(SSDFS_BTREE_LEAF_NODE_HEIGHT);
+	root_node->header.items_count = cpu_to_le8(0);
+	root_node->header.flags = cpu_to_le8(0);
+	root_node->header.type = cpu_to_le8(SSDFS_BTREE_ROOT_NODE);
+	root_node->header.upper_node_id = cpu_to_le32(SSDFS_BTREE_ROOT_NODE_ID);
+	root_node->header.node_ids[0] = cpu_to_le32(U32_MAX);
+	root_node->header.node_ids[1] = cpu_to_le32(U32_MAX);
+}
+
+static int sb_prepare_snapshots_btree(struct ssdfs_volume_layout *layout)
+{
+	struct ssdfs_snapshots_btree *tree;
+	u64 feature_compat;
+	int err;
+
+	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
+
+	tree = &layout->sb.vs.snapshots_btree;
+
+	memset(tree, 0xFF, sizeof(struct ssdfs_snapshots_btree));
+
+	err = sb_snapshots_btree_desc_prepare(layout);
+	if (err) {
+		SSDFS_ERR("fail to prepare snapshots tree's descriptor: "
+			  "err %d\n",
+			  err);
+		return err;
+	}
+
+	sb_snapshots_btree_prepare_root_node(layout);
+
+	feature_compat = le64_to_cpu(layout->sb.vs.feature_compat);
+	feature_compat |= SSDFS_HAS_SNAPSHOTS_TREE_COMPAT_FLAG;
 	layout->sb.vs.feature_compat = cpu_to_le64(feature_compat);
 
 	return 0;
@@ -1100,6 +1226,13 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	err = sb_prepare_shared_dict_btree(layout);
 	if (err) {
 		SSDFS_ERR("fail to prepare shared dictionary btree: "
+			  "err %d\n", err);
+		return err;
+	}
+
+	err = sb_prepare_snapshots_btree(layout);
+	if (err) {
+		SSDFS_ERR("fail to prepare snapshots btree: "
 			  "err %d\n", err);
 		return err;
 	}

@@ -37,11 +37,14 @@ void print_usage(void)
 		   "snapshots-threshold=value]\t\t  create snapshot.\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
-	SSDFS_INFO("\t [-l|--list day=value, month=value, year=value, "
+	SSDFS_INFO("\t [-l|--list minute=value, hour=value, "
+		   "day=value, month=value, year=value, "
 		   "mode=value (READ_ONLY|READ_WRITE), "
 		   "type=value (PERIODIC|ONE_TIME), "
 		   "max-number=value]\t\t  show list of snapshots.\n");
-	SSDFS_INFO("\t [-m|--modify name=value, id=value, "
+	SSDFS_INFO("\t [-m|--modify minute=value, hour=value, "
+		   "day=value, month=value, year=value, "
+		   "name=value, id=value, "
 		   "mode=value (READ_ONLY|READ_WRITE), "
 		   "type=value (PERIODIC|ONE_TIME), "
 		   "expiration=value (WEEK|MONTH|YEAR|NEVER), "
@@ -49,7 +52,8 @@ void print_usage(void)
 		   "snapshots-threshold=value]\t\t  change snapshot's properties.\n");
 	SSDFS_INFO("\t [-r|--remove name=value, "
 		   "id=value]\t\t  delete snapshot.\n");
-	SSDFS_INFO("\t [-R|--remove-range day=value, month=value, "
+	SSDFS_INFO("\t [-R|--remove-range minute=value, hour=value, "
+		   "day=value, month=value, "
 		   "year=value]\t\t  delete range of snapshots.\n");
 	SSDFS_INFO("\t [-s|--show-details name=value, "
 		   "id=value]\t\t  show snapshot's details.\n");
@@ -176,6 +180,24 @@ void check_frequency(int frequency)
 }
 
 static inline
+void check_minute(int minute)
+{
+	if (minute < 0 || minute > 60) {
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+}
+
+static inline
+void check_hour(int hour)
+{
+	if (hour < 0 || hour > 24) {
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+}
+
+static inline
 void check_day(int day)
 {
 	if (day <= 0 || day > 31) {
@@ -245,7 +267,9 @@ void parse_options(int argc, char *argv[],
 		NULL
 	};
 	enum {
-		SNAPSHOT_LIST_RANGE_DAY_OPT = 0,
+		SNAPSHOT_LIST_RANGE_MINUTE_OPT = 0,
+		SNAPSHOT_LIST_RANGE_HOUR_OPT,
+		SNAPSHOT_LIST_RANGE_DAY_OPT,
 		SNAPSHOT_LIST_RANGE_MONTH_OPT,
 		SNAPSHOT_LIST_RANGE_YEAR_OPT,
 		SNAPSHOT_LIST_MODE_OPT,
@@ -253,6 +277,8 @@ void parse_options(int argc, char *argv[],
 		SNAPSHOT_LIST_MAX_NUMBER_OPT,
 	};
 	char *const snapshot_list_tokens[] = {
+		[SNAPSHOT_LIST_RANGE_MINUTE_OPT]	= "minute",
+		[SNAPSHOT_LIST_RANGE_HOUR_OPT]		= "hour",
 		[SNAPSHOT_LIST_RANGE_DAY_OPT]		= "day",
 		[SNAPSHOT_LIST_RANGE_MONTH_OPT]		= "month",
 		[SNAPSHOT_LIST_RANGE_YEAR_OPT]		= "year",
@@ -262,7 +288,12 @@ void parse_options(int argc, char *argv[],
 		NULL
 	};
 	enum {
-		SNAPSHOT_MODIFY_NAME_OPT = 0,
+		SNAPSHOT_MODIFY_MINUTE_OPT = 0,
+		SNAPSHOT_MODIFY_HOUR_OPT,
+		SNAPSHOT_MODIFY_DAY_OPT,
+		SNAPSHOT_MODIFY_MONTH_OPT,
+		SNAPSHOT_MODIFY_YEAR_OPT,
+		SNAPSHOT_MODIFY_NAME_OPT,
 		SNAPSHOT_MODIFY_ID_OPT,
 		SNAPSHOT_MODIFY_MODE_OPT,
 		SNAPSHOT_MODIFY_TYPE_OPT,
@@ -271,6 +302,11 @@ void parse_options(int argc, char *argv[],
 		SNAPSHOT_MODIFY_EXISTING_NUMBER_OPTS,
 	};
 	char *const snapshot_modify_tokens[] = {
+		[SNAPSHOT_MODIFY_MINUTE_OPT]		= "minute",
+		[SNAPSHOT_MODIFY_HOUR_OPT]		= "hour",
+		[SNAPSHOT_MODIFY_DAY_OPT]		= "day",
+		[SNAPSHOT_MODIFY_MONTH_OPT]		= "month",
+		[SNAPSHOT_MODIFY_YEAR_OPT]		= "year",
 		[SNAPSHOT_MODIFY_NAME_OPT]		= "name",
 		[SNAPSHOT_MODIFY_ID_OPT]		= "id",
 		[SNAPSHOT_MODIFY_MODE_OPT]		= "mode",
@@ -290,11 +326,15 @@ void parse_options(int argc, char *argv[],
 		NULL
 	};
 	enum {
-		SNAPSHOT_REMOVE_RANGE_DAY_OPT = 0,
+		SNAPSHOT_REMOVE_RANGE_MINUTE_OPT = 0,
+		SNAPSHOT_REMOVE_RANGE_HOUR_OPT,
+		SNAPSHOT_REMOVE_RANGE_DAY_OPT,
 		SNAPSHOT_REMOVE_RANGE_MONTH_OPT,
 		SNAPSHOT_REMOVE_RANGE_YEAR_OPT,
 	};
 	char *const snapshot_remove_range_tokens[] = {
+		[SNAPSHOT_REMOVE_RANGE_MINUTE_OPT]	= "minute",
+		[SNAPSHOT_REMOVE_RANGE_HOUR_OPT]	= "hour",
 		[SNAPSHOT_REMOVE_RANGE_DAY_OPT]		= "day",
 		[SNAPSHOT_REMOVE_RANGE_MONTH_OPT]	= "month",
 		[SNAPSHOT_REMOVE_RANGE_YEAR_OPT]	= "year",
@@ -395,6 +435,16 @@ void parse_options(int argc, char *argv[],
 
 				switch (getsubopt(&p, snapshot_list_tokens,
 						  &value)) {
+				case SNAPSHOT_LIST_RANGE_MINUTE_OPT:
+					range = &list->time_range;
+					range->minute = atoi(value);
+					check_minute(range->minute);
+					break;
+				case SNAPSHOT_LIST_RANGE_HOUR_OPT:
+					range = &list->time_range;
+					range->hour = atoi(value);
+					check_hour(range->hour);
+					break;
 				case SNAPSHOT_LIST_RANGE_DAY_OPT:
 					range = &list->time_range;
 					range->day = atoi(value);
@@ -440,11 +490,37 @@ void parse_options(int argc, char *argv[],
 			while (*p != '\0') {
 				char *value;
 				struct ssdfs_snapshot_modify_options *modify;
+				struct ssdfs_time_range *range;
 
 				modify = &options->modify;
 
 				switch (getsubopt(&p, snapshot_modify_tokens,
 						  &value)) {
+				case SNAPSHOT_MODIFY_MINUTE_OPT:
+					range = &modify->time_range;
+					range->minute = atoi(value);
+					check_minute(range->minute);
+					break;
+				case SNAPSHOT_MODIFY_HOUR_OPT:
+					range = &modify->time_range;
+					range->hour = atoi(value);
+					check_hour(range->hour);
+					break;
+				case SNAPSHOT_MODIFY_DAY_OPT:
+					range = &modify->time_range;
+					range->day = atoi(value);
+					check_day(range->day);
+					break;
+				case SNAPSHOT_MODIFY_MONTH_OPT:
+					range = &modify->time_range;
+					range->month = atoi(value);
+					check_month(range->month);
+					break;
+				case SNAPSHOT_MODIFY_YEAR_OPT:
+					range = &modify->time_range;
+					range->year = atoi(value);
+					check_year(range->year);
+					break;
 				case SNAPSHOT_MODIFY_NAME_OPT:
 					strncpy(options->name_buf, value,
 						sizeof(options->name_buf));
@@ -538,6 +614,14 @@ void parse_options(int argc, char *argv[],
 				switch (getsubopt(&p,
 						  snapshot_remove_range_tokens,
 						  &value)) {
+				case SNAPSHOT_REMOVE_RANGE_MINUTE_OPT:
+					range->minute = atoi(value);
+					check_minute(range->minute);
+					break;
+				case SNAPSHOT_REMOVE_RANGE_HOUR_OPT:
+					range->hour = atoi(value);
+					check_hour(range->hour);
+					break;
 				case SNAPSHOT_REMOVE_RANGE_DAY_OPT:
 					range->day = atoi(value);
 					check_day(range->day);
