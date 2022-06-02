@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/sysmacros.h>
 #include <linux/fs.h>
 #include <getopt.h>
 #include <fcntl.h>
@@ -35,6 +36,7 @@
 #include <time.h>
 #include <zlib.h>
 #include <mtd/mtd-abi.h>
+#include <linux/blkzoned.h>
 
 #include "ssdfs_tools.h"
 
@@ -170,6 +172,57 @@ int ssdfs_pread(int fd, u64 offset, size_t size, void *buf)
 	return 0;
 }
 
+int is_zoned_device(int fd)
+{
+	struct stat stat;
+	int is_zoned = SSDFS_FALSE;
+	u32 sectors_per_zone;
+	int res;
+	int err;
+
+	if (fd < -1) {
+		SSDFS_ERR("invalid file descriptor %d\n",
+			  fd);
+		return -EINVAL;
+	}
+
+	err = fstat(fd, &stat);
+	if (err) {
+		SSDFS_ERR("unable to get file status: %s\n",
+			  strerror(errno));
+		return errno;
+	}
+
+	switch (stat.st_mode & S_IFMT) {
+	case S_IFBLK:
+		res = ioctl(fd, BLKGETZONESZ, &sectors_per_zone);
+		if (res < 0) {
+			if (errno == ENOTTY || errno == EINVAL) {
+				/*
+				 * No kernel support, assuming non-zoned device.
+				 */
+			} else {
+				SSDFS_ERR("fail to retrieve zone size: %s\n",
+					  strerror(errno));
+			}
+
+			is_zoned = SSDFS_FALSE;
+		} else {
+			if (sectors_per_zone == 0)
+				is_zoned = SSDFS_FALSE;
+			else
+				is_zoned = SSDFS_TRUE;
+		}
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
+	return is_zoned;
+}
+
 int open_device(struct ssdfs_environment *env)
 {
 	struct mtd_info_user mtd;
@@ -247,15 +300,22 @@ int open_device(struct ssdfs_environment *env)
 		break;
 
 	case S_IFBLK:
-		/* block device type */
 		err = ioctl(env->fd, BLKGETSIZE64, &env->fs_size);
 		if (err) {
 			SSDFS_ERR("block ioctl failed for %s: %s\n",
 				  env->dev_name, strerror(errno));
 			return errno;
 		}
-		env->dev_ops = &bdev_ops;
-		env->device_type = SSDFS_BLK_DEVICE;
+
+		if (is_zoned_device(env->fd)) {
+			/* ZNS device */
+			env->dev_ops = &zns_ops;
+			env->device_type = SSDFS_ZNS_DEVICE;
+		} else {
+			/* block device type */
+			env->dev_ops = &bdev_ops;
+			env->device_type = SSDFS_BLK_DEVICE;
+		}
 		break;
 
 	default:

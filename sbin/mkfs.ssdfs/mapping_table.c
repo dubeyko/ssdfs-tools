@@ -75,7 +75,7 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
 	seg_nums = layout->env.fs_size / layout->seg_size;
-	pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 
 define_stripes_per_portion:
 	correct_maptbl_stripes_per_portion(layout);
@@ -616,8 +616,11 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 static
 int check_pebs_validity(struct ssdfs_volume_layout *layout)
 {
+	struct ssdfs_nand_geometry info = {
+		.erasesize = layout->env.erase_size,
+		.writesize = layout->page_size,
+	};
 	int fd = layout->env.fd;
-	u32 peb_size = layout->env.erase_size;
 	u32 maptbl_pebs;
 	u16 portions_per_peb;
 	size_t portion_size;
@@ -628,9 +631,10 @@ int check_pebs_validity(struct ssdfs_volume_layout *layout)
 
 	switch (layout->env.device_type) {
 	case SSDFS_MTD_DEVICE:
-		/* do nothing */
+		/* continue logic */
 		break;
 
+	case SSDFS_ZNS_DEVICE:
 	case SSDFS_BLK_DEVICE:
 		return 0;
 
@@ -638,8 +642,7 @@ int check_pebs_validity(struct ssdfs_volume_layout *layout)
 		BUG();
 	};
 
-	res = layout->env.dev_ops->check_nand_geometry(fd, peb_size,
-							layout->page_size);
+	res = layout->env.dev_ops->check_nand_geometry(fd, &info);
 	if (res)
 		return res;
 
@@ -879,7 +882,7 @@ u64 map_leb2peb(struct ssdfs_volume_layout *layout,
 	u32 portion_index;
 	u64 start_leb, start_peb;
 	u16 lebs_count;
-	u32 pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 	u64 leb_index = leb_id % pebs_per_seg;
 	u16 stripes_per_portion = layout->maptbl.stripes_per_portion;
 	u16 peb_desc_per_stripe;
@@ -1042,7 +1045,7 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 {
 	struct ssdfs_maptbl_sb_header *hdr = &layout->sb.vh.maptbl;
 	struct ssdfs_meta_area_extent *extent;
-	u32 pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 	u32 portions_per_seg =
 		pebs_per_seg * layout->maptbl.portions_per_fragment;
 	u32 segs_per_copy = layout->maptbl.portions_count / portions_per_seg;
@@ -1116,7 +1119,7 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 	struct ssdfs_maptbl_sb_header *hdr = &layout->sb.vh.maptbl;
 	struct ssdfs_maptbl_layout *maptbl = &layout->maptbl;
 	u64 pebs_count = layout->env.fs_size / layout->env.erase_size;
-	u32 pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 	u32 portions_per_seg = pebs_per_seg * maptbl->portions_per_fragment;
 	u16 flags = 0;
 	u16 pebs_per_stripe;
@@ -1249,9 +1252,9 @@ void set_maptbl_presence_flag(struct ssdfs_volume_layout *layout)
 
 int maptbl_mkfs_validate(struct ssdfs_volume_layout *layout)
 {
-	u32 seg_size = layout->seg_size;
+	u64 seg_size = layout->seg_size;
 	u32 erase_size = layout->env.erase_size;
-	u32 pebs_per_seg = seg_size / erase_size;
+	u32 pebs_per_seg = (u32)(seg_size / erase_size);
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1317,7 +1320,7 @@ static void maptbl_set_log_pages(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pages %u, blks_count %u\n",
-		  layout->segbmap.log_pages, blks);
+		  layout->maptbl.log_pages, blks);
 
 	BUG_ON(blks == 0);
 	BUG_ON(blks >= U16_MAX);
@@ -1332,6 +1335,12 @@ static void maptbl_set_log_pages(struct ssdfs_volume_layout *layout,
 		SSDFS_WARN("pages_per_peb %u, blks %u\n",
 			   pages_per_peb, blks);
 	}
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "log_pages %u\n",
+		  layout->maptbl.log_pages);
+
+	blks = min_t(u32, blks, (u32)SSDFS_LOG_MAX_PAGES);
 
 	if (layout->maptbl.log_pages == U16_MAX)
 		log_pages = blks;
@@ -1349,9 +1358,17 @@ static void maptbl_set_log_pages(struct ssdfs_volume_layout *layout,
 		}
 	}
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "log_pages %u\n",
+		  log_pages);
+
 try_align_log_pages:
 	while (layout->env.erase_size % (log_pages * layout->page_size))
 		log_pages++;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "log_pages %u\n",
+		  log_pages);
 
 	if ((log_pages - blks) < 3) {
 		log_pages += 3;
@@ -1363,9 +1380,17 @@ try_align_log_pages:
 			   pages_per_peb, log_pages);
 	}
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "log_pages %u\n",
+		  layout->maptbl.log_pages);
+
 	layout->maptbl.log_pages = log_pages;
 	BUG_ON(log_pages >= U16_MAX);
 	layout->sb.vh.maptbl_log_pages = cpu_to_le16((u16)log_pages);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "log_pages %u\n",
+		  layout->maptbl.log_pages);
 }
 
 int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
@@ -1393,7 +1418,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	meta_desc = &layout->meta_array[SSDFS_PEB_MAPPING_TABLE];
 	segs_count = meta_desc->segs_count;
 	maptbl_pebs = layout->maptbl.maptbl_pebs;
-	pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 
 	if (segs_count <= 0 ||
 	    segs_count > ((maptbl_pebs + pebs_per_seg - 1) / pebs_per_seg)) {
@@ -1709,7 +1734,7 @@ int maptbl_mkfs_commit(struct ssdfs_volume_layout *layout)
 	meta_desc = &layout->meta_array[SSDFS_PEB_MAPPING_TABLE];
 	segs_count = meta_desc->segs_count;
 	maptbl_pebs = layout->maptbl.maptbl_pebs;
-	pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 
 	if (segs_count <= 0 ||
 	    segs_count > ((maptbl_pebs + pebs_per_seg - 1) / pebs_per_seg)) {

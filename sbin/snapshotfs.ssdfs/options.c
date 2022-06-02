@@ -377,7 +377,7 @@ void parse_options(int argc, char *argv[],
 						  &value)) {
 				case SNAPSHOT_CREATE_NAME_OPT:
 					strncpy(options->name_buf, value,
-						sizeof(options->name_buf));
+						sizeof(options->name_buf) - 1);
 					create->name = options->name_buf;
 					break;
 				case SNAPSHOT_CREATE_MODE_OPT:
@@ -523,7 +523,7 @@ void parse_options(int argc, char *argv[],
 					break;
 				case SNAPSHOT_MODIFY_NAME_OPT:
 					strncpy(options->name_buf, value,
-						sizeof(options->name_buf));
+						sizeof(options->name_buf) - 1);
 					modify->name = options->name_buf;
 					break;
 				case SNAPSHOT_MODIFY_ID_OPT:
@@ -581,7 +581,7 @@ void parse_options(int argc, char *argv[],
 						  &value)) {
 				case SNAPSHOT_REMOVE_NAME_OPT:
 					strncpy(options->name_buf, value,
-						sizeof(options->name_buf));
+						sizeof(options->name_buf) - 1);
 					remove->name = options->name_buf;
 					break;
 				case SNAPSHOT_REMOVE_ID_OPT:
@@ -658,7 +658,7 @@ void parse_options(int argc, char *argv[],
 						  &value)) {
 				case SNAPSHOT_SHOW_DETAILS_NAME_OPT:
 					strncpy(options->name_buf, value,
-						sizeof(options->name_buf));
+						sizeof(options->name_buf) - 1);
 					options->show_details.name =
 							options->name_buf;
 					break;

@@ -157,7 +157,7 @@ struct ssdfs_blk2off_table_layout {
 	/* creation options */
 	int has_backup_copy;
 	int compression;
-	u16 pages_per_seg;
+	u32 pages_per_seg;
 };
 
 /*

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 AC_PREREQ([2.69])
-AC_INIT(ssdfs-utils, 4.06, slava@dubeyko.com)
+AC_INIT(ssdfs-utils, 4.07, slava@dubeyko.com)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([include/ssdfs_abi.h])
 AC_CONFIG_HEADERS([config.h])
@@ -47,6 +47,7 @@ AC_CHECK_HEADERS([zlib.h])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h limits.h paths.h stdlib.h string.h sys/ioctl.h unistd.h])
+AC_CHECK_HEADER([linux/blkzoned.h], [], [AC_MSG_ERROR([linux/blkzoned.h not found])])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL

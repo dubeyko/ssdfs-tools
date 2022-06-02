@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.07 [June 02, 2022]
+    (*) Implement ZNS SSD support.
+    (*) On-disk layout has version 1.9.
+
 v.4.06 [February 18, 2022]
     (*) [testfs] add snapshots tree test-case.
 

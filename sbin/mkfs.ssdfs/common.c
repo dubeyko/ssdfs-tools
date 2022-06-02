@@ -496,7 +496,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 	size_t hdr_len = sizeof(struct ssdfs_segment_header);
 	char *begin_ptr;
 	u32 pages_per_peb;
-	u16 log_pages;
+	u32 log_pages;
 	u32 seg_flags = 0;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -508,6 +508,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 	hdr_ext = &peb_desc->extents[SSDFS_SEG_HEADER];
 	pages_per_peb = layout->env.erase_size / layout->page_size;
 	log_pages = pages_per_peb;
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 
 	BUG_ON(!hdr_ext->buf);
 	BUG_ON(blks_count >= USHRT_MAX);
@@ -519,19 +520,21 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 	switch (seg_desc->seg_type) {
 	case SSDFS_INITIAL_SNAPSHOT:
 		log_pages = blks_count;
+		log_pages = min_t(u32, blks_count, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
 		break;
 
 	case SSDFS_SUPERBLOCK:
 		log_pages = layout->sb.log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
-		BUG_ON(log_pages != blks_count);
 		break;
 
 	case SSDFS_SEGBMAP:
 		log_pages = layout->segbmap.log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
 		if (log_pages != blks_count)
@@ -540,6 +543,7 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 
 	case SSDFS_PEB_MAPPING_TABLE:
 		log_pages = layout->maptbl.log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
 		if (log_pages != blks_count)
@@ -710,7 +714,7 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	fragments_count = bmap_bytes + PAGE_CACHE_SIZE - 1;
 	fragments_count >>= PAGE_CACHE_SHIFT;
 	BUG_ON(fragments_count >= U16_MAX);
-	BUG_ON(fragments_count > SSDFS_FRAGMENTS_CHAIN_MAX);
+	BUG_ON(fragments_count > SSDFS_BLK_BMAP_FRAGMENTS_CHAIN_MAX);
 
 	allocation_size = bmap_bytes + bmp_hdr_size + bmp_frag_hdr_size;
 	allocation_size += fragments_count * frag_desc_size;
@@ -1051,7 +1055,7 @@ static inline u32 define_block_descriptor_offset(u16 blk_id,
 	return offset;
 }
 
-static void prepare_offsets_table_fragment(u8 *fragment, u16 pages_per_seg,
+static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 					   int peb_index,
 					   u16 sequence_id, u8 area_type,
 					   u32 logical_start_page,
@@ -1114,7 +1118,7 @@ static void prepare_offsets_table_fragment(u8 *fragment, u16 pages_per_seg,
 		flags |= SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT;
 	hdr->flags = cpu_to_le16(flags);
 
-	free_items = min_t(u16, pages_per_seg, OFF_DESC_PER_FRAGMENT());
+	free_items = min_t(u32, pages_per_seg, (u32)OFF_DESC_PER_FRAGMENT());
 	free_items -= id_count;
 	hdr->used_logical_blks = cpu_to_le16(id_count);
 	hdr->free_logical_blks = cpu_to_le16(free_items);
@@ -1142,7 +1146,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	size_t tbl_hdr_size = sizeof(struct ssdfs_blk2off_table_header);
 	size_t phys_off_hdr_size = sizeof(struct ssdfs_phys_offset_table_header);
 	size_t item_size = sizeof(struct ssdfs_phys_offset_descriptor);
-	u16 pages_per_seg;
+	u32 pages_per_seg;
 	u32 pages_per_peb;
 	u16 fragments_count;
 	u32 allocation_size;
@@ -1907,7 +1911,7 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	size_t footer_len = sizeof(struct ssdfs_partial_log_header);
 	struct ssdfs_metadata_descriptor *meta_desc;
 	u32 pages_per_peb;
-	u16 log_pages;
+	u32 log_pages;
 	u32 log_flags = 0;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -1915,8 +1919,11 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 		  seg_index, peb_index, blks_count);
 
 	pages_per_peb = layout->env.erase_size / layout->page_size;
-	BUG_ON(pages_per_peb >= U16_MAX);
-	log_pages = (u16)pages_per_peb;
+
+	log_pages = pages_per_peb;
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_WARN("seg_index %d >= segs_capacity %d\n",
@@ -1951,19 +1958,21 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	switch (seg_desc->seg_type) {
 	case SSDFS_INITIAL_SNAPSHOT:
 		log_pages = blks_count;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
 		break;
 
 	case SSDFS_SUPERBLOCK:
 		log_pages = layout->sb.log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
-		BUG_ON(log_pages != blks_count);
 		break;
 
 	case SSDFS_SEGBMAP:
 		log_pages = layout->segbmap.log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
 		if (log_pages != blks_count) {
@@ -1975,6 +1984,7 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 
 	case SSDFS_PEB_MAPPING_TABLE:
 		log_pages = layout->maptbl.log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 		BUG_ON(log_pages == 0);
 		BUG_ON(log_pages >= U16_MAX);
 		if (log_pages != blks_count) {

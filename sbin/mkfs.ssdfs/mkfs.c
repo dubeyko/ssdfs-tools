@@ -54,7 +54,7 @@ static struct ssdfs_volume_layout volume_layout = {
 	.blkbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
 	.blk2off_tbl.has_backup_copy = SSDFS_FALSE,
 	.blk2off_tbl.compression = SSDFS_UNKNOWN_COMPRESSION,
-	.blk2off_tbl.pages_per_seg = U16_MAX,
+	.blk2off_tbl.pages_per_seg = U32_MAX,
 	.segbmap.has_backup_copy = SSDFS_FALSE,
 	.segbmap.segs_per_chain = SSDFS_SEGBMAP_SEGS_PER_CHAIN_DEFAULT,
 	.segbmap.fragments_per_peb = SSDFS_SEGBMAP_FRAG_PER_PEB_DEFAULT,
@@ -92,9 +92,9 @@ static struct ssdfs_mkfs_operations *mkfs_ops[SSDFS_METADATA_ITEMS_MAX];
 
 static int user_data_mkfs_validate(struct ssdfs_volume_layout *layout)
 {
-	u32 seg_size = layout->seg_size;
+	u64 seg_size = layout->seg_size;
 	u32 erase_size = layout->env.erase_size;
-	u32 pebs_per_seg = seg_size / erase_size;
+	u32 pebs_per_seg = (u32)(seg_size / erase_size);
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
@@ -153,18 +153,23 @@ static int user_data_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
-	u16 log_pages = layout->user_data_seg.log_pages;
+	u32 log_pages = layout->user_data_seg.log_pages;
 	int err;
 
 	BUG_ON(log_pages == 0);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "log_pages %u\n",
+		  layout->user_data_seg.log_pages);
 
 	erasesize = layout->env.erase_size;
 	pagesize = layout->page_size;
 	pages_per_peb = erasesize / pagesize;
 
-	if (log_pages == U16_MAX) {
+	if (log_pages >= U16_MAX) {
 		log_pages = pages_per_peb / SSDFS_DATA_LOGS_PER_PEB_DEFAULT;
-		layout->user_data_seg.log_pages = log_pages;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+		layout->user_data_seg.log_pages = (u16)log_pages;
 	}
 
 	if (log_pages > pages_per_peb) {
@@ -173,7 +178,9 @@ static int user_data_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			   "pages_per_peb %u\n",
 			   log_pages, pages_per_peb);
 
-		log_pages = layout->user_data_seg.log_pages = pages_per_peb;
+		log_pages = pages_per_peb;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+		layout->user_data_seg.log_pages = (u16)log_pages;
 	}
 
 	if (pages_per_peb % log_pages) {
@@ -188,10 +195,14 @@ static int user_data_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			   "corrected_value %u\n",
 			   log_pages, corrected_value);
 
-		log_pages = layout->user_data_seg.log_pages = pages_per_peb;
+		log_pages = corrected_value;
+		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+		layout->user_data_seg.log_pages = (u16)log_pages;
 	}
 
-	layout->sb.vh.user_data_log_pages = cpu_to_le16(log_pages);
+	BUG_ON(log_pages >= U16_MAX);
+
+	layout->sb.vh.user_data_log_pages = cpu_to_le16((u16)log_pages);
 
 	err = prepare_user_data_options(layout);
 	if (err) {
@@ -259,16 +270,18 @@ static void prepare_metadata_creation_ops(void)
 
 static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 {
+	struct ssdfs_nand_geometry info;
 	u64 fs_size = layout->env.fs_size;
-	u32 seg_size = layout->seg_size;
+	u64 seg_size = layout->seg_size;
 	u32 erase_size = layout->env.erase_size;
 	u32 page_size = layout->page_size;
 	u64 segs_count;
 	u32 pebs_per_seg;
 	u32 pages_per_seg;
+	int res;
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "BEFORE_CHECK: fs_size %llu, seg_size %u, "
+		  "BEFORE_CHECK: fs_size %llu, seg_size %llu, "
 		  "erase_size %u, page_size %u\n",
 		  (unsigned long long)fs_size, seg_size,
 		  erase_size, page_size);
@@ -286,29 +299,66 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 	}
 
 	if (seg_size < erase_size) {
-		SSDFS_ERR("segment size %u can't be lesser than erase size %u.\n",
+		SSDFS_ERR("segment size %llu can't be lesser than erase size %u.\n",
 			  seg_size, erase_size);
 		return -EINVAL;
 	}
 
 	if ((seg_size % erase_size) != 0) {
-		SSDFS_ERR("segment size %u should be aligned on erase size %u.\n",
+		SSDFS_ERR("segment size %llu should be aligned on erase size %u.\n",
 			  seg_size, erase_size);
 		return -EINVAL;
 	}
 
 	if (fs_size <= seg_size) {
-		SSDFS_ERR("fs size %llu can't be equal/lesser than segment size %u.\n",
+		SSDFS_ERR("fs size %llu can't be equal/lesser than segment size %llu.\n",
 			  (unsigned long long)fs_size, seg_size);
 		return -EINVAL;
 	}
+
+	switch (layout->env.device_type) {
+	case SSDFS_ZNS_DEVICE:
+		info.erasesize = layout->env.erase_size;
+		info.writesize = layout->page_size;
+
+		res = layout->env.dev_ops->check_nand_geometry(layout->env.fd,
+								&info);
+		if (res == -ENOENT) {
+			layout->env.erase_size = info.erasesize;
+			layout->page_size = info.writesize;
+
+			SSDFS_INFO("NAND geometry corrected: "
+				   "erase_size %u, write_size %u\n",
+				   info.erasesize, info.writesize);
+
+			erase_size = layout->env.erase_size;
+			page_size = layout->page_size;
+		} else if (res != 0)
+			return res;
+
+		if (seg_size != erase_size) {
+			layout->seg_size = layout->env.erase_size;
+
+			SSDFS_INFO("segment size corrected: "
+				   "seg_size %llu, erase_size %u\n",
+				   layout->seg_size,
+				   layout->env.erase_size);
+
+			seg_size = layout->seg_size;
+		}
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	};
 
 	segs_count = fs_size / seg_size;
 	layout->env.fs_size = segs_count * seg_size;
 
 	if (layout->env.fs_size != fs_size && layout->env.show_info) {
 		SSDFS_WARN("device size %llu was corrected to fs size %llu "
-			   "because of segment size %u\n",
+			   "because of segment size %llu\n",
 			   fs_size, layout->env.fs_size, seg_size);
 	}
 
@@ -323,7 +373,7 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 	}
 
 	pages_per_seg = seg_size / page_size;
-	if (pages_per_seg >= U16_MAX) {
+	if (pages_per_seg >= U32_MAX) {
 		SSDFS_ERR("pages_per_seg %u is too huge\n",
 			  pages_per_seg);
 		return -EINVAL;
@@ -518,7 +568,7 @@ static int alloc_segs_array(struct ssdfs_volume_layout *layout)
 {
 	int segs[SSDFS_ALLOC_POLICY_MAX] = {0};
 	u32 fs_segs_count, fs_metadata_quota_max;
-	u32 pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 	int i, j;
 	int err = 0;
 
@@ -976,10 +1026,10 @@ static int check_layout_before_write(struct ssdfs_volume_layout *layout)
 {
 	char *bmap;
 	u64 fs_size = layout->env.fs_size;
-	u32 segsize = layout->seg_size;
+	u64 segsize = layout->seg_size;
 	u32 pagesize = layout->page_size;
 	u64 fs_blks = fs_size / pagesize;
-	u32 seg_blks_capacity = segsize / pagesize;
+	u64 seg_blks_capacity = segsize / pagesize;
 	int i, j;
 	int err = 0;
 
@@ -991,7 +1041,7 @@ static int check_layout_before_write(struct ssdfs_volume_layout *layout)
 	}
 
 	for (i = 0; i < layout->segs_count; i++) {
-		u32 seg_blks = 0;
+		u64 seg_blks = 0;
 
 		for (j = 0; j < layout->segs[i].pebs_count; j++) {
 			struct ssdfs_peb_content *peb;
@@ -1011,7 +1061,7 @@ static int check_layout_before_write(struct ssdfs_volume_layout *layout)
 		}
 
 		if (seg_blks > seg_blks_capacity) {
-			SSDFS_ERR("blocks count %u is greater than segment %u\n",
+			SSDFS_ERR("blocks count %llu is greater than %llu\n",
 				  seg_blks, seg_blks_capacity);
 			err = -E2BIG;
 			goto free_bmap;
@@ -1070,7 +1120,7 @@ static int erase_peb(struct ssdfs_volume_layout *layout,
 static int erase_device(struct ssdfs_volume_layout *layout)
 {
 	int fd = layout->env.fd;
-	u32 seg_size = layout->seg_size;
+	u64 seg_size = layout->seg_size;
 	u64 offset = 0;
 	char *buf;
 	u32 i, j;
@@ -1135,6 +1185,10 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
+	struct ssdfs_nand_geometry info = {
+		.erasesize = layout->env.erase_size,
+		.writesize = layout->page_size,
+	};
 	int fd = layout->env.fd;
 	u32 erase_size = layout->env.erase_size;
 	u64 peb_id;
@@ -1181,7 +1235,7 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 		offset = (peb_id * erase_size) + desc->offset;
 		size = desc->bytes_count;
 
-		err = layout->env.dev_ops->write(fd, offset, size, buf);
+		err = layout->env.dev_ops->write(fd, &info, offset, size, buf);
 		if (err) {
 			SSDFS_ERR("unable to write: "
 				  "offset %llu, bytes_count %llu\n",

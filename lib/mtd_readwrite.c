@@ -31,7 +31,8 @@ int mtd_read(int fd, u64 offset, size_t size, void *buf)
 	return ssdfs_pread(fd, offset, size, buf);
 }
 
-int mtd_write(int fd, u64 offset, size_t size, void *buf)
+int mtd_write(int fd, struct ssdfs_nand_geometry *info,
+		u64 offset, size_t size, void *buf)
 {
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
@@ -55,7 +56,7 @@ int mtd_erase(int fd, u64 offset, size_t size, void *buf)
 	}
 }
 
-int mtd_check_nand_geometry(int fd, u32 erasesize, u32 writesize)
+int mtd_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
 {
 	struct mtd_info_user meminfo;
 	int err;
@@ -67,15 +68,15 @@ int mtd_check_nand_geometry(int fd, u32 erasesize, u32 writesize)
 		return err;
 	}
 
-	if (meminfo.erasesize != erasesize) {
+	if (meminfo.erasesize != info->erasesize) {
 		SSDFS_ERR("meminfo.erasesize %u != erasesize %u\n",
-			  meminfo.erasesize, erasesize);
+			  meminfo.erasesize, info->erasesize);
 		return -EINVAL;
 	}
 
-	if (meminfo.writesize != writesize) {
+	if (meminfo.writesize != info->writesize) {
 		SSDFS_ERR("meminfo.writesize %u != writesize %u\n",
-			  meminfo.writesize, writesize);
+			  meminfo.writesize, info->writesize);
 		return -EINVAL;
 	}
 

@@ -135,6 +135,7 @@ static void sb_set_lnodes_log_pages(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pages %u\n",
@@ -144,14 +145,19 @@ static void sb_set_lnodes_log_pages(struct ssdfs_volume_layout *layout)
 	pagesize = layout->page_size;
 	pages_per_peb = erasesize / pagesize;
 
+	log_pages = pages_per_peb;
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
+
 	if (layout->btree.lnode_log_pages == U16_MAX)
-		layout->btree.lnode_log_pages = pages_per_peb;
+		layout->btree.lnode_log_pages = (u16)log_pages;
 	else {
 		if (layout->btree.lnode_log_pages > pages_per_peb) {
 			SSDFS_WARN("log_pages is corrected from %u to %u\n",
 				   layout->btree.lnode_log_pages,
-				   pages_per_peb);
-			layout->btree.lnode_log_pages = pages_per_peb;
+				   log_pages);
+			layout->btree.lnode_log_pages = (u16)log_pages;
 		}
 
 		if (pages_per_peb % layout->btree.lnode_log_pages) {
@@ -174,6 +180,7 @@ static void sb_set_hnodes_log_pages(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pages %u\n",
@@ -183,14 +190,19 @@ static void sb_set_hnodes_log_pages(struct ssdfs_volume_layout *layout)
 	pagesize = layout->page_size;
 	pages_per_peb = erasesize / pagesize;
 
+	log_pages = pages_per_peb;
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
+
 	if (layout->btree.hnode_log_pages == U16_MAX)
-		layout->btree.hnode_log_pages = pages_per_peb;
+		layout->btree.hnode_log_pages = (u16)log_pages;
 	else {
 		if (layout->btree.hnode_log_pages > pages_per_peb) {
 			SSDFS_WARN("log_pages is corrected from %u to %u\n",
 				   layout->btree.hnode_log_pages,
-				   pages_per_peb);
-			layout->btree.hnode_log_pages = pages_per_peb;
+				   log_pages);
+			layout->btree.hnode_log_pages = (u16)log_pages;
 		}
 
 		if (pages_per_peb % layout->btree.hnode_log_pages) {
@@ -213,6 +225,7 @@ static void sb_set_inodes_log_pages(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pages %u\n",
@@ -222,14 +235,19 @@ static void sb_set_inodes_log_pages(struct ssdfs_volume_layout *layout)
 	pagesize = layout->page_size;
 	pages_per_peb = erasesize / pagesize;
 
+	log_pages = pages_per_peb;
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
+
 	if (layout->btree.inode_log_pages == U16_MAX)
-		layout->btree.inode_log_pages = pages_per_peb;
+		layout->btree.inode_log_pages = (u16)log_pages;
 	else {
 		if (layout->btree.inode_log_pages > pages_per_peb) {
 			SSDFS_WARN("log_pages is corrected from %u to %u\n",
 				   layout->btree.inode_log_pages,
-				   pages_per_peb);
-			layout->btree.inode_log_pages = pages_per_peb;
+				   log_pages);
+			layout->btree.inode_log_pages = (u16)log_pages;
 		}
 
 		if (pages_per_peb % layout->btree.inode_log_pages) {
@@ -1083,11 +1101,15 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	struct ssdfs_volume_header *vh = &layout->sb.vh;
 	struct ssdfs_volume_state *vs = &layout->sb.vs;
 	u32 pagesize = layout->page_size;
-	u32 segsize = layout->seg_size;
+	u64 segsize = layout->seg_size;
 	u32 erasesize = layout->env.erase_size;
+	u32 megabytes_per_peb;
+	u32 pebs_per_seg;
 	u64 segs_count;
 	u64 ctime;
 	u64 cno;
+	u32 flags = 0;
+	u32 calculated;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1113,17 +1135,67 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 		  le8_to_cpu(vh->magic.version.minor));
 
 	vh->log_pagesize = cpu_to_le8((u8)ilog2(pagesize));
-	vh->log_erasesize = cpu_to_le8((u8)ilog2(erasesize));
 	vh->log_segsize = cpu_to_le8((u8)ilog2(segsize));
-	vh->log_pebs_per_seg = cpu_to_le8((u8)ilog2(segsize / erasesize));
+
+	pebs_per_seg = segsize / erasesize;
+	if (pebs_per_seg >= U16_MAX) {
+		SSDFS_ERR("unsupported value: "
+			  "pebs_per_seg %u\n",
+			  pebs_per_seg);
+		return -ERANGE;
+	}
+
+	megabytes_per_peb = erasesize / SSDFS_1MB;
+	if (megabytes_per_peb >= U16_MAX) {
+		SSDFS_ERR("unsupported value: "
+			  "megabytes_per_peb %u\n",
+			  megabytes_per_peb);
+		return -ERANGE;
+	}
+
+	vh->log_pebs_per_seg = cpu_to_le8((u8)ilog2(pebs_per_seg));
+
+	switch (layout->env.device_type) {
+	case SSDFS_MTD_DEVICE:
+	case SSDFS_BLK_DEVICE:
+		vh->log_erasesize = cpu_to_le8((u8)ilog2(erasesize));
+		vh->megabytes_per_peb = cpu_to_le16((u16)megabytes_per_peb);
+		vh->pebs_per_seg = cpu_to_le16((u16)pebs_per_seg);
+		break;
+
+	case SSDFS_ZNS_DEVICE:
+		vh->log_erasesize = cpu_to_le8((u8)ilog2(erasesize));
+		vh->megabytes_per_peb = cpu_to_le16((u16)megabytes_per_peb);
+		vh->pebs_per_seg = cpu_to_le16((u16)pebs_per_seg);
+
+		flags |= SSDFS_VH_ZNS_BASED_VOLUME;
+
+		if (megabytes_per_peb > 0) {
+			calculated = 1 << vh->log_erasesize;
+
+			if (calculated != erasesize)
+				flags |= SSDFS_VH_UNALIGNED_ZONE;
+		}
+		break;
+
+	default:
+		BUG();
+	};
+
+	vh->flags = cpu_to_le32(flags);
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pagesize %d, log_erasesize %d, "
-		  "log_segsize %d, log_pebs_per_seg %d\n",
+		  "log_segsize %d, log_pebs_per_seg %d, "
+		  "megabytes_per_peb %u, pebs_per_seg %u, "
+		  "flags %#x\n",
 		  le8_to_cpu(vh->log_pagesize),
 		  le8_to_cpu(vh->log_erasesize),
 		  le8_to_cpu(vh->log_segsize),
-		  le8_to_cpu(vh->log_pebs_per_seg));
+		  le8_to_cpu(vh->log_pebs_per_seg),
+		  le16_to_cpu(vh->megabytes_per_peb),
+		  le16_to_cpu(vh->pebs_per_seg),
+		  le32_to_cpu(vh->flags));
 
 	vh->create_time = cpu_to_le64(ctime);
 	vh->create_cno = cpu_to_le64(cno);
@@ -1243,7 +1315,7 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 int sb_mkfs_validate(struct ssdfs_volume_layout *layout)
 {
 	struct ssdfs_volume_state *vs = &layout->sb.vs;
-	u32 segsize = layout->seg_size;
+	u64 segsize = layout->seg_size;
 	u32 pagesize = layout->page_size;
 	u64 segs_count;
 	u64 free_segs;
@@ -1280,6 +1352,8 @@ static void sb_set_log_pages(struct ssdfs_volume_layout *layout,
 	pagesize = layout->page_size;
 	pages_per_peb = erasesize / pagesize;
 
+	blks = min_t(u32, blks, (u32)SSDFS_LOG_MAX_PAGES);
+
 	BUG_ON((blks / 2) > pages_per_peb);
 
 	if (pages_per_peb % blks) {
@@ -1287,7 +1361,9 @@ static void sb_set_log_pages(struct ssdfs_volume_layout *layout,
 			   pages_per_peb, blks);
 	}
 
-	layout->sb.log_pages = blks;
+	BUG_ON(blks >= U16_MAX);
+
+	layout->sb.log_pages = (u16)blks;
 	layout->sb.vh.sb_seg_log_pages = cpu_to_le16(blks);
 }
 

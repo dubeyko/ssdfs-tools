@@ -452,6 +452,7 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 					 u32 *parsed_bytes)
 {
 	struct ssdfs_block_bitmap_fragment *hdr;
+	size_t frag_desc_size = sizeof(struct ssdfs_fragment_desc);
 	u16 peb_index;
 	u16 sequence_id;
 	u16 flags;
@@ -460,6 +461,9 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 	u16 metadata_blks;
 	u16 invalid_blks;
 	u16 fragments_count;
+	u32 frag_desc_offset;
+	u32 raw_data_bytes = 0;
+	u32 displayed_bytes = 0;
 	int i;
 	int res;
 
@@ -524,8 +528,10 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 	fragments_count = le16_to_cpu(hdr->chain_hdr.fragments_count);
 
+	frag_desc_offset = offset + *parsed_bytes;
+	*parsed_bytes += (u32)fragments_count * frag_desc_size;
+
 	for (i = 0; i < fragments_count; i++) {
-		size_t frag_desc_size = sizeof(struct ssdfs_fragment_desc);
 		struct ssdfs_fragment_desc *frag;
 		u8 *data;
 
@@ -536,15 +542,14 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 			return -EINVAL;
 		}
 
-		frag = (struct ssdfs_fragment_desc *)((u8 *)area_buf + offset +
-							*parsed_bytes);
+		frag = (struct ssdfs_fragment_desc *)((u8 *)area_buf +
+							frag_desc_offset +
+							(i * frag_desc_size));
 
 		SSDFS_DUMPFS_DUMP(env, "\n");
 		SSDFS_DUMPFS_DUMP(env, "FRAGMENT_INDEX: #%d\n", i);
 
 		ssdfs_dumpfs_parse_fragment_header(env, frag);
-
-		*parsed_bytes += frag_desc_size;
 
 		if ((size - *parsed_bytes) < le16_to_cpu(frag->compr_size)) {
 			SSDFS_ERR("size %u is lesser than %u\n",
@@ -557,15 +562,29 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 		SSDFS_DUMPFS_DUMP(env, "RAW DATA:\n");
 
-		res = ssdfs_dumpfs_show_raw_string(env, 0, data,
-						le16_to_cpu(frag->compr_size));
-		if (res < 0) {
-			SSDFS_ERR("fail to dump raw data: size %u, err %d\n",
-				  le16_to_cpu(frag->compr_size), res);
-			return res;
-		}
+		displayed_bytes = 0;
+		raw_data_bytes = le16_to_cpu(frag->compr_size);
 
-		*parsed_bytes += le16_to_cpu(frag->compr_size);
+		do {
+			u8 *ptr = data + displayed_bytes;
+
+			res = ssdfs_dumpfs_show_raw_string(env,
+							   offset +
+							   *parsed_bytes +
+							   displayed_bytes,
+							   ptr,
+							   raw_data_bytes -
+							   displayed_bytes);
+			if (res < 0) {
+				SSDFS_ERR("fail to show raw dump's string: "
+					  "err %d\n", res);
+				return res;
+			}
+
+			displayed_bytes += res;
+		} while (displayed_bytes < raw_data_bytes);
+
+		*parsed_bytes += raw_data_bytes;
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
@@ -1885,6 +1904,8 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	struct ssdfs_volume_header *vh = &hdr->volume_hdr;
 	u32 page_size;
 	u32 erase_size;
+	u16 megabytes_per_peb;
+	u32 vh_flags = 0;
 	u32 seg_size;
 	u64 create_time;
 	u64 create_cno;
@@ -1899,16 +1920,19 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 
 	page_size = 1 << vh->log_pagesize;
 	erase_size = 1 << vh->log_erasesize;
+	megabytes_per_peb = le16_to_cpu(vh->megabytes_per_peb);
 	seg_size = 1 << vh->log_segsize;
 	create_time = le64_to_cpu(vh->create_time);
 	create_cno = le64_to_cpu(vh->create_cno);
+	vh_flags = le32_to_cpu(vh->flags);
 	seg_type = le16_to_cpu(hdr->seg_type);
 	seg_flags = le32_to_cpu(hdr->seg_flags);
 
 	ssdfs_dumpfs_parse_magic(env, &vh->magic);
 
 	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
-	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes\n", erase_size);
+	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes, %u MB\n",
+			  erase_size, megabytes_per_peb);
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
 			  1 << vh->log_pebs_per_seg);
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
@@ -1917,6 +1941,19 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 			   ssdfs_nanoseconds_to_time(create_time));
 	SSDFS_DUMPFS_DUMP(env, "CREATION_CHECKPOINT: %llu\n",
 			  create_cno);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "VOLUME HEADER FLAGS: ");
+
+	if (vh_flags & SSDFS_VH_ZNS_BASED_VOLUME)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_VH_ZNS_BASED_VOLUME ");
+
+	if (vh_flags & SSDFS_VH_UNALIGNED_ZONE)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_VH_UNALIGNED_ZONE ");
+
+	if (vh_flags == 0)
+		SSDFS_DUMPFS_DUMP(env, "NONE");
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
 

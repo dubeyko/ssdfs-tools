@@ -325,6 +325,7 @@ static inline long IS_ERR(const void *ptr)
 #define __CHECK_ENDIAN__
 #define __bitwise __bitwise__
 #else
+#undef __bitwise
 #define __bitwise
 #endif
 

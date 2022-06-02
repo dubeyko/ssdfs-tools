@@ -17,6 +17,8 @@
  *                  Zvonimir Bandic <Zvonimir.Bandic@wdc.com>
  */
 
+#include <linux/fs.h>
+
 #include "ssdfs_tools.h"
 
 /************************************************************************
@@ -28,17 +30,27 @@ int bdev_read(int fd, u64 offset, size_t size, void *buf)
 	return ssdfs_pread(fd, offset, size, buf);
 }
 
-int bdev_write(int fd, u64 offset, size_t size, void *buf)
+int bdev_write(int fd, struct ssdfs_nand_geometry *info,
+		u64 offset, size_t size, void *buf)
 {
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
 int bdev_erase(int fd, u64 offset, size_t size, void *buf)
 {
-	return ssdfs_pwrite(fd, offset, size, buf);
+	u64 range[2] = {offset, size};
+
+	if (ioctl(fd, BLKDISCARD, &range) < 0) {
+		SSDFS_INFO("BLKDISCARD is not supported: "
+			   "trying write: offset %llu, size %zu\n",
+			   offset, size);
+		return ssdfs_pwrite(fd, offset, size, buf);
+	}
+
+	return 0;
 }
 
-int bdev_check_nand_geometry(int fd, u32 erasesize, u32 writesize)
+int bdev_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
 {
 	return -EOPNOTSUPP;
 }

@@ -41,7 +41,7 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	seg_nums = layout->env.fs_size / layout->seg_size;
 	layout->segbmap.bmap_bytes = SEG_BMAP_BYTES(seg_nums);
 	fragments = SEG_BMAP_FRAGMENTS(seg_nums);
-	pebs_per_seg = layout->seg_size / layout->env.erase_size;
+	pebs_per_seg = (u64)(layout->seg_size / layout->env.erase_size);
 
 	fragments_per_seg = fragments_per_peb * pebs_per_seg;
 	segbmap_segs = (u8)((fragments + fragments_per_seg - 1) /
@@ -506,9 +506,9 @@ static void set_segbmap_presence_flag(struct ssdfs_volume_layout *layout)
 
 int segbmap_mkfs_validate(struct ssdfs_volume_layout *layout)
 {
-	u32 seg_size = layout->seg_size;
+	u64 seg_size = layout->seg_size;
 	u32 erase_size = layout->env.erase_size;
-	u32 pebs_per_seg = seg_size / erase_size;
+	u32 pebs_per_seg = (u32)(seg_size / erase_size);
 	int i;
 	int err;
 
@@ -578,6 +578,8 @@ static void segbmap_set_log_pages(struct ssdfs_volume_layout *layout,
 		SSDFS_WARN("pages_per_peb %u, blks %u\n",
 			   pages_per_peb, blks);
 	}
+
+	blks = min_t(u32, blks, (u32)SSDFS_LOG_MAX_PAGES);
 
 	if (layout->segbmap.log_pages == U16_MAX)
 		log_pages = blks;

@@ -70,7 +70,7 @@ void print_usage(void)
 	SSDFS_INFO("\t [-D|--nand-dies count]\t  NAND dies count.\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-e|--erasesize size]\t  erase size of target device "
-		   "(128KB|256KB|512KB|2MB|8MB).\n");
+		   "(128KB|256KB|512KB|2MB|8MB|...).\n");
 	SSDFS_INFO("\t [-f|--force]\t\t  force overwrite of existing filesystem.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
 	SSDFS_INFO("\t [-i|--inode_size size]\t  inode size in bytes "
@@ -224,6 +224,14 @@ static void check_erasesize(u64 erasesize)
 	case SSDFS_512KB:
 	case SSDFS_2MB:
 	case SSDFS_8MB:
+	case SSDFS_16MB:
+	case SSDFS_32MB:
+	case SSDFS_64MB:
+	case SSDFS_128MB:
+	case SSDFS_256MB:
+	case SSDFS_512MB:
+	case SSDFS_1GB:
+	case SSDFS_2GB:
 		/* do nothing: proper value */
 		break;
 
@@ -602,7 +610,7 @@ void parse_options(int argc, char *argv[],
 			break;
 		case 'L':
 			strncpy(layout->volume_label, optarg,
-				sizeof(layout->volume_label));
+				sizeof(layout->volume_label) - 1);
 			break;
 		case 'M':
 			p = optarg;
