@@ -137,6 +137,8 @@ struct ssdfs_metadata_check {
 /* 0x0000 */
 	__le16 bytes;
 #define SSDFS_CRC32			(1 << 0)
+#define SSDFS_ZLIB_COMPRESSED		(1 << 1)
+#define SSDFS_LZO_COMPRESSED		(1 << 2)
 	__le16 flags;
 	__le32 csum;
 
@@ -1668,7 +1670,9 @@ struct ssdfs_fragments_chain_header {
 #define SSDFS_LOG_AREA_CHAIN_HDR	0x1
 #define SSDFS_BLK_STATE_CHAIN_HDR	0x2
 #define SSDFS_BLK_DESC_CHAIN_HDR	0x3
-#define SSDFS_BLK_BMAP_CHAIN_HDR	0x4
+#define SSDFS_BLK_DESC_ZLIB_CHAIN_HDR	0x4
+#define SSDFS_BLK_DESC_LZO_CHAIN_HDR	0x5
+#define SSDFS_BLK_BMAP_CHAIN_HDR	0x6
 #define SSDFS_CHAIN_HDR_TYPE_MAX	(SSDFS_BLK_BMAP_CHAIN_HDR + 1)
 
 /* Fragments chain flags */
@@ -1713,7 +1717,9 @@ struct ssdfs_fragment_desc {
 #define SSDFS_FRAGMENT_LZO_BLOB		3
 #define SSDFS_DATA_BLK_STATE_DESC	4
 #define SSDFS_DATA_BLK_DESC		5
-#define SSDFS_NEXT_TABLE_DESC		6
+#define SSDFS_DATA_BLK_DESC_ZLIB	6
+#define SSDFS_DATA_BLK_DESC_LZO		7
+#define SSDFS_NEXT_TABLE_DESC		8
 #define SSDFS_FRAGMENT_DESC_MAX_TYPE	(SSDFS_NEXT_TABLE_DESC + 1)
 
 /* Fragment descriptor flags */
@@ -1923,7 +1929,8 @@ struct ssdfs_phys_offset_table_header {
 /* Physical offset table flags */
 #define SSDFS_OFF_TABLE_HAS_CSUM		(1 << 0)
 #define SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT	(1 << 1)
-#define SSDFS_OFF_TABLE_FLAGS_MASK		0x3
+#define SSDFS_BLK_DESC_TBL_COMPRESSED		(1 << 2)
+#define SSDFS_OFF_TABLE_FLAGS_MASK		0x7
 
 /*
  * struct ssdfs_translation_extent - logical block to offset id translation

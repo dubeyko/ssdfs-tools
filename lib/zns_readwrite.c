@@ -55,7 +55,7 @@ int zns_write(int fd, struct ssdfs_nand_geometry *info,
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
-int zns_erase(int fd, u64 offset, size_t size, void *buf)
+int zns_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
 {
 	struct blk_zone_range range;
 

@@ -1107,7 +1107,8 @@ static int erase_peb(struct ssdfs_volume_layout *layout,
 	peb_desc = &seg_desc->pebs[peb_index];
 	offset = peb_desc->peb_id * peb_size;
 
-	err = layout->env.dev_ops->erase(fd, offset, peb_size, buf);
+	err = layout->env.dev_ops->erase(fd, offset, peb_size, buf,
+					 layout->env.show_debug);
 	if (err) {
 		SSDFS_ERR("unable to erase peb #%llu\n",
 			  peb_desc->peb_id);
@@ -1152,7 +1153,8 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 				  i);
 
 			err = layout->env.dev_ops->erase(fd, offset,
-							 seg_size, buf);
+							seg_size, buf,
+							layout->env.show_debug);
 			if (err) {
 				SSDFS_ERR("unable to erase segment #%u\n", i);
 				goto free_erase_buf;

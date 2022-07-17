@@ -93,9 +93,20 @@ ssdfs_dumpfs_parse_fragments_chain_hdr(struct ssdfs_dumpfs_environment *env,
 		SSDFS_DUMPFS_DUMP(env,
 			"CHAIN TYPE: SSDFS_BLK_STATE_CHAIN_HDR\n");
 		break;
+
 	case SSDFS_BLK_DESC_CHAIN_HDR:
 		SSDFS_DUMPFS_DUMP(env,
 			"CHAIN TYPE: SSDFS_BLK_DESC_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK_DESC_ZLIB_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_BLK_DESC_ZLIB_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_BLK_DESC_LZO_CHAIN_HDR\n");
 		break;
 
 	case SSDFS_BLK_BMAP_CHAIN_HDR:
@@ -469,6 +480,10 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 	*parsed_bytes = 0;
 
+	SSDFS_DBG(env->base.show_debug,
+		  "offset %u, size %u, parsed_bytes %u\n",
+		  offset, size, *parsed_bytes);
+
 	if (size < sizeof(struct ssdfs_block_bitmap_fragment)) {
 		SSDFS_ERR("size %u is lesser than %zu\n",
 			  size,
@@ -526,16 +541,25 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 	*parsed_bytes += sizeof(struct ssdfs_block_bitmap_fragment);
 
+	SSDFS_DBG(env->base.show_debug,
+		  "offset %u, size %u, parsed_bytes %u\n",
+		  offset, size, *parsed_bytes);
+
 	fragments_count = le16_to_cpu(hdr->chain_hdr.fragments_count);
 
 	frag_desc_offset = offset + *parsed_bytes;
 	*parsed_bytes += (u32)fragments_count * frag_desc_size;
 
+	SSDFS_DBG(env->base.show_debug,
+		  "offset %u, size %u, "
+		  "parsed_bytes %u, fragments_count %u\n",
+		  offset, size, *parsed_bytes, fragments_count);
+
 	for (i = 0; i < fragments_count; i++) {
 		struct ssdfs_fragment_desc *frag;
 		u8 *data;
 
-		if ((size - *parsed_bytes) < frag_desc_size) {
+		if (i > 0 && ((size - *parsed_bytes) < frag_desc_size)) {
 			SSDFS_ERR("size %u is lesser than %zu\n",
 				  size - *parsed_bytes,
 				  frag_desc_size);
@@ -585,6 +609,13 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 		} while (displayed_bytes < raw_data_bytes);
 
 		*parsed_bytes += raw_data_bytes;
+
+		SSDFS_DBG(env->base.show_debug,
+			  "offset %u, size %u, "
+			  "parsed_bytes %u, index %d, "
+			  "raw_data_bytes %u\n",
+			  offset, size, *parsed_bytes,
+			  i, raw_data_bytes);
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
@@ -606,6 +637,10 @@ int ssdfs_dumpfs_parse_block_bitmap(struct ssdfs_dumpfs_environment *env,
 	u32 size;
 	int i;
 	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "area_size %u, bytes_count %u\n",
+		  area_size, bytes_count);
 
 	if (area_size < bytes_count) {
 		SSDFS_ERR("area_size %u < bytes_count %u\n",
@@ -661,6 +696,10 @@ int ssdfs_dumpfs_parse_block_bitmap(struct ssdfs_dumpfs_environment *env,
 
 	for (i = 0; i < fragments_count; i++) {
 		u32 parsed_bytes = 0;
+
+		SSDFS_DBG(env->base.show_debug,
+			  "offset %u, size %u\n",
+			  offset, size);
 
 		SSDFS_DUMPFS_DUMP(env, "BLOCK BITMAP FRAGMENT: #%d\n", i);
 
@@ -1669,6 +1708,18 @@ parse_next_area:
 			return -EINVAL;
 		}
 
+		switch (area_hdr->chain_hdr.type) {
+		case SSDFS_BLK_DESC_ZLIB_CHAIN_HDR:
+		case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
+			SSDFS_DUMPFS_DUMP(env,
+				"COMPRESSED STATE IS NOT SUPPORTED YET\n");
+			goto finish_parse_fragment;
+
+		default:
+			/* do nothing */
+			break;
+		}
+
 		data = (u8 *)area_buf + parsed_bytes;
 
 		SSDFS_DUMPFS_DUMP(env, "\n");
@@ -1682,6 +1733,7 @@ parse_next_area:
 			return err;
 		}
 
+finish_parse_fragment:
 		parsed_bytes += le16_to_cpu(frag->compr_size);
 	}
 

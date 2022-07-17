@@ -37,7 +37,7 @@ int mtd_write(int fd, struct ssdfs_nand_geometry *info,
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
-int mtd_erase(int fd, u64 offset, size_t size, void *buf)
+int mtd_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
 {
 	if (offset >= 0x100000000ull) {
 		struct erase_info_user64 ei;
@@ -96,7 +96,7 @@ int mtd_check_peb(int fd, u64 offset, u32 erasesize)
 	if (res > 0)
 		return SSDFS_PEB_IS_BAD;
 
-	res = mtd_erase(fd, offset, (size_t)erasesize, NULL);
+	res = mtd_erase(fd, offset, (size_t)erasesize, NULL, SSDFS_FALSE);
 	if (res != 0)
 		return SSDFS_RECOVERING_PEB;
 

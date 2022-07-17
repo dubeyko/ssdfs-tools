@@ -36,13 +36,14 @@ int bdev_write(int fd, struct ssdfs_nand_geometry *info,
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
-int bdev_erase(int fd, u64 offset, size_t size, void *buf)
+int bdev_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
 {
 	u64 range[2] = {offset, size};
 
 	if (ioctl(fd, BLKDISCARD, &range) < 0) {
-		SSDFS_INFO("BLKDISCARD is not supported: "
-			   "trying write: offset %llu, size %zu\n",
+		SSDFS_DBG(is_debug,
+			  "BLKDISCARD is not supported: "
+			  "trying write: offset %llu, size %zu\n",
 			   offset, size);
 		return ssdfs_pwrite(fd, offset, size, buf);
 	}
