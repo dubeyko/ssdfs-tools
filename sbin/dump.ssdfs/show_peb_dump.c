@@ -174,6 +174,16 @@ void ssdfs_dumpfs_parse_fragment_header(struct ssdfs_dumpfs_environment *env,
 			"FRAGMENT TYPE: SSDFS_DATA_BLK_DESC\n");
 		break;
 
+	case SSDFS_DATA_BLK_DESC_ZLIB:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_DATA_BLK_DESC_ZLIB\n");
+		break;
+
+	case SSDFS_DATA_BLK_DESC_LZO:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_DATA_BLK_DESC_LZO\n");
+		break;
+
 	case SSDFS_NEXT_TABLE_DESC:
 		SSDFS_DUMPFS_DUMP(env,
 			"FRAGMENT TYPE: SSDFS_NEXT_TABLE_DESC\n");
