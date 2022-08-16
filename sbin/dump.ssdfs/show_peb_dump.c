@@ -592,6 +592,9 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 			return -EINVAL;
 		}
 
+		if (!env->is_raw_dump_requested)
+			continue;
+
 		data = (u8 *)area_buf + offset + *parsed_bytes;
 
 		SSDFS_DUMPFS_DUMP(env, "RAW DATA:\n");

@@ -2,7 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
-v.4.07 [July 16, 2022]
+v.4.09 [August 15, 2022]
+    (*) Fix bugs in ZNS SSD support implementation.
+
+v.4.08 [July 16, 2022]
     (*) Implement support block descriptor table compression.
 
 v.4.07 [June 02, 2022]

@@ -153,7 +153,8 @@ int ssdfs_dumpfs_show_raw_dump(struct ssdfs_dumpfs_environment *env)
 		u32 size = min_t(u32, env->raw_dump.buf_size, len - read_bytes);
 
 		err = env->base.dev_ops->read(env->base.fd, offset, size,
-					      env->raw_dump.buf);
+					      env->raw_dump.buf,
+					      env->base.show_debug);
 		if (err) {
 			SSDFS_ERR("fail to read dump: "
 				  "offset %llu, size %u, err %d\n",

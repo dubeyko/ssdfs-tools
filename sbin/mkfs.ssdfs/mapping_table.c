@@ -561,7 +561,8 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 			desc = (struct ssdfs_peb_descriptor *)cur_ptr;
 
 			res = layout->env.dev_ops->check_peb(fd, offset,
-							     peb_size);
+							peb_size,
+							layout->env.show_debug);
 			if (res < 0) {
 				SSDFS_ERR("fail to check PEB: "
 					  "offset %llu, err %d\n",
@@ -642,7 +643,8 @@ int check_pebs_validity(struct ssdfs_volume_layout *layout)
 		BUG();
 	};
 
-	res = layout->env.dev_ops->check_nand_geometry(fd, &info);
+	res = layout->env.dev_ops->check_nand_geometry(fd, &info,
+						       layout->env.show_debug);
 	if (res)
 		return res;
 

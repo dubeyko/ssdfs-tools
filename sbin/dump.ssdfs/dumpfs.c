@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
 	SSDFS_DUMPFS_INFO(env_ptr->base.show_info,
 			  "[001]\tOPEN DEVICE...\n");
 
-	err = open_device(&env_ptr->base);
+	err = open_device(&env_ptr->base, 0);
 	if (err)
 		exit(EXIT_FAILURE);
 

@@ -70,16 +70,19 @@ struct ssdfs_nand_geometry {
  */
 struct ssdfs_device_ops {
 	/* read method */
-	int (*read)(int fd, u64 offset, size_t size, void *buf);
+	int (*read)(int fd, u64 offset, size_t size, void *buf, int is_debug);
 	/* write method */
 	int (*write)(int fd, struct ssdfs_nand_geometry *info,
-		     u64 offset, size_t size, void *buf);
+		     u64 offset, size_t size, void *buf, int is_debug);
 	/* erase method */
-	int (*erase)(int fd, u64 offset, size_t size, void *buf, int is_debug);
+	int (*erase)(int fd, u64 offset, size_t size,
+		     void *buf, size_t buf_size, int is_debug);
 	/* check NAND features */
-	int (*check_nand_geometry)(int fd, struct ssdfs_nand_geometry *info);
+	int (*check_nand_geometry)(int fd, struct ssdfs_nand_geometry *info,
+				   int is_debug);
 	/* check PEB */
-	int (*check_peb)(int fd, u64 offset, u32 erasesize);
+	int (*check_peb)(int fd, u64 offset, u32 erasesize,
+			 int is_debug);
 };
 
 /*
@@ -340,7 +343,7 @@ int ssdfs_calculate_csum(struct ssdfs_metadata_check *check,
 			 void *buf, size_t buf_size);
 int is_csum_valid(struct ssdfs_metadata_check *check,
 		   void *buf, size_t buf_size);
-int open_device(struct ssdfs_environment *env);
+int open_device(struct ssdfs_environment *env, u32 flags);
 int ssdfs_pread(int fd, u64 offset, size_t size, void *buf);
 int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf);
 u64 ssdfs_current_time_in_nanoseconds(void);
@@ -348,28 +351,34 @@ char *ssdfs_nanoseconds_to_time(u64 nanoseconds);
 int is_zoned_device(int fd);
 
 /* lib/mtd_readwrite.c */
-int mtd_read(int fd, u64 offset, size_t size, void *buf);
+int mtd_read(int fd, u64 offset, size_t size, void *buf, int is_debug);
 int mtd_write(int fd, struct ssdfs_nand_geometry *info,
-		u64 offset, size_t size, void *buf);
-int mtd_erase(int fd, u64 offset, size_t size, void *buf, int is_debug);
-int mtd_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info);
-int mtd_check_peb(int fd, u64 offset, u32 erasesize);
+		u64 offset, size_t size, void *buf, int is_debug);
+int mtd_erase(int fd, u64 offset, size_t size,
+		void *buf, size_t buf_size, int is_debug);
+int mtd_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
+			    int is_debug);
+int mtd_check_peb(int fd, u64 offset, u32 erasesize, int is_debug);
 
 /* lib/bdev_readwrite.c */
-int bdev_read(int fd, u64 offset, size_t size, void *buf);
+int bdev_read(int fd, u64 offset, size_t size, void *buf, int is_debug);
 int bdev_write(int fd, struct ssdfs_nand_geometry *info,
-		u64 offset, size_t size, void *buf);
-int bdev_erase(int fd, u64 offset, size_t size, void *buf, int is_debug);
-int bdev_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info);
-int bdev_check_peb(int fd, u64 offset, u32 erasesize);
+		u64 offset, size_t size, void *buf, int is_debug);
+int bdev_erase(int fd, u64 offset, size_t size,
+		void *buf, size_t buf_size, int is_debug);
+int bdev_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
+			     int is_debug);
+int bdev_check_peb(int fd, u64 offset, u32 erasesize, int is_debug);
 
 /* lib/zns_readwrite.c */
-int zns_read(int fd, u64 offset, size_t size, void *buf);
+int zns_read(int fd, u64 offset, size_t size, void *buf, int is_debug);
 int zns_write(int fd, struct ssdfs_nand_geometry *info,
-		u64 offset, size_t size, void *buf);
-int zns_erase(int fd, u64 offset, size_t size, void *buf, int is_debug);
-int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info);
-int zns_check_peb(int fd, u64 offset, u32 erasesize);
+		u64 offset, size_t size, void *buf, int is_debug);
+int zns_erase(int fd, u64 offset, size_t size,
+		void *buf, size_t buf_size, int is_debug);
+int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
+			    int is_debug);
+int zns_check_peb(int fd, u64 offset, u32 erasesize, int is_debug);
 
 static const struct ssdfs_device_ops mtd_ops = {
 	.read = mtd_read,

@@ -19,20 +19,31 @@
  *                       Write/Erase operations                         *
  ************************************************************************/
 
-int zns_read(int fd, u64 offset, size_t size, void *buf)
+int zns_read(int fd, u64 offset, size_t size, void *buf, int is_debug)
 {
 	return ssdfs_pread(fd, offset, size, buf);
 }
 
 int zns_write(int fd, struct ssdfs_nand_geometry *info,
-	      u64 offset, size_t size, void *buf)
+	      u64 offset, size_t size, void *buf, int is_debug)
 {
 	struct blk_zone_range range;
 	u64 zone_start = (offset / info->erasesize) * info->erasesize;
 
-	if (zone_start == offset) {
+	SSDFS_DBG(is_debug,
+		  "trying write: offset %llu, size %zu, "
+		  "zone_start %llu, erasesize %u\n",
+		   offset, size, zone_start, info->erasesize);
+
+	if (zone_start == offset || offset == SSDFS_RESERVED_VBR_SIZE) {
 		range.sector = zone_start / SSDFS_512B;
 		range.nr_sectors = info->erasesize / SSDFS_512B;
+
+		SSDFS_DBG(is_debug,
+			  "open zone: offset %llu, zone_start %llu, "
+			  "range (sector %llu, nr_sectors %llu)\n",
+			   offset, zone_start,
+			   (u64)range.sector, range.nr_sectors);
 
 		if (ioctl(fd, BLKOPENZONE, &range) < 0) {
 			SSDFS_ERR("fail to open zone "
@@ -55,12 +66,19 @@ int zns_write(int fd, struct ssdfs_nand_geometry *info,
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
-int zns_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
+int zns_erase(int fd, u64 offset, size_t size,
+		void *buf, size_t buf_size, int is_debug)
 {
 	struct blk_zone_range range;
 
 	range.sector = offset / SSDFS_512B;
 	range.nr_sectors = (size + SSDFS_512B - 1) / SSDFS_512B;
+
+	SSDFS_DBG(is_debug,
+		  "erase zone: offset %llu, size %zu, "
+		  "range (sector %llu, nr_sectors %llu)\n",
+		   offset, size,
+		   range.sector, range.nr_sectors);
 
 	if (ioctl(fd, BLKRESETZONE, &range) < 0) {
 		SSDFS_ERR("fail to reset zone (offset %llu, size %zu): %s\n",
@@ -71,7 +89,8 @@ int zns_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
 	return 0;
 }
 
-int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
+int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
+			    int is_debug)
 {
 	u32 sectors_per_zone = 0;
 	u64 zone_size;
@@ -124,10 +143,14 @@ int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
 			info->writesize = SSDFS_32KB;
 	}
 
+	SSDFS_DBG(is_debug,
+		  "sectors_per_zone %u, zone_size %llu\n",
+		   sectors_per_zone, zone_size);
+
 	return res;
 }
 
-int zns_check_peb(int fd, u64 offset, u32 erasesize)
+int zns_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
 {
 	return -EOPNOTSUPP;
 }

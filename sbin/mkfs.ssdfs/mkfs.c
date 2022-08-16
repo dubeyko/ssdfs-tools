@@ -19,6 +19,7 @@
 
 #define _LARGEFILE64_SOURCE
 #define __USE_FILE_OFFSET64
+#define _GNU_SOURCE
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -80,6 +81,9 @@ static struct ssdfs_volume_layout volume_layout = {
 	.user_data_seg.migration_threshold = U16_MAX,
 	.user_data_seg.compression = SSDFS_UNKNOWN_COMPRESSION,
 	.env.device_type = SSDFS_DEVICE_TYPE_MAX,
+	.write_buffer.ptr = NULL,
+	.write_buffer.offset = 0,
+	.write_buffer.capacity = 0,
 	.is_volume_erased = SSDFS_FALSE,
 };
 
@@ -322,7 +326,8 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 		info.writesize = layout->page_size;
 
 		res = layout->env.dev_ops->check_nand_geometry(layout->env.fd,
-								&info);
+							&info,
+							layout->env.show_debug);
 		if (res == -ENOENT) {
 			layout->env.erase_size = info.erasesize;
 			layout->page_size = info.writesize;
@@ -665,6 +670,24 @@ static int alloc_segs_array(struct ssdfs_volume_layout *layout)
 		}
 	}
 
+	layout->write_buffer.capacity = SSDFS_4KB;
+	layout->write_buffer.offset = 0;
+	err = posix_memalign((void **)&layout->write_buffer.ptr,
+			     SSDFS_4KB,
+			     layout->write_buffer.capacity);
+	if (err) {
+		layout->write_buffer.capacity = 0;
+		SSDFS_ERR("fail to allocate memory\n");
+		return err;
+	} else if (!layout->write_buffer.ptr) {
+		err = -ENOMEM;
+		layout->write_buffer.capacity = 0;
+		SSDFS_ERR("fail to allocate memory: "
+			  "size %u\n",
+			  layout->write_buffer.capacity);
+		goto free_memory;
+	}
+
 	SSDFS_DBG(layout->env.show_debug, "ALLOCATED: segs %p, segs_capacity %d\n",
 		  layout->segs, layout->segs_capacity);
 
@@ -685,6 +708,13 @@ static void free_segs_array(struct ssdfs_volume_layout *layout)
 	SSDFS_DBG(layout->env.show_debug,
 		  "segs %p, segs_capacity %d, segs_count %d\n",
 		  layout->segs, layout->segs_capacity, layout->segs_count);
+
+	if (layout->write_buffer.ptr) {
+		free(layout->write_buffer.ptr);
+		layout->write_buffer.ptr = NULL;
+		layout->write_buffer.capacity = 0;
+		layout->write_buffer.offset = 0;
+	}
 
 	segbmap_destroy_fragments_array(layout);
 	maptbl_destroy_fragments_array(layout);
@@ -1075,7 +1105,7 @@ free_bmap:
 
 static int erase_peb(struct ssdfs_volume_layout *layout,
 		     int seg_index, int peb_index,
-		     char *buf)
+		     char *buf, size_t buf_size)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
@@ -1085,8 +1115,8 @@ static int erase_peb(struct ssdfs_volume_layout *layout,
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "seg_index %d, peb_index %d, buf %p\n",
-		  seg_index, peb_index, buf);
+		  "seg_index %d, peb_index %d, buf %p, buf_size %zu\n",
+		  seg_index, peb_index, buf, buf_size);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_ERR("invalid seg_index %d, "
@@ -1107,7 +1137,8 @@ static int erase_peb(struct ssdfs_volume_layout *layout,
 	peb_desc = &seg_desc->pebs[peb_index];
 	offset = peb_desc->peb_id * peb_size;
 
-	err = layout->env.dev_ops->erase(fd, offset, peb_size, buf,
+	err = layout->env.dev_ops->erase(fd, offset, peb_size,
+					 buf, buf_size,
 					 layout->env.show_debug);
 	if (err) {
 		SSDFS_ERR("unable to erase peb #%llu\n",
@@ -1124,6 +1155,7 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 	u64 seg_size = layout->seg_size;
 	u64 offset = 0;
 	char *buf;
+	size_t buf_size = SSDFS_128KB;
 	u32 i, j;
 	int err = 0;
 
@@ -1137,12 +1169,18 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 	if (layout->is_volume_erased)
 		return 0;
 
-	buf = malloc(layout->seg_size);
-	if (!buf) {
-		SSDFS_ERR("fail to allocate the erase buffer\n");
+	err = posix_memalign((void **)&buf, SSDFS_128KB, buf_size);
+	if (err) {
+		SSDFS_ERR("fail to allocate memory\n");
+		return err;
+	} else if (!buf) {
+		SSDFS_ERR("fail to allocate memory: "
+			  "size %zu\n",
+			  buf_size);
 		return -ENOMEM;
 	}
-	memset(buf, 0xff, layout->seg_size);
+
+	memset(buf, 0xff, buf_size);
 
 	if (layout->need_erase_device) {
 		u32 fs_segs_count = (u32)(layout->env.fs_size / seg_size);
@@ -1152,8 +1190,8 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 				  "erasing segment %u...\n",
 				  i);
 
-			err = layout->env.dev_ops->erase(fd, offset,
-							seg_size, buf,
+			err = layout->env.dev_ops->erase(fd, offset, seg_size,
+							buf, buf_size,
 							layout->env.show_debug);
 			if (err) {
 				SSDFS_ERR("unable to erase segment #%u\n", i);
@@ -1165,7 +1203,7 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 	} else {
 		for (i = 0; i < layout->segs_count; i++) {
 			for (j = 0; j < layout->segs[i].pebs_count; j++) {
-				err = erase_peb(layout, i, j, buf);
+				err = erase_peb(layout, i, j, buf, buf_size);
 				if (err) {
 					SSDFS_ERR("fail to erase peb: "
 						  "seg_index %u, peb_index %u, "
@@ -1182,18 +1220,129 @@ free_erase_buf:
 	return err;
 }
 
-static int write_peb(struct ssdfs_volume_layout *layout,
-		     int seg_index, int peb_index)
+static int flush_write_buffer(struct ssdfs_volume_layout *layout,
+			      u64 offset, u32 size)
 {
-	struct ssdfs_segment_desc *seg_desc;
-	struct ssdfs_peb_content *peb_desc;
 	struct ssdfs_nand_geometry info = {
 		.erasesize = layout->env.erase_size,
 		.writesize = layout->page_size,
 	};
 	int fd = layout->env.fd;
+	int err;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "offset %llu, size %u\n",
+		  offset, size);
+
+	if (layout->write_buffer.ptr == NULL) {
+		SSDFS_ERR("write buffer is not allocated\n");
+		return -ERANGE;
+	}
+
+	if (layout->write_buffer.capacity == 0) {
+		SSDFS_ERR("invalid write buffer capacity %u\n",
+			  layout->write_buffer.capacity);
+		return -ERANGE;
+	}
+
+	if (size == 0 || size > layout->write_buffer.capacity) {
+		SSDFS_ERR("invalid requested size: "
+			  "size %u, layout->write_buffer.capacity %u\n",
+			  size, layout->write_buffer.capacity);
+		return -ERANGE;
+	}
+
+	if (offset % SSDFS_4KB) {
+		SSDFS_ERR("unaligned offset %llu\n",
+			  offset);
+		return -ERANGE;
+	}
+
+	err = layout->env.dev_ops->write(fd, &info, offset, size,
+					 layout->write_buffer.ptr,
+					 layout->env.show_debug);
+	if (err) {
+		SSDFS_ERR("unable to write: "
+			  "offset %llu, bytes_count %u\n",
+			  offset, size);
+		return err;
+	}
+
+	memset(layout->write_buffer.ptr, 0xFF, layout->write_buffer.capacity);
+	layout->write_buffer.offset = 0;
+
+	return 0;
+}
+
+static int prepare_write_buffer(struct ssdfs_volume_layout *layout,
+				u32 offset, char *buf, u32 size,
+				u32 *copied_size)
+{
+	u32 bytes_count;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "offset %u, size %u\n",
+		  offset, size);
+
+	*copied_size = 0;
+
+	if (layout->write_buffer.ptr == NULL) {
+		SSDFS_ERR("write buffer is not allocated\n");
+		return -ERANGE;
+	}
+
+	if (layout->write_buffer.capacity == 0) {
+		SSDFS_ERR("invalid write buffer capacity %u\n",
+			  layout->write_buffer.capacity);
+		return -ERANGE;
+	}
+
+	if (buf == NULL) {
+		SSDFS_ERR("input buffer is not allocated\n");
+		return -ERANGE;
+	}
+
+	if (offset < layout->write_buffer.offset ||
+	    offset >= layout->write_buffer.capacity) {
+		SSDFS_DBG(layout->env.show_debug,
+			  "no more space: write_buffer.offset %u, "
+			  "offset %u, size %u\n",
+			  layout->write_buffer.offset, offset, size);
+		return -ENOSPC;
+	}
+
+	bytes_count = min_t(u32, size, layout->write_buffer.capacity - offset);
+	memcpy(layout->write_buffer.ptr + offset, buf, bytes_count);
+	*copied_size = bytes_count;
+	layout->write_buffer.offset = offset + bytes_count;
+
+	if (*copied_size != size) {
+		SSDFS_DBG(layout->env.show_debug,
+			  "no more space: offset %u, size %u\n",
+			  offset, size);
+		return -ENOSPC;
+	}
+
+	if ((offset + bytes_count) == layout->write_buffer.capacity) {
+		SSDFS_DBG(layout->env.show_debug,
+			  "no more space: offset %u, size %u\n",
+			  offset, size);
+		return -ENOSPC;
+	}
+
+	return 0;
+}
+
+static int write_peb(struct ssdfs_volume_layout *layout,
+		     int seg_index, int peb_index)
+{
+	struct ssdfs_segment_desc *seg_desc;
+	struct ssdfs_peb_content *peb_desc;
 	u32 erase_size = layout->env.erase_size;
 	u64 peb_id;
+	u32 peb_offset = 0;
+	u64 volume_offset;
+	u32 flushed_bytes = 0;
 	u32 i;
 	int err = 0;
 
@@ -1220,13 +1369,16 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 		return -EINVAL;
 	}
 
+	memset(layout->write_buffer.ptr, 0xFF, layout->write_buffer.capacity);
+
 	peb_desc = &seg_desc->pebs[peb_index];
 	peb_id = peb_desc->peb_id;
+	volume_offset = peb_id * erase_size;
 
 	for (i = 0; i < SSDFS_SEG_LOG_ITEMS_COUNT; i++) {
 		struct ssdfs_extent_desc *desc;
-		u64 offset;
-		u64 size;
+		u32 write_buf_offset;
+		u32 size;
 		char *buf;
 
 		desc = &peb_desc->extents[i];
@@ -1234,14 +1386,85 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 			continue;
 
 		buf = desc->buf;
-		offset = (peb_id * erase_size) + desc->offset;
+
+		if (desc->offset < peb_offset) {
+			SSDFS_ERR("desc->offset %u < peb_offset %u\n",
+				  desc->offset, peb_offset);
+			return -ERANGE;
+		}
+
+		peb_offset = desc->offset;
 		size = desc->bytes_count;
 
-		err = layout->env.dev_ops->write(fd, &info, offset, size, buf);
+		SSDFS_DBG(layout->env.show_debug,
+			  "item_index %d, peb_offset %u, "
+			  "size %u, flushed_bytes %u\n",
+			  i, peb_offset, size, flushed_bytes);
+
+		while (size > 0) {
+			u32 copied_bytes = 0;
+
+			write_buf_offset =
+				peb_offset % layout->write_buffer.capacity;
+
+			err = prepare_write_buffer(layout, write_buf_offset,
+						   buf, size, &copied_bytes);
+			if (err == -ENOSPC) {
+				err = flush_write_buffer(layout, volume_offset,
+						layout->write_buffer.capacity);
+				if (err) {
+					SSDFS_ERR("fail to flush write buffer: "
+						  "volume_offset %llu, err %d\n",
+						  volume_offset, err);
+					return err;
+				}
+
+				volume_offset += layout->write_buffer.capacity;
+				flushed_bytes += layout->write_buffer.capacity;
+			} else if (err) {
+				SSDFS_ERR("fail to prepare write buffer: "
+					  "peb_offset %u, write_buf_offset %u, "
+					  "size %u, err %d\n",
+					  peb_offset, write_buf_offset,
+					  size, err);
+				return err;
+			}
+
+			if (copied_bytes > size) {
+				SSDFS_ERR("copied_bytes %u > size %u\n",
+					  copied_bytes, size);
+				return -ERANGE;
+			}
+
+			buf += copied_bytes;
+			size -= copied_bytes;
+			peb_offset += copied_bytes;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "copied_bytes %u, size %u, "
+				  "peb_offset %u\n",
+				  copied_bytes, size,
+				  peb_offset);
+		};
+	}
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "peb_offset %u, flushed_bytes %u\n",
+		  peb_offset, flushed_bytes);
+
+	if (peb_offset > flushed_bytes) {
+		u32 aligned_size;
+
+		aligned_size = peb_offset - flushed_bytes;
+		aligned_size += SSDFS_4KB - 1;
+		aligned_size = (aligned_size / SSDFS_4KB) * SSDFS_4KB;
+
+		err = flush_write_buffer(layout, volume_offset,
+					 aligned_size);
 		if (err) {
-			SSDFS_ERR("unable to write: "
-				  "offset %llu, bytes_count %llu\n",
-				  offset, size);
+			SSDFS_ERR("fail to flush write buffer: "
+				  "volume_offset %llu, err %d\n",
+				  volume_offset, err);
 			return err;
 		}
 	}
@@ -1334,7 +1557,7 @@ int main(int argc, char *argv[])
 	SSDFS_MKFS_INFO(layout_ptr->env.show_info,
 			"[001]\tOPEN DEVICE...\n");
 
-	err = open_device(&layout_ptr->env);
+	err = open_device(&layout_ptr->env, O_DIRECT);
 	if (err)
 		exit(EXIT_FAILURE);
 

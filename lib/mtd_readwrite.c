@@ -26,18 +26,19 @@
  *                       Write/Erase operations                         *
  ************************************************************************/
 
-int mtd_read(int fd, u64 offset, size_t size, void *buf)
+int mtd_read(int fd, u64 offset, size_t size, void *buf, int is_debug)
 {
 	return ssdfs_pread(fd, offset, size, buf);
 }
 
 int mtd_write(int fd, struct ssdfs_nand_geometry *info,
-		u64 offset, size_t size, void *buf)
+		u64 offset, size_t size, void *buf, int is_debug)
 {
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
-int mtd_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
+int mtd_erase(int fd, u64 offset, size_t size,
+		void *buf, size_t buf_size, int is_debug)
 {
 	if (offset >= 0x100000000ull) {
 		struct erase_info_user64 ei;
@@ -56,7 +57,8 @@ int mtd_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
 	}
 }
 
-int mtd_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
+int mtd_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
+			    int is_debug)
 {
 	struct mtd_info_user meminfo;
 	int err;
@@ -83,7 +85,7 @@ int mtd_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
 	return 0;
 }
 
-int mtd_check_peb(int fd, u64 offset, u32 erasesize)
+int mtd_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
 {
 	int res;
 
@@ -96,7 +98,7 @@ int mtd_check_peb(int fd, u64 offset, u32 erasesize)
 	if (res > 0)
 		return SSDFS_PEB_IS_BAD;
 
-	res = mtd_erase(fd, offset, (size_t)erasesize, NULL, SSDFS_FALSE);
+	res = mtd_erase(fd, offset, (size_t)erasesize, NULL, 0, SSDFS_FALSE);
 	if (res != 0)
 		return SSDFS_RECOVERING_PEB;
 

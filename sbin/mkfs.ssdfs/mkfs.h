@@ -290,6 +290,18 @@ struct ssdfs_metadata_desc {
 };
 
 /*
+ * struct ssdfs_write_buffer - write buffer
+ * @ptr: pointer on write buffer
+ * @offset: current offset in buffer
+ * @capacity: capacity of buffer in bytes
+ */
+struct ssdfs_write_buffer {
+	char *ptr;
+	u32 offset;
+	u32 capacity;
+};
+
+/*
  * struct ssdfs_volume_layout - description of created volume layout
  * @force_overwrite: force overwrite partition option
  * @need_erase_device: necessity in device erasure option
@@ -314,6 +326,7 @@ struct ssdfs_metadata_desc {
  * @segs_capacity: maximum available count of descriptors in array
  * @last_allocated_seg_index: last allocated segment index
  * @segs_count: count of prepared segments
+ * @write_buf: buffer for alligned write of prepared metadata
  * @env: environment
  * @is_volume_erased: inform that volume has been erased
  */
@@ -346,6 +359,8 @@ struct ssdfs_volume_layout {
 	int segs_capacity;
 	int last_allocated_seg_index;
 	int segs_count;
+
+	struct ssdfs_write_buffer write_buffer;
 
 	struct ssdfs_environment env;
 	int is_volume_erased;

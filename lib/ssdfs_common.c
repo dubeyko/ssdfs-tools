@@ -19,6 +19,7 @@
 
 #define _LARGEFILE64_SOURCE
 #define __USE_FILE_OFFSET64
+#define _GNU_SOURCE
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -223,15 +224,19 @@ int is_zoned_device(int fd)
 	return is_zoned;
 }
 
-int open_device(struct ssdfs_environment *env)
+int open_device(struct ssdfs_environment *env, u32 flags)
 {
 	struct mtd_info_user mtd;
 	struct stat stat;
+	u32 default_flags = O_RDWR | O_LARGEFILE;
 	int err;
 
-	SSDFS_DBG(env->show_debug, "dev_name %s\n", env->dev_name);
+	SSDFS_DBG(env->show_debug, "dev_name %s, flags %#x\n",
+		  env->dev_name, flags);
 
-	env->fd = open(env->dev_name, O_RDWR | O_LARGEFILE);
+	flags = default_flags | flags;
+
+	env->fd = open(env->dev_name, flags);
 	if (env->fd == -1) {
 		SSDFS_ERR("unable to open %s: %s\n",
 			  env->dev_name, strerror(errno));

@@ -85,7 +85,7 @@ int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read block descriptors array: "
 			  "offset %llu, err %d\n",
@@ -113,7 +113,7 @@ int ssdfs_dumpfs_read_blk2off_table(struct ssdfs_dumpfs_environment *env,
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read blk2off table: "
 			  "offset %llu, err %d\n",
@@ -141,7 +141,7 @@ int ssdfs_dumpfs_read_block_bitmap(struct ssdfs_dumpfs_environment *env,
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read block bitmap: "
 			  "offset %llu, err %d\n",
@@ -169,7 +169,7 @@ int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read log footer: "
 			  "offset %llu, err %d\n",
@@ -197,7 +197,7 @@ int ssdfs_dumpfs_read_partial_log_footer(struct ssdfs_dumpfs_environment *env,
 	offset += area_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read partial log footer: "
 			  "offset %llu, err %d\n",
@@ -234,7 +234,7 @@ int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
 		  offset, sg_size);
 
 	err = env->base.dev_ops->read(env->base.fd, offset, sg_size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read segment header: "
 			  "offset %llu, err %d\n",
@@ -266,7 +266,7 @@ int ssdfs_dumpfs_read_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	offset += log_offset;
 
 	err = env->base.dev_ops->read(env->base.fd, offset, size,
-				      buf);
+				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read partial log header: "
 			  "offset %llu, err %d\n",

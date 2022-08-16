@@ -25,38 +25,56 @@
  *                       Write/Erase operations                         *
  ************************************************************************/
 
-int bdev_read(int fd, u64 offset, size_t size, void *buf)
+int bdev_read(int fd, u64 offset, size_t size, void *buf, int is_debug)
 {
 	return ssdfs_pread(fd, offset, size, buf);
 }
 
 int bdev_write(int fd, struct ssdfs_nand_geometry *info,
-		u64 offset, size_t size, void *buf)
+		u64 offset, size_t size, void *buf, int is_debug)
 {
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
 
-int bdev_erase(int fd, u64 offset, size_t size, void *buf, int is_debug)
+int bdev_erase(int fd, u64 offset, size_t size,
+		void *buf, size_t buf_size, int is_debug)
 {
 	u64 range[2] = {offset, size};
+	u64 erased_bytes = 0;
+	int err;
 
 	if (ioctl(fd, BLKDISCARD, &range) < 0) {
 		SSDFS_DBG(is_debug,
 			  "BLKDISCARD is not supported: "
 			  "trying write: offset %llu, size %zu\n",
 			   offset, size);
-		return ssdfs_pwrite(fd, offset, size, buf);
+
+		do {
+			err = ssdfs_pwrite(fd, offset + erased_bytes,
+					   buf_size, buf);
+			if (err) {
+				SSDFS_ERR("fail to erase: "
+					  "offset %llu, erased_bytes %llu, "
+					  "size %zu, buf_size %zu, err %d\n",
+					  offset, erased_bytes,
+					  size, buf_size, err);
+				return err;
+			}
+
+			erased_bytes += buf_size;
+		} while (erased_bytes < size);
 	}
 
 	return 0;
 }
 
-int bdev_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info)
+int bdev_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
+			     int is_debug)
 {
 	return -EOPNOTSUPP;
 }
 
-int bdev_check_peb(int fd, u64 offset, u32 erasesize)
+int bdev_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
 {
 	return -EOPNOTSUPP;
 }
