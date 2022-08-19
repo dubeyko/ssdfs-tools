@@ -1586,23 +1586,23 @@ struct ssdfs_partial_log_header {
 /* 0x0030 */
 	struct ssdfs_metadata_descriptor desc_array[SSDFS_SEG_HDR_DESC_MAX];
 
-/* 0x00B0 */
+/* 0x00C0 */
 	__le64 nsegs;
 	__le64 free_pages;
 
-/* 0x00C0 */
+/* 0x00D0 */
 	struct ssdfs_inode root_folder;
 
-/* 0x01C0 */
+/* 0x01D0 */
 	struct ssdfs_inodes_btree inodes_btree;
 
-/* 0x0240 */
+/* 0x0250 */
 	struct ssdfs_shared_extents_btree shared_extents_btree;
 
-/* 0x02C0 */
+/* 0x02D0 */
 	struct ssdfs_shared_dictionary_btree shared_dict_btree;
 
-/* 0x0340 */
+/* 0x0350 */
 	__le32 sequence_id;
 	__le8 log_pagesize;
 	__le8 log_erasesize;
@@ -1610,11 +1610,11 @@ struct ssdfs_partial_log_header {
 	__le8 log_pebs_per_seg;
 	__le8 reserved1[0x8];
 
-/* 0x0350 */
+/* 0x0360 */
 	struct ssdfs_snapshots_btree snapshots_btree;
 
-/* 0x03D0 */
-	__le8 reserved2[0x30];
+/* 0x03E0 */
+	__le8 reserved2[0x20];
 
 /* 0x0400 */
 	struct ssdfs_invalidated_extents_btree invextree;

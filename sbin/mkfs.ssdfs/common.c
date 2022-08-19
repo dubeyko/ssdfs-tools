@@ -824,7 +824,6 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 								desc_offset);
 
 		fragment = bmap + (i * PAGE_CACHE_SIZE);
-		fragment_offset += i * PAGE_CACHE_SIZE;
 
 		BUG_ON(bmap_bytes <= written_bmap_bytes);
 		fragment_size = min_t(u32, bmap_bytes - written_bmap_bytes,
@@ -847,6 +846,7 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			goto fail_pre_commit_blk_bmap;
 		}
 
+		fragment_offset += PAGE_CACHE_SIZE;
 		written_bmap_bytes += fragment_size;
 	}
 
