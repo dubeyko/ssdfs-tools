@@ -135,6 +135,7 @@ static void sb_set_lnodes_log_pages(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages_default;
 	u32 log_pages;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -167,6 +168,14 @@ static void sb_set_lnodes_log_pages(struct ssdfs_volume_layout *layout)
 		}
 	}
 
+	log_pages_default = pages_per_peb / SSDFS_LOGS_PER_PEB_DEFAULT;
+	log_pages = layout->btree.lnode_log_pages;
+	log_pages = max_t(u32, log_pages, log_pages_default);
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
+
+	layout->btree.lnode_log_pages = (u16)log_pages;
 	layout->sb.vh.lnodes_seg_log_pages =
 		cpu_to_le16(layout->btree.lnode_log_pages);
 
@@ -180,6 +189,7 @@ static void sb_set_hnodes_log_pages(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages_default;
 	u32 log_pages;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -212,6 +222,14 @@ static void sb_set_hnodes_log_pages(struct ssdfs_volume_layout *layout)
 		}
 	}
 
+	log_pages_default = pages_per_peb / SSDFS_LOGS_PER_PEB_DEFAULT;
+	log_pages = layout->btree.hnode_log_pages;
+	log_pages = max_t(u32, log_pages, log_pages_default);
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
+
+	layout->btree.hnode_log_pages = (u16)log_pages;
 	layout->sb.vh.hnodes_seg_log_pages =
 		cpu_to_le16(layout->btree.hnode_log_pages);
 
@@ -225,6 +243,7 @@ static void sb_set_inodes_log_pages(struct ssdfs_volume_layout *layout)
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages_default;
 	u32 log_pages;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -257,6 +276,14 @@ static void sb_set_inodes_log_pages(struct ssdfs_volume_layout *layout)
 		}
 	}
 
+	log_pages_default = pages_per_peb / SSDFS_LOGS_PER_PEB_DEFAULT;
+	log_pages = layout->btree.inode_log_pages;
+	log_pages = max_t(u32, log_pages, log_pages_default);
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	BUG_ON(log_pages >= U16_MAX);
+
+	layout->btree.inode_log_pages = (u16)log_pages;
 	layout->sb.vh.inodes_seg_log_pages =
 		cpu_to_le16(layout->btree.inode_log_pages);
 

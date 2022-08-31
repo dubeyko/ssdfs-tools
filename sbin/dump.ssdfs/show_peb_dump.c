@@ -475,12 +475,12 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 	struct ssdfs_block_bitmap_fragment *hdr;
 	size_t frag_desc_size = sizeof(struct ssdfs_fragment_desc);
 	u16 peb_index;
-	u16 sequence_id;
-	u16 flags;
-	u16 type;
-	u16 last_free_blk;
-	u16 metadata_blks;
-	u16 invalid_blks;
+	u8 sequence_id;
+	u8 flags;
+	u8 type;
+	u32 last_free_blk;
+	u32 metadata_blks;
+	u32 invalid_blks;
 	u16 fragments_count;
 	u32 frag_desc_offset;
 	u32 raw_data_bytes = 0;
@@ -503,12 +503,12 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 	hdr = (struct ssdfs_block_bitmap_fragment *)((u8 *)area_buf + offset);
 	peb_index = le16_to_cpu(hdr->peb_index);
-	sequence_id = le16_to_cpu(hdr->sequence_id);
-	flags = le16_to_cpu(hdr->flags);
-	type = le16_to_cpu(hdr->type);
-	last_free_blk = le16_to_cpu(hdr->last_free_blk);
-	metadata_blks = le16_to_cpu(hdr->metadata_blks);
-	invalid_blks = le16_to_cpu(hdr->invalid_blks);
+	sequence_id = hdr->sequence_id;
+	flags = hdr->flags;
+	type = hdr->type;
+	last_free_blk = le32_to_cpu(hdr->last_free_blk);
+	metadata_blks = le32_to_cpu(hdr->metadata_blks);
+	invalid_blks = le32_to_cpu(hdr->invalid_blks);
 
 	SSDFS_DUMPFS_DUMP(env, "PEB_INDEX: %u\n", peb_index);
 	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n", sequence_id);
@@ -711,8 +711,8 @@ int ssdfs_dumpfs_parse_block_bitmap(struct ssdfs_dumpfs_environment *env,
 		u32 parsed_bytes = 0;
 
 		SSDFS_DBG(env->base.show_debug,
-			  "offset %u, size %u\n",
-			  offset, size);
+			  "offset %u, size %u, i %d, fragments_count %u\n",
+			  offset, size, i, fragments_count);
 
 		SSDFS_DUMPFS_DUMP(env, "BLOCK BITMAP FRAGMENT: #%d\n", i);
 
@@ -726,8 +726,19 @@ int ssdfs_dumpfs_parse_block_bitmap(struct ssdfs_dumpfs_environment *env,
 			return err;
 		}
 
+		if (parsed_bytes == 0) {
+			SSDFS_ERR("fail to parse block bitmap fragment: "
+				  "offset %u, size %u, parsed_bytes %u\n",
+				  offset, size, parsed_bytes);
+			return err;
+		}
+
 		offset += parsed_bytes;
 		size = area_size - offset;
+
+		SSDFS_DBG(env->base.show_debug,
+			  "offset %u, parsed_bytes %u, size %u\n",
+			  offset, parsed_bytes, size);
 	}
 
 	return 0;

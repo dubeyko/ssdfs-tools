@@ -5,7 +5,7 @@ noinst_LTLIBRARIES = libssdfs.la
 
 libssdfs_la_SOURCES = ssdfs_common.c segbmap.c blkbmap.c \
 			mtd_readwrite.c bdev_readwrite.c \
-			zns_readwrite.c
+			zns_readwrite.c compression.c
 libssdfs_la_CFLAGS = -Wall -fPIC
 libssdfs_la_CPPFLAGS = -I$(top_srcdir)/include
 libssdfs_la_LDFLAGS = -static

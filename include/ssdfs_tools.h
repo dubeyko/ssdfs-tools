@@ -21,6 +21,7 @@
 
 #define pr_fmt(fmt) SSDFS_UTILS_VERSION ": " fmt
 
+#include <zlib.h>
 #include <sys/ioctl.h>
 
 #include "kerncompat.h"
@@ -349,6 +350,16 @@ int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf);
 u64 ssdfs_current_time_in_nanoseconds(void);
 char *ssdfs_nanoseconds_to_time(u64 nanoseconds);
 int is_zoned_device(int fd);
+
+/* lib/compression.c */
+int ssdfs_zlib_compress(unsigned char *data_in,
+			unsigned char *cdata_out,
+			u32 *srclen, u32 *destlen,
+			int is_debug);
+int ssdfs_zlib_decompress(unsigned char *cdata_in,
+			  unsigned char *data_out,
+			  u32 srclen, u32 destlen,
+			  int is_debug);
 
 /* lib/mtd_readwrite.c */
 int mtd_read(int fd, u64 offset, size_t size, void *buf, int is_debug);
