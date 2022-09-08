@@ -65,10 +65,12 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u32 maptbl_segs;
 	u32 maptbl_pebs;
 	u32 pebtbl_portion_bytes;
+	u32 pebtbl_portion_mempages;
 	u32 peb_desc_per_stripe;
 	u32 peb_desc_per_portion;
 	u32 lebtbl_portion_bytes;
 	u32 lebtbl_mempages;
+	u32 lebtbl_portion_mempages;
 	u32 leb_desc_per_mempage;
 	u32 leb_desc_per_portion;
 
@@ -111,11 +113,13 @@ define_stripes_per_portion:
 	/* re-calculate peb_desc_per_portion */
 	peb_desc_per_portion = peb_desc_per_stripe * stripes_per_portion;
 	pebtbl_portion_bytes = stripes_per_portion * PAGE_CACHE_SIZE;
+	pebtbl_portion_mempages = stripes_per_portion;
 
 	leb_desc_per_portion = peb_desc_per_portion + leb_desc_per_mempage - 1;
 	lebtbl_mempages = leb_desc_per_portion / leb_desc_per_mempage;
 	leb_desc_per_portion = lebtbl_mempages * leb_desc_per_mempage;
 	lebtbl_portion_bytes = lebtbl_mempages * PAGE_CACHE_SIZE;
+	lebtbl_portion_mempages = lebtbl_mempages;
 	leb_desc_per_portion = peb_desc_per_portion;
 
 	portion_size = lebtbl_portion_bytes + pebtbl_portion_bytes;
@@ -204,7 +208,9 @@ define_stripes_per_portion:
 
 	layout->maptbl.maptbl_pebs = maptbl_pebs;
 	layout->maptbl.lebtbl_portion_bytes = lebtbl_portion_bytes;
+	layout->maptbl.lebtbl_portion_mempages = lebtbl_portion_mempages;
 	layout->maptbl.pebtbl_portion_bytes = pebtbl_portion_bytes;
+	layout->maptbl.pebtbl_portion_mempages = pebtbl_portion_mempages;
 	BUG_ON(leb_desc_per_portion >= U16_MAX);
 
 	layout->maptbl.lebs_per_portion = (u16)leb_desc_per_portion;
@@ -220,11 +226,13 @@ define_stripes_per_portion:
 		  "maptbl: segs %d, stripes_per_portion %u, "
 		  "portions_per_fragment %u, maptbl_pebs %u, "
 		  "lebtbl_portion_bytes %u, pebtbl_portion_bytes %u, "
+		  "lebtbl_portion_mempages %u, pebtbl_portion_mempages %u, "
 		  "lebs_per_portion %u, pebs_per_portion %u, "
 		  "portions_count %llu, portion_size %u\n",
 		  *segs, stripes_per_portion, portions_per_fragment,
 		  maptbl_pebs, lebtbl_portion_bytes,
-		  pebtbl_portion_bytes, leb_desc_per_portion,
+		  pebtbl_portion_bytes, lebtbl_portion_mempages,
+		  pebtbl_portion_mempages, leb_desc_per_portion,
 		  peb_desc_per_portion, fragments, portion_size);
 	return seg_state;
 }
@@ -1491,6 +1499,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			err = pre_commit_block_bitmap(layout, seg_index, j,
+						      peb_buffer_size,
 						      valid_blks);
 			if (err)
 				return err;
@@ -1522,7 +1531,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 							j, valid_blks,
 							SSDFS_MAPTBL_INO,
 							payload_offset_in_bytes,
-							PAGE_CACHE_SIZE);
+							layout->page_size);
 			if (err)
 				return err;
 
@@ -1574,9 +1583,10 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				}
 
 				err = pre_commit_block_bitmap_backup(layout,
-								    seg_index,
-								    j,
-								    valid_blks);
+								seg_index,
+								j,
+								peb_buffer_size,
+								valid_blks);
 				if (err)
 					return err;
 			}

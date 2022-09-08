@@ -295,9 +295,10 @@ static int sb_dentries_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -378,9 +379,10 @@ static int sb_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -461,9 +463,10 @@ static int sb_xattrs_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -541,9 +544,10 @@ static int sb_inodes_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -747,9 +751,10 @@ int sb_shared_extents_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -872,9 +877,10 @@ static int sb_shared_dict_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -998,9 +1004,10 @@ int sb_snapshots_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 	}
 
 	if (node_size < pagesize || node_size % pagesize) {
-		SSDFS_ERR("invalid option: node_size %u, pagesize %u \n",
-			  node_size, pagesize);
-		return -ERANGE;
+		SSDFS_WARN("node_size is corrected from %u to %u\n",
+			   node_size, pagesize);
+		layout->btree.node_size = pagesize;
+		node_size = layout->btree.node_size;
 	}
 
 	if (node_size >= erasesize || erasesize % node_size) {
@@ -1377,7 +1384,7 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	u32 fragments;
 	u32 log_pages = 0;
 	size_t hdr_size = sizeof(struct ssdfs_segment_header);
-	u32 inline_capacity = PAGE_CACHE_SIZE - hdr_size;
+	u32 inline_capacity = layout->page_size - hdr_size;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1452,9 +1459,9 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			BUG_ON(extent->buf);
 			BUG_ON(layout->maptbl_cache.fragment_size !=
-				PAGE_CACHE_SIZE);
+				layout->page_size);
 
-			peb_buffer_size = fragments * PAGE_CACHE_SIZE;
+			peb_buffer_size = fragments * layout->page_size;
 
 			extent->buf = malloc(peb_buffer_size);
 			if (!extent->buf) {
@@ -1470,11 +1477,11 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 				sptr = layout->maptbl_cache.fragments_array[k];
 				dptr = (u8 *)extent->buf +
-						(k * PAGE_CACHE_SIZE);
+						(k * layout->page_size);
 
 				BUG_ON(!sptr || !dptr);
 
-				memcpy(dptr, sptr, PAGE_CACHE_SIZE);
+				memcpy(dptr, sptr, layout->page_size);
 			}
 
 			extent->bytes_count = layout->maptbl_cache.bytes_count;

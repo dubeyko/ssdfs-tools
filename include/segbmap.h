@@ -42,13 +42,13 @@ enum {
 
 /* lib/segbmap.c */
 u32 SEG_BMAP_BYTES(u64 items_count);
-u16 SEG_BMAP_FRAGMENTS(u64 items_count);
+u16 SEG_BMAP_FRAGMENTS(u64 items_count, u32 page_size);
 u32 ssdfs_segbmap_payload_bytes_per_fragment(size_t fragment_size);
 u32 ssdfs_segbmap_items_per_fragment(size_t fragment_size);
 u64 ssdfs_segbmap_define_first_fragment_item(int fragment_index,
 					     size_t fragment_size);
 int SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(struct ssdfs_segbmap_fragment_header *hdr,
 				     u8 *fragment, u64 start_item, u64 max_item,
-				     int state, u64 *found_seg);
+				     u32 page_size, int state, u64 *found_seg);
 
 #endif /* _SSDFS_SEGBMAP_H */
