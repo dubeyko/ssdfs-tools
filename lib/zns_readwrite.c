@@ -152,5 +152,56 @@ int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
 
 int zns_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
 {
+	struct blk_zone_report *report;
+	struct blk_zone *zone;
+	u64 zone_start;
+	void *buf;
+	size_t buf_size = sizeof(struct blk_zone_report) +
+				sizeof(struct blk_zone);
+	int res;
+
+	if (is_debug) {
+		zone_start = (offset / erasesize) * erasesize;
+
+		buf = calloc(1, buf_size);
+		if (!buf) {
+			SSDFS_ERR("fail to allocate buffer\n");
+			return -ENOMEM;
+		}
+
+		report = (struct blk_zone_report *)buf;
+		report->sector = zone_start / SSDFS_512B;
+		report->nr_zones = 1;
+
+		res = ioctl(fd, BLKREPORTZONE, report);
+		if (res < 0) {
+			if (errno == ENOTTY || errno == EINVAL) {
+				/*
+				 * No kernel support, assuming non-zoned device.
+				 */
+				SSDFS_ERR("no kernel support for ZNS device\n");
+			} else {
+				SSDFS_ERR("fail to retrieve zone size: %s\n",
+					  strerror(errno));
+			}
+		} else {
+			if (!report->nr_zones) {
+				SSDFS_ERR("zone report contains nothing\n");
+			} else {
+				zone = (struct blk_zone *)(report + 1);
+
+				SSDFS_DBG(is_debug,
+					  "zone: start %llu, len %llu, wp %llu, "
+					  "type %#x, cond %#x, non_seq %#x, "
+					  "reset %#x, capacity %llu\n",
+					  zone->start, zone->len, zone->wp,
+					  zone->type, zone->cond, zone->non_seq,
+					  zone->reset, zone->capacity);
+			}
+		}
+
+		free(buf);
+	}
+
 	return -EOPNOTSUPP;
 }

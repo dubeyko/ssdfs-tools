@@ -735,7 +735,6 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	u32 fragment_offset;
 	u8 flags = 0;
 	u8 type = SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB;
-	u32 read_bytes;
 	u32 i;
 	int err;
 
@@ -973,8 +972,6 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	free(extent->buf);
 	extent->buf = extent->compr_buf;
 	extent->compr_buf = NULL;
-
-	read_bytes = 0;
 
 	return 0;
 
