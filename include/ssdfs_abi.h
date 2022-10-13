@@ -55,7 +55,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		9
+#define SSDFS_MINOR_REVISION		10
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1770,24 +1770,24 @@ struct ssdfs_block_bitmap_header {
 struct ssdfs_block_bitmap_fragment {
 /* 0x0000 */
 	__le16 peb_index;
-	__le16 sequence_id;
+	__le8 sequence_id;
 
 #define SSDFS_MIGRATING_BLK_BMAP	(1 << 0)
 #define SSDFS_PEB_HAS_EXT_PTR		(1 << 1)
 #define SSDFS_PEB_HAS_RELATION		(1 << 2)
 #define SSDFS_FRAG_BLK_BMAP_FLAG_MASK	0x7
-	__le16 flags;
+	__le8 flags : 6;
 
 #define SSDFS_SRC_BLK_BMAP		(0)
 #define SSDFS_DST_BLK_BMAP		(1)
 #define SSDFS_FRAG_BLK_BMAP_TYPE_MAX	(SSDFS_DST_BLK_BMAP + 1)
-	__le16 type;
+	__le8 type : 2;
+
+	__le32 last_free_blk;
 
 /* 0x0008 */
-	__le16 last_free_blk;
-	__le16 metadata_blks;
-	__le16 invalid_blks;
-	__le16 reserved2;
+	__le32 metadata_blks;
+	__le32 invalid_blks;
 
 /* 0x0010 */
 	struct ssdfs_fragments_chain_header chain_hdr;

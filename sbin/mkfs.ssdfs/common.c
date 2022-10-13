@@ -75,6 +75,9 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	u32 bytes_count;
 	u32 offset = desc->extents[SSDFS_SEG_HEADER].offset;
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "extent_index %d\n", extent_index);
+
 	switch (extent_index) {
 	case SSDFS_MAPTBL_CACHE:
 	case SSDFS_LOG_PAYLOAD:
@@ -106,11 +109,17 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 		return -EINVAL;
 	}
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "STEP 1: offset %u\n", offset);
+
 	if (extent_index < SSDFS_MAPTBL_CACHE)
 		goto set_extent_offset;
 
 	offset += layout->page_size - 1;
 	offset = (offset / layout->page_size) * layout->page_size;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "STEP 2: offset %u\n", offset);
 
 	switch (extent_index) {
 	case SSDFS_OFFSET_TABLE_BACKUP:
@@ -140,6 +149,9 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 		BUG();
 	}
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "STEP 3: offset %u\n", offset);
+
 	if (extent_index < SSDFS_BLOCK_BITMAP_BACKUP)
 		goto set_extent_offset;
 
@@ -156,7 +168,13 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 		BUG();
 	}
 
+	offset += layout->page_size - 1;
+	offset = (offset / layout->page_size) * layout->page_size;
+
 set_extent_offset:
+	SSDFS_DBG(layout->env.show_debug,
+		  "FINALLY: offset %u\n", offset);
+
 	desc->extents[extent_index].offset = offset;
 
 	return 0;
@@ -173,6 +191,7 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 	bytes_count += desc->extents[SSDFS_SEG_HEADER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE].bytes_count;
+	bytes_count += desc->extents[SSDFS_BLOCK_DESCRIPTORS].bytes_count;
 
 	if (desc->extents[SSDFS_MAPTBL_CACHE].bytes_count > inline_capacity) {
 		bytes_count += layout->page_size - 1;
@@ -185,19 +204,48 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 	bytes_count += layout->page_size - 1;
 	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "bytes_count: SEG_HDR %u, BLK_BMAP %u, "
+		  "OFFSET_TBL %u, BLK_DESC %u, MAPTBL_CACHE %u, "
+		  "total %u\n",
+		  desc->extents[SSDFS_SEG_HEADER].bytes_count,
+		  desc->extents[SSDFS_BLOCK_BITMAP].bytes_count,
+		  desc->extents[SSDFS_OFFSET_TABLE].bytes_count,
+		  desc->extents[SSDFS_BLOCK_DESCRIPTORS].bytes_count,
+		  desc->extents[SSDFS_MAPTBL_CACHE].bytes_count,
+		  bytes_count);
+
 	bytes_count += desc->extents[SSDFS_LOG_PAYLOAD].bytes_count;
 
 	bytes_count += layout->page_size - 1;
 	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "bytes_count: PAYLOAD %u, total %u\n",
+		  desc->extents[SSDFS_LOG_PAYLOAD].bytes_count,
+		  bytes_count);
 
 	bytes_count += desc->extents[SSDFS_LOG_FOOTER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE_BACKUP].bytes_count;
 
 	bytes_count += layout->page_size - 1;
+	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
 	BUG_ON(bytes_count > layout->env.erase_size);
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "bytes_count: LOG_FOOTER %u, BLK_BMAP_BACKUP %u, "
+		  "OFFSET_TBL_BACKUP %u, total %u\n",
+		  desc->extents[SSDFS_LOG_FOOTER].bytes_count,
+		  desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count,
+		  desc->extents[SSDFS_OFFSET_TABLE_BACKUP].bytes_count,
+		  bytes_count);
+
 	pages_count = bytes_count / layout->page_size;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "bytes_count %u, pages_count %u\n",
+		  bytes_count, pages_count);
 
 	return pages_count;
 }
@@ -952,7 +1000,7 @@ static void __commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	BUG_ON(metadata_blks >= (layout->env.erase_size / layout->page_size));
 
-	bmp_frag_hdr->metadata_blks = cpu_to_le16(metadata_blks);
+	bmp_frag_hdr->metadata_blks = cpu_to_le32(metadata_blks);
 }
 
 void commit_block_bitmap(struct ssdfs_volume_layout *layout,

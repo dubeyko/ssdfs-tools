@@ -1045,7 +1045,7 @@ int sb_snapshots_btree_desc_prepare(struct ssdfs_volume_layout *layout)
 		  "min_index_area_size %u\n",
 		  node_size, node_ptr_size,
 		  sizeof(struct ssdfs_btree_index_key),
-		  sizeof(struct ssdfs_raw_fork),
+		  sizeof(struct ssdfs_snapshot),
 		  min_index_area_size);
 
 	return 0;
