@@ -699,9 +699,6 @@ static int ssdfs_fragment_descriptor_init(struct ssdfs_fragment_desc *desc,
 	}
 
 	desc->magic = SSDFS_FRAGMENT_DESC_MAGIC;
-
-	/* TODO: temporary compression doesn't supported */
-	BUG_ON(type != SSDFS_FRAGMENT_UNCOMPR_BLOB);
 	desc->type = cpu_to_le8((u8)type);
 
 	desc->flags = cpu_to_le8((u8)flags);
@@ -712,7 +709,7 @@ static int ssdfs_fragment_descriptor_init(struct ssdfs_fragment_desc *desc,
 	desc->uncompr_size = cpu_to_le16(uncompr_size);
 
 	if (flags & SSDFS_FRAGMENT_HAS_CSUM)
-		desc->checksum = ssdfs_crc32_le(fragment, compr_size);
+		desc->checksum = ssdfs_crc32_le(fragment, uncompr_size);
 
 	return 0;
 }
@@ -725,12 +722,14 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	struct ssdfs_block_bitmap_header *bmp_hdr;
 	struct ssdfs_block_bitmap_fragment *bmp_frag_hdr;
 	u8 *bmap;
+	u8 *compr_bmap;
 	size_t bmp_hdr_size = sizeof(struct ssdfs_block_bitmap_header);
 	size_t bmp_frag_hdr_size = sizeof(struct ssdfs_block_bitmap_fragment);
 	size_t frag_desc_size = sizeof(struct ssdfs_fragment_desc);
 	u32 pages_per_peb;
 	u32 allocation_size;
 	u32 bmap_bytes, written_bmap_bytes;
+	u32 written_compr_bytes;
 	u32 fragments_count;
 	u32 bmap_offset;
 	u32 fragment_offset;
@@ -746,6 +745,7 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	BUG_ON(!layout || !extent);
 	BUG_ON(extent->buf);
+	BUG_ON(extent->compr_buf);
 
 	BUG_ON(layout->page_size == 0);
 	BUG_ON(layout->page_size > layout->env.erase_size);
@@ -774,33 +774,37 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 		return -ENOMEM;
 	}
 
-	bmp_hdr = (struct ssdfs_block_bitmap_header *)extent->buf;
+	extent->compr_buf = calloc(1, allocation_size);
+	if (!extent->compr_buf) {
+		err = -ENOMEM;
+		SSDFS_ERR("unable to allocate memory of size %u\n",
+			  allocation_size);
+		goto fail_pre_commit_blk_bmap;
+	}
+
+	bmp_hdr = (struct ssdfs_block_bitmap_header *)extent->compr_buf;
 
 	bmp_hdr->magic.common = cpu_to_le32(SSDFS_SUPER_MAGIC);
 	bmp_hdr->magic.key = cpu_to_le16(SSDFS_BLK_BMAP_MAGIC);
 	bmp_hdr->magic.version.major = cpu_to_le8(SSDFS_MAJOR_REVISION);
 	bmp_hdr->magic.version.minor = cpu_to_le8(SSDFS_MINOR_REVISION);
-
 	bmp_hdr->fragments_count = cpu_to_le16(1);
-	bmp_hdr->bytes_count = cpu_to_le32(allocation_size);
 
 	if (layout->blkbmap.has_backup_copy)
 		flags |= SSDFS_BLK_BMAP_BACKUP;
 
 	switch (layout->blkbmap.compression) {
 	case SSDFS_UNCOMPRESSED_BLOB:
-		/* TODO: temporary compression is not supported */
-	case SSDFS_ZLIB_BLOB:
 	case SSDFS_LZO_BLOB:
 		type = SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB;
 		break;
 
-/*
 	case SSDFS_ZLIB_BLOB:
 		flags |= SSDFS_BLK_BMAP_COMPRESSED;
 		type = SSDFS_BLK_BMAP_ZLIB_BLOB;
 		break;
 
+/*
 	case SSDFS_LZO_BLOB:
 		flags |= SSDFS_BLK_BMAP_COMPRESSED;
 		type = SSDFS_BLK_BMAP_LZO_BLOB;
@@ -819,6 +823,7 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	bmap_offset += fragments_count * frag_desc_size;
 
 	bmap = (u8 *)extent->buf + bmap_offset;
+	compr_bmap = (u8 *)extent->compr_buf + bmap_offset;
 
 	err = ssdfs_blkbmap_set_area(bmap, 0, valid_blks, SSDFS_BLK_VALID);
 	if (err) {
@@ -829,14 +834,14 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	}
 
 	bmp_frag_hdr =
-		(struct ssdfs_block_bitmap_fragment *)((u8 *)extent->buf +
+		(struct ssdfs_block_bitmap_fragment *)((u8 *)extent->compr_buf +
 							bmp_hdr_size);
 
 	bmp_frag_hdr->peb_index = cpu_to_le16(peb_index);
 	bmp_frag_hdr->sequence_id = 0;
 	bmp_frag_hdr->flags = 0;
-	bmp_frag_hdr->type = cpu_to_le16(SSDFS_SRC_BLK_BMAP);
-	bmp_frag_hdr->last_free_blk = cpu_to_le16(valid_blks);
+	bmp_frag_hdr->type = SSDFS_SRC_BLK_BMAP;
+	bmp_frag_hdr->last_free_blk = cpu_to_le32(valid_blks);
 	bmp_frag_hdr->invalid_blks = 0;
 
 	bmp_frag_hdr->chain_hdr.magic = cpu_to_le8(SSDFS_CHAIN_HDR_MAGIC);
@@ -847,9 +852,6 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	bmp_frag_hdr->chain_hdr.fragments_count =
 				cpu_to_le16((u16)fragments_count);
-
-	/* TODO: temporary compression is not supported */
-	bmp_frag_hdr->chain_hdr.compr_bytes = cpu_to_le32(bmap_bytes);
 	bmp_frag_hdr->chain_hdr.uncompr_bytes = cpu_to_le32(bmap_bytes);
 
 	fragment_offset = bmp_hdr_size;
@@ -857,22 +859,28 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	fragment_offset += fragments_count * frag_desc_size;
 
 	written_bmap_bytes = 0;
+	written_compr_bytes = 0;
+
+	flags = SSDFS_FRAGMENT_HAS_CSUM;
 
 	for (i = 0; i < fragments_count; i++) {
 		u8 *fragment;
+		u8 *compr_fragment;
 		struct ssdfs_fragment_desc *cur_desc;
 		u32 desc_offset;
 		u32 fragment_size;
+		u32 compr_size = allocation_size - written_compr_bytes;
 
 		desc_offset = bmp_hdr_size;
 		desc_offset += bmp_frag_hdr_size;
 		desc_offset += i * frag_desc_size;
 
-		cur_desc = (struct ssdfs_fragment_desc *)((u8 *)extent->buf +
+		cur_desc =
+		    (struct ssdfs_fragment_desc *)((u8 *)extent->compr_buf +
 								desc_offset);
 
 		fragment = bmap + (i * PAGE_CACHE_SIZE);
-		fragment_offset += i * PAGE_CACHE_SIZE;
+		compr_fragment = compr_bmap + written_compr_bytes;
 
 		BUG_ON(bmap_bytes <= written_bmap_bytes);
 		fragment_size = min_t(u32, bmap_bytes - written_bmap_bytes,
@@ -881,13 +889,48 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 		BUG_ON(i >= U8_MAX);
 
+		if (fragment_size < SSDFS_MIN_SIZE_COMPRESSION_THRESHOLD)
+			goto make_uncompressed_blob;
+
+		switch (layout->blkbmap.compression) {
+		case SSDFS_UNCOMPRESSED_BLOB:
+		case SSDFS_LZO_BLOB:
+make_uncompressed_blob:
+			type = SSDFS_FRAGMENT_UNCOMPR_BLOB;
+			compr_size = fragment_size;
+			memcpy(compr_fragment, fragment, fragment_size);
+			break;
+
+		case SSDFS_ZLIB_BLOB:
+			type = SSDFS_FRAGMENT_ZLIB_BLOB;
+			err = ssdfs_zlib_compress(fragment,
+						  compr_fragment,
+						  &fragment_size,
+						  &compr_size,
+						  layout->env.show_debug);
+			if (err) {
+				SSDFS_ERR("fail to compress: "
+					  "fragment_size %u, err %d\n",
+					  fragment_size, err);
+				goto fail_pre_commit_blk_bmap;
+			}
+			break;
+
+/*
+		case SSDFS_LZO_BLOB:
+			type = SSDFS_FRAGMENT_LZO_BLOB;
+			break;
+*/
+
+		default:
+			BUG();
+		}
+
 		err = ssdfs_fragment_descriptor_init(cur_desc, fragment,
-						    fragment_offset,
-						    (u16)fragment_size,
-						    (u16)fragment_size,
-						    (u8)i,
-						    SSDFS_FRAGMENT_UNCOMPR_BLOB,
-						    SSDFS_FRAGMENT_HAS_CSUM);
+						     fragment_offset,
+						     (u16)compr_size,
+						     (u16)fragment_size,
+						     (u8)i, type, flags);
 		if (err) {
 			SSDFS_ERR("fail to init fragment descriptor: "
 				  "fragment_index %u, err %d\n",
@@ -895,18 +938,57 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			goto fail_pre_commit_blk_bmap;
 		}
 
+		fragment_offset += compr_size;
 		written_bmap_bytes += fragment_size;
+		written_compr_bytes += compr_size;
 	}
 
 	set_blkbmap_compression_flag(layout);
 
-	extent->bytes_count = allocation_size;
+	bmp_frag_hdr->chain_hdr.compr_bytes = cpu_to_le32(written_compr_bytes);
+
+	written_bmap_bytes = bmp_hdr_size + bmp_frag_hdr_size;
+	written_bmap_bytes += fragments_count * frag_desc_size;
+	written_bmap_bytes += written_compr_bytes;
+
+	bmp_hdr->bytes_count = cpu_to_le32(written_bmap_bytes);
+	extent->bytes_count = written_bmap_bytes;
+
+	switch (layout->blkbmap.compression) {
+	case SSDFS_UNCOMPRESSED_BLOB:
+	case SSDFS_LZO_BLOB:
+		extent->state = SSDFS_UNCOMPRESSED_BLOB;
+		break;
+
+	case SSDFS_ZLIB_BLOB:
+		extent->state = SSDFS_ZLIB_BLOB;
+		break;
+
+/*
+	case SSDFS_LZO_BLOB:
+		break;
+*/
+
+	default:
+		BUG();
+	}
+
+	free(extent->buf);
+	extent->buf = extent->compr_buf;
+	extent->compr_buf = NULL;
 
 	return 0;
 
 fail_pre_commit_blk_bmap:
-	free(extent->buf);
-	extent->buf = NULL;
+	if (extent->buf) {
+		free(extent->buf);
+		extent->buf = NULL;
+	}
+
+	if (extent->compr_buf) {
+		free(extent->compr_buf);
+		extent->compr_buf = NULL;
+	}
 
 	return err;
 }

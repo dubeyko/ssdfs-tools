@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.11 [October 14, 2022]
+    (*) [mkfs] Introduce zlib compression support.
+
 v.4.10 [October 13, 2022]
     (*) Prepare block bitmap to support 2GB zone size.
 

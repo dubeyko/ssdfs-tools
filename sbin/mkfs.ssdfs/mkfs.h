@@ -81,14 +81,20 @@ enum {
 
 /*
  * struct ssdfs_extent_desc - extent descriptor
+ * @state: extent state [compressed or not compressed]
  * @buf: pointer on buffer with initialized data
+ * @compr_buf: pointer on buffer with compressed data
  * @offset: offset from PEB's beginning in bytes
  * @bytes_count: bytes count in the extent
+ * @compr_bytes: compressed size in bytes
  */
 struct ssdfs_extent_desc {
+	int state;
 	char *buf;
+	char *compr_buf;
 	u32 offset;
 	u32 bytes_count;
+	u32 compr_bytes;
 };
 
 /*
