@@ -57,7 +57,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		11
+#define SSDFS_MINOR_REVISION		12
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -684,6 +684,7 @@ enum {
 	SSDFS_CUR_LNODE_SEG,
 	SSDFS_CUR_HNODE_SEG,
 	SSDFS_CUR_IDXNODE_SEG,
+	SSDFS_CUR_DATA_UPDATE_SEG,	/* ZNS SSD case */
 	SSDFS_CUR_SEGS_COUNT,
 };
 
@@ -1304,19 +1305,19 @@ struct ssdfs_volume_state {
 /* 0x0070 */
 	__le64 cur_segs[SSDFS_CUR_SEGS_COUNT];
 
-/* 0x0090 */
+/* 0x0098 */
 	__le16 migration_threshold;
 	__le16 reserved1;
 
-/* 0x0094 */
+/* 0x009C */
 	struct ssdfs_blk_bmap_options blkbmap;
 	struct ssdfs_blk2off_tbl_options blk2off_tbl;
 
-/* 0x009C */
+/* 0x00A4 */
 	struct ssdfs_user_data_options user_data;
 
-/* 0x00A4 */
-	__le8 reserved2[0xC];
+/* 0x00AC */
+	__le8 reserved2[0x4];
 
 /* 0x00B0 */
 	struct ssdfs_inode root_folder;
@@ -1607,7 +1608,7 @@ struct ssdfs_partial_log_header {
 	__le8 log_erasesize;
 	__le8 log_segsize;
 	__le8 log_pebs_per_seg;
-	__le8 reserved[0x8];
+	__le8 reserved1[0x8];
 
 /* 0x0360 */
 	struct ssdfs_snapshots_btree snapshots_btree;

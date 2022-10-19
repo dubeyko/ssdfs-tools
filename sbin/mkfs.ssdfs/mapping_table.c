@@ -61,6 +61,7 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u16 stripes_per_portion;
 	u32 portion_size;
 	u64 pebs_per_volume;
+	u64 portions_per_volume;
 	u32 pebs_per_seg;
 	u32 maptbl_segs;
 	u32 maptbl_pebs;
@@ -76,6 +77,10 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 
 	seg_nums = layout->env.fs_size / layout->seg_size;
 	pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
+
+	pebs_per_volume = layout->env.fs_size / layout->env.erase_size;
+	BUG_ON(pebs_per_volume < seg_nums);
+	BUG_ON(pebs_per_volume % seg_nums);
 
 define_stripes_per_portion:
 	correct_maptbl_stripes_per_portion(layout);
@@ -97,6 +102,30 @@ define_stripes_per_portion:
 			peb_desc_per_portion / leb_desc_per_mempage;
 		layout->maptbl.stripes_per_portion = stripes_per_portion;
 	}
+
+	switch (layout->env.device_type) {
+	case SSDFS_MTD_DEVICE:
+	case SSDFS_BLK_DEVICE:
+		/* do nothing */
+		break;
+
+	case SSDFS_ZNS_DEVICE:
+		portions_per_volume = pebs_per_volume + peb_desc_per_portion - 1;
+		portions_per_volume /= peb_desc_per_portion;
+
+		if (portions_per_volume > U16_MAX) {
+			SSDFS_ERR("portions_per_volume %llu is too huge\n",
+				  portions_per_volume);
+			return -E2BIG;
+		}
+
+		stripes_per_portion = (u16) portions_per_volume;
+		layout->maptbl.stripes_per_portion = stripes_per_portion;
+		break;
+
+	default:
+		BUG();
+	};
 
 	if (pebs_per_seg > stripes_per_portion) {
 		u32 leb_index_per_stripe;
@@ -138,10 +167,6 @@ define_stripes_per_portion:
 		layout->maptbl.stripes_per_portion -= diff_stripes;
 		goto define_stripes_per_portion;
 	}
-
-	pebs_per_volume = layout->env.fs_size / layout->env.erase_size;
-	BUG_ON(pebs_per_volume < seg_nums);
-	BUG_ON(pebs_per_volume % seg_nums);
 
 	fragments = pebs_per_volume + peb_desc_per_portion - 1;
 	fragments /= peb_desc_per_portion;

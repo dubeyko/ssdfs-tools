@@ -1487,6 +1487,12 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 		}
 	}
 
+	volume_offset = peb_id * erase_size;
+	layout->env.dev_ops->check_peb(layout->env.fd,
+					volume_offset,
+					erase_size,
+					layout->env.show_debug);
+
 	return 0;
 }
 
