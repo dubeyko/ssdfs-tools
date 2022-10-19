@@ -559,6 +559,7 @@ static void segbmap_set_log_pages(struct ssdfs_volume_layout *layout,
 	u32 erasesize;
 	u32 pagesize;
 	u32 pages_per_peb;
+	u32 log_pages_default;
 	u32 log_pages = 0;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -610,6 +611,10 @@ try_align_log_pages:
 		SSDFS_WARN("pages_per_peb %u, log_pages %u\n",
 			   pages_per_peb, log_pages);
 	}
+
+	log_pages_default = pages_per_peb / SSDFS_LOGS_PER_PEB_DEFAULT;
+	log_pages = max_t(u32, log_pages, log_pages_default);
+	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
 
 	layout->segbmap.log_pages = log_pages;
 	BUG_ON(log_pages >= U16_MAX);

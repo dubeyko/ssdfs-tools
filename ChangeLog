@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.12 [October 18, 2022]
+    (*) [mkfs] Introduce invalidated extents btree.
+
 v.4.11 [October 14, 2022]
     (*) [mkfs] Introduce zlib compression support.
 
