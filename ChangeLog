@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.14 [October 25, 2022]
+    (*) [mkfs] Fix issue with mapping table creation.
+
 v.4.13 [October 19, 2022]
     (*) Fix bugs in ZNS SSD support implementation.
 

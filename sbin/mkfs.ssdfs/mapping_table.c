@@ -322,7 +322,8 @@ void maptbl_prepare_leb_table(struct ssdfs_volume_layout *layout,
 	u16 lebs_per_portion = layout->maptbl.lebs_per_portion;
 	u32 leb_desc_per_mempage;
 	u16 lebtbl_mempages;
-	u64 start_leb;
+	u64 start_portion_leb;
+	u64 start_fragment_leb;
 	u64 pebs_per_volume;
 	u64 lebs_count;
 	u32 bytes_count;
@@ -337,23 +338,26 @@ void maptbl_prepare_leb_table(struct ssdfs_volume_layout *layout,
 	BUG_ON(lebtbl_mempages == 0);
 	BUG_ON(mempage_index >= lebtbl_mempages);
 
-	start_leb = ((u64)lebs_per_portion * portion_index) +
-			((u64)leb_desc_per_mempage * mempage_index);
+	start_portion_leb = (u64)lebs_per_portion * portion_index;
+	start_fragment_leb = start_portion_leb +
+				((u64)leb_desc_per_mempage * mempage_index);
 
 	pebs_per_volume = layout->env.fs_size / layout->env.erase_size;
 
-	if (pebs_per_volume <= start_leb)
+	if (pebs_per_volume <= start_fragment_leb)
 		lebs_count = 0;
 	else {
-		lebs_count = pebs_per_volume - start_leb;
+		lebs_count = pebs_per_volume - start_fragment_leb;
 		lebs_count = min_t(u64, lebs_count, lebs_per_portion);
+		lebs_count = min_t(u64, lebs_count, leb_desc_per_mempage);
 	}
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "start_leb %llu, pebs_per_volume %llu, "
+		  "start_portion_leb %llu, start_fragment_leb %llu, "
+		  "pebs_per_volume %llu, "
 		  "lebs_per_portion %u, lebs_count %llu\n",
-		  start_leb, pebs_per_volume,
-		  lebs_per_portion, lebs_count);
+		  start_portion_leb, start_fragment_leb,
+		  pebs_per_volume, lebs_per_portion, lebs_count);
 
 	bytes_count = hdr_size;
 	bytes_count += lebs_count * sizeof(struct ssdfs_leb_descriptor);
@@ -363,7 +367,11 @@ void maptbl_prepare_leb_table(struct ssdfs_volume_layout *layout,
 	hdr->magic = cpu_to_le16(SSDFS_LEB_TABLE_MAGIC);
 	hdr->flags = 0;
 
-	hdr->start_leb = cpu_to_le64(start_leb);
+	if (mempage_index == 0)
+		hdr->start_leb = cpu_to_le64(start_portion_leb);
+	else
+		hdr->start_leb = cpu_to_le64(start_fragment_leb);
+
 	BUG_ON(lebs_count >= U16_MAX);
 	hdr->lebs_count = cpu_to_le16(lebs_count);
 
