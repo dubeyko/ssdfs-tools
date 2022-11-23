@@ -45,6 +45,7 @@ static struct ssdfs_volume_layout volume_layout = {
 	.env.show_info = SSDFS_TRUE,
 	.seg_size = SSDFS_8MB,
 	.env.erase_size = SSDFS_8MB,
+	.env.open_zones = 0,
 	.page_size = SSDFS_4KB,
 	.nand_dies_count = SSDFS_NAND_DIES_DEFAULT,
 	.migration_threshold = U16_MAX,
@@ -81,6 +82,7 @@ static struct ssdfs_volume_layout volume_layout = {
 	.user_data_seg.migration_threshold = U16_MAX,
 	.user_data_seg.compression = SSDFS_UNKNOWN_COMPRESSION,
 	.env.device_type = SSDFS_DEVICE_TYPE_MAX,
+	.calculated_open_zones = 0,
 	.write_buffer.ptr = NULL,
 	.write_buffer.offset = 0,
 	.write_buffer.capacity = 0,
@@ -1278,6 +1280,7 @@ static int flush_write_buffer(struct ssdfs_volume_layout *layout,
 
 	err = layout->env.dev_ops->write(fd, &info, offset, size,
 					 layout->write_buffer.ptr,
+					 &layout->env.open_zones,
 					 layout->env.show_debug);
 	if (err) {
 		SSDFS_ERR("unable to write: "
@@ -1361,6 +1364,7 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 	u32 peb_offset = 0;
 	u64 volume_offset;
 	u32 flushed_bytes = 0;
+	int need_close_zone = SSDFS_FALSE;
 	u32 i;
 	int err = 0;
 
@@ -1487,11 +1491,42 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 		}
 	}
 
+	switch (layout->env.device_type) {
+	case SSDFS_ZNS_DEVICE:
+		/* continue logic */
+		break;
+
+	case SSDFS_BLK_DEVICE:
+	case SSDFS_MTD_DEVICE:
+		return 0;
+
+	default:
+		BUG();
+	};
+
+	switch (seg_desc->seg_type) {
+	case SSDFS_INITIAL_SNAPSHOT:
+		need_close_zone = SSDFS_TRUE;
+		layout->env.open_zones--;
+		break;
+
+	default:
+		need_close_zone = SSDFS_FALSE;
+		break;
+	}
+
 	volume_offset = peb_id * erase_size;
-	layout->env.dev_ops->check_peb(layout->env.fd,
-					volume_offset,
-					erase_size,
-					layout->env.show_debug);
+	err = layout->env.dev_ops->check_peb(layout->env.fd,
+					     volume_offset,
+					     erase_size,
+					     need_close_zone,
+					     layout->env.show_debug);
+	if (err) {
+		SSDFS_ERR("fail to check the PEB: "
+			  "volume_offset %llu, err %d\n",
+			  volume_offset, err);
+		return err;
+	}
 
 	return 0;
 }
@@ -1560,6 +1595,21 @@ static int write_device(struct ssdfs_volume_layout *layout)
 		SSDFS_ERR("fail to sync device %s: %s\n",
 			  layout->env.dev_name, strerror(errno));
 		return errno;
+	}
+
+	switch (layout->env.device_type) {
+	case SSDFS_ZNS_DEVICE:
+		if (layout->env.open_zones != layout->calculated_open_zones) {
+			SSDFS_ERR("open_zones %u != calculated_open_zones %u\n",
+				  layout->env.open_zones,
+				  layout->calculated_open_zones);
+			return -ERANGE;
+		}
+		break;
+
+	default:
+		/* do nothing */
+		break;
 	}
 
 	return 0;

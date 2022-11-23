@@ -2021,6 +2021,9 @@ void __commit_log_footer(struct ssdfs_volume_layout *layout,
 		log_flags |= SSDFS_LOG_FOOTER_HAS_OFFSET_TABLE;
 	}
 
+	footer->volume_state.open_zones =
+		cpu_to_le32(layout->calculated_open_zones);
+
 	footer->log_flags = cpu_to_le32(log_flags);
 
 	footer->volume_state.check.bytes = cpu_to_le16(footer_len);
@@ -2176,6 +2179,7 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	pl_footer->log_erasesize = layout->sb.vh.log_erasesize;
 	pl_footer->log_segsize = layout->sb.vh.log_segsize;
 	pl_footer->log_pebs_per_seg = layout->sb.vh.log_pebs_per_seg;
+	pl_footer->open_zones = cpu_to_le32(layout->calculated_open_zones);
 
 	pl_footer->pl_flags = cpu_to_le32(log_flags);
 

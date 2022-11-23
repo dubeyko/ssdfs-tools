@@ -1240,6 +1240,8 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT NUMBERS: %llu\n",
 						le64_to_cpu(vs->nsegs));
+	SSDFS_DUMPFS_DUMP(env, "OPEN/ACTIVE ZONES: %u\n",
+						le32_to_cpu(vs->open_zones));
 	SSDFS_DUMPFS_DUMP(env, "FREE PAGES: %llu\n",
 						le64_to_cpu(vs->free_pages));
 	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_TIME: %s\n",
@@ -2433,7 +2435,9 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
 
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT NUMBERS: %llu\n",
-						le64_to_cpu(pl_hdr->nsegs));
+					le64_to_cpu(pl_hdr->nsegs));
+	SSDFS_DUMPFS_DUMP(env, "OPEN/ACTIVE ZONES: %u\n",
+					le32_to_cpu(pl_hdr->open_zones));
 	SSDFS_DUMPFS_DUMP(env, "FREE PAGES: %llu\n",
 						le64_to_cpu(pl_hdr->free_pages));
 	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_TIME: %s\n",

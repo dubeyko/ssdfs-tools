@@ -25,7 +25,8 @@ int zns_read(int fd, u64 offset, size_t size, void *buf, int is_debug)
 }
 
 int zns_write(int fd, struct ssdfs_nand_geometry *info,
-	      u64 offset, size_t size, void *buf, int is_debug)
+	      u64 offset, size_t size, void *buf,
+	      u32 *open_zones, int is_debug)
 {
 	struct blk_zone_range range;
 	u64 zone_start = (offset / info->erasesize) * info->erasesize;
@@ -52,6 +53,11 @@ int zns_write(int fd, struct ssdfs_nand_geometry *info,
 				  strerror(errno));
 			return -EIO;
 		}
+
+		(*open_zones)++;
+
+		SSDFS_DBG(is_debug,
+			  "open_zones %u\n", *open_zones);
 	}
 
 	if ((zone_start + info->erasesize) < (offset + size)) {
@@ -150,10 +156,12 @@ int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
 	return res;
 }
 
-int zns_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
+int zns_check_peb(int fd, u64 offset, u32 erasesize,
+		  int need_close_zone, int is_debug)
 {
 	struct blk_zone_report *report;
 	struct blk_zone *zone;
+	struct blk_zone_range range;
 	u64 zone_start;
 	void *buf;
 	size_t buf_size = sizeof(struct blk_zone_report) +
@@ -203,5 +211,16 @@ int zns_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
 		free(buf);
 	}
 
-	return -EOPNOTSUPP;
+	if (need_close_zone) {
+		range.sector = offset / SSDFS_512B;
+		range.nr_sectors = (erasesize + SSDFS_512B - 1) / SSDFS_512B;
+
+		if (ioctl(fd, BLKFINISHZONE, &range) < 0) {
+			SSDFS_ERR("fail to finish zone (offset %llu, size %u): %s\n",
+				  offset, erasesize, strerror(errno));
+			return -EIO;
+		}
+	}
+
+	return 0;
 }

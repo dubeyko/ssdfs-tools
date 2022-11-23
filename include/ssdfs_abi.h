@@ -1265,6 +1265,7 @@ struct ssdfs_volume_header {
  * @blkbmap: block bitmap options
  * @blk2off_tbl: offset translation table options
  * @user_data: user data options
+ * @open_zones: number of open/active zones
  * @root_folder: copy of root folder's inode
  * @inodes_btree: inodes btree root
  * @shared_extents_btree: shared extents btree root
@@ -1317,7 +1318,7 @@ struct ssdfs_volume_state {
 	struct ssdfs_user_data_options user_data;
 
 /* 0x00AC */
-	__le8 reserved2[0x4];
+	__le32 open_zones;
 
 /* 0x00B0 */
 	struct ssdfs_inode root_folder;
@@ -1554,6 +1555,7 @@ struct ssdfs_log_footer {
  * @log_erasesize: log2(erase block size)
  * @log_segsize: log2(segment size)
  * @log_pebs_per_seg: log2(erase blocks per segment)
+ * @open_zones: number of open/active zones
  * @snapshots_btree: snapshots btree root
  *
  * This header is used when the full log needs to be built from several
@@ -1608,7 +1610,8 @@ struct ssdfs_partial_log_header {
 	__le8 log_erasesize;
 	__le8 log_segsize;
 	__le8 log_pebs_per_seg;
-	__le8 reserved1[0x8];
+	__le32 open_zones;
+	__le8 reserved1[0x4];
 
 /* 0x0360 */
 	struct ssdfs_snapshots_btree snapshots_btree;

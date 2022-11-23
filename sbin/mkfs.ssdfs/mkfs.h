@@ -332,6 +332,7 @@ struct ssdfs_write_buffer {
  * @segs_capacity: maximum available count of descriptors in array
  * @last_allocated_seg_index: last allocated segment index
  * @segs_count: count of prepared segments
+ * @calculated_open_zones: calculated number of open zones
  * @write_buf: buffer for alligned write of prepared metadata
  * @env: environment
  * @is_volume_erased: inform that volume has been erased
@@ -365,6 +366,7 @@ struct ssdfs_volume_layout {
 	int segs_capacity;
 	int last_allocated_seg_index;
 	int segs_count;
+	u32 calculated_open_zones;
 
 	struct ssdfs_write_buffer write_buffer;
 

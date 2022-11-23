@@ -595,6 +595,7 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 
 			res = layout->env.dev_ops->check_peb(fd, offset,
 							peb_size,
+							SSDFS_FALSE,
 							layout->env.show_debug);
 			if (res < 0) {
 				SSDFS_ERR("fail to check PEB: "
@@ -1498,6 +1499,12 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			logical_byte_offset =
 				(u64)fragment_index * portion_size;
+
+			layout->calculated_open_zones++;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "calculated_open_zones %u\n",
+				  layout->calculated_open_zones);
 
 			layout->segs[seg_index].pebs_count++;
 			BUG_ON(layout->segs[seg_index].pebs_count >

@@ -31,7 +31,8 @@ int bdev_read(int fd, u64 offset, size_t size, void *buf, int is_debug)
 }
 
 int bdev_write(int fd, struct ssdfs_nand_geometry *info,
-		u64 offset, size_t size, void *buf, int is_debug)
+		u64 offset, size_t size, void *buf,
+		u32 *open_zones, int is_debug)
 {
 	return ssdfs_pwrite(fd, offset, size, buf);
 }
@@ -74,7 +75,8 @@ int bdev_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
 	return -EOPNOTSUPP;
 }
 
-int bdev_check_peb(int fd, u64 offset, u32 erasesize, int is_debug)
+int bdev_check_peb(int fd, u64 offset, u32 erasesize,
+		   int need_close_zone, int is_debug)
 {
 	return -EOPNOTSUPP;
 }

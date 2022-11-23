@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.15 [November 22, 2022]
+    (*) Fix issue with open zones accounting.
+
 v.4.14 [October 25, 2022]
     (*) [mkfs] Fix issue with mapping table creation.
 

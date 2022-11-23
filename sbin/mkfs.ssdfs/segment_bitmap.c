@@ -684,6 +684,12 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			logical_byte_offset =
 				(u64)fragment_index * fragment_size;
 
+			layout->calculated_open_zones++;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "calculated_open_zones %u\n",
+				  layout->calculated_open_zones);
+
 			layout->segs[seg_index].pebs_count++;
 			BUG_ON(layout->segs[seg_index].pebs_count >
 				layout->segs[seg_index].pebs_capacity);
