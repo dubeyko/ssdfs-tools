@@ -78,8 +78,8 @@ struct ssdfs_peb_dump_environment {
 	int show_all_logs;
 	u32 log_offset;
 	u32 log_size;
-	u16 log_index;
-	u16 logs_count;
+	u32 log_index;
+	u32 logs_count;
 
 	u32 parse_flags;
 };

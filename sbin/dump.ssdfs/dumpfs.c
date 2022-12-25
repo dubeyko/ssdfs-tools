@@ -49,7 +49,7 @@ static struct ssdfs_dumpfs_environment environment = {
 	.peb.log_offset = 0,
 	.peb.log_size = U32_MAX,
 	.peb.log_index = 0,
-	.peb.logs_count = U16_MAX,
+	.peb.logs_count = U32_MAX,
 	.peb.parse_flags = 0,
 	.raw_dump.offset = U64_MAX,
 	.raw_dump.size = 0,
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 			env_ptr->base.fs_size / env_ptr->base.erase_size;
 	}
 
-	if (env_ptr->peb.logs_count >= U16_MAX) {
+	if (env_ptr->peb.logs_count >= U32_MAX) {
 		env_ptr->peb.logs_count =
 			env_ptr->base.erase_size / SSDFS_512B;
 	}

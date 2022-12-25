@@ -52,11 +52,11 @@ void print_usage(void)
 	SSDFS_INFO("\t [-V|--version]\t\t  print version and exit.\n");
 }
 
-static void ssdfs_check_log_index(int value)
+static void ssdfs_check_log_index(u32 value)
 {
-	if (value >= U16_MAX) {
+	if (value >= U32_MAX) {
 		SSDFS_ERR("invalid log index option: "
-			  "log_index %d is huge\n",
+			  "log_index %u is huge\n",
 			  value);
 		print_usage();
 		exit(EXIT_FAILURE);
@@ -180,13 +180,13 @@ void parse_options(int argc, char *argv[],
 					peb->peb_size = (u32)count;
 					break;
 				case PEB_LOG_INDEX_OPT:
-					count = atoi(value);
-					ssdfs_check_log_index(count);
-					peb->log_index = (u16)count;
+					count = atol(value);
+					ssdfs_check_log_index((u32)count);
+					peb->log_index = (u32)count;
 					break;
 				case PEB_LOG_COUNT_OPT:
-					count = atoi(value);
-					peb->logs_count = (u16)count;
+					count = atol(value);
+					peb->logs_count = (u32)count;
 					if (peb->logs_count > 1)
 						peb->show_all_logs = SSDFS_TRUE;
 					else

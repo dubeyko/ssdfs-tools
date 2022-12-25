@@ -3148,8 +3148,10 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 	union ssdfs_log_header buf;
 	u64 peb_id;
 	u64 pebs_count;
+	u32 pagesize;
 	int log_index;
-	u16 logs_count;
+	u32 logs_count;
+	u32 max_logs;
 	int step = 2;
 	int i;
 	int err = 0;
@@ -3180,9 +3182,12 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		SSDFS_DUMPFS_INFO(env->base.show_info,
 				  "[00%d]\t[SUCCESS]\n",
 				  step);
-
 		step++;
+
 		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
+		pagesize = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
+		env->peb.pebs_count = env->base.fs_size / env->peb.peb_size;
+		env->peb.logs_count = env->peb.peb_size / pagesize;
 	}
 
 	SSDFS_DUMPFS_INFO(env->base.show_info,
@@ -3200,7 +3205,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		goto finish_peb_dump;
 	}
 
-	if (env->peb.log_index == U16_MAX) {
+	if (env->peb.log_index == U32_MAX) {
 		err = -EINVAL;
 		SSDFS_INFO("PLEASE, DEFINE LOG INDEX\n");
 		print_usage();
@@ -3212,83 +3217,84 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 	log_index = env->peb.log_index;
 	logs_count = env->peb.logs_count;
 
-try_find_start_log:
-	for (i = 0; i < (env->peb.log_index - 1); i++) {
-		err = ssdfs_dumpfs_read_log_bytes(env, &buf);
-		if (err) {
-			SSDFS_ERR("fail to read log's size in bytes: "
-				  "peb_id %llu, peb_size %u, "
-				  "log_offset %u, err %d\n",
-				  env->peb.id, env->peb.peb_size,
-				  env->peb.log_offset, err);
-			goto finish_peb_dump;
-		}
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id %llu, pebs_count %llu, "
+		  "log_index %u, logs_count %u\n",
+		  env->peb.id, env->peb.pebs_count,
+		  env->peb.log_index, env->peb.logs_count);
 
-		env->peb.log_offset += env->peb.log_size;
-	}
+	max_logs = env->peb.show_all_logs ? env->peb.logs_count : 1;
 
-try_read_segment_header:
-	err = ssdfs_dumpfs_read_log_bytes(env, &buf);
-	if (err) {
-		SSDFS_ERR("fail to read log's size in bytes: "
-			  "peb_id %llu, peb_size %u, "
-			  "log_offset %u, err %d\n",
-			  env->peb.id, env->peb.peb_size,
-			  env->peb.log_offset, err);
-		goto finish_peb_dump;
-	}
-
-	if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
-	    le16_to_cpu(buf.magic.key) == SSDFS_SEGMENT_HDR_MAGIC) {
-		err = ssdfs_dumpfs_parse_full_log(env, &buf);
-		if (err) {
-			SSDFS_ERR("fail to parse the full log: "
-				  "err %d\n", err);
-			goto finish_peb_dump;
-		}
-	} else if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
-		   le16_to_cpu(buf.magic.key) == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
-		err = ssdfs_dumpfs_parse_partial_log(env, &buf);
-		if (err) {
-			SSDFS_ERR("fail to parse the partial log: "
-				  "err %d\n", err);
-			goto finish_peb_dump;
-		}
-	} else {
-		SSDFS_DBG(env->base.show_debug,
-			  "LOG ABSENT: peb_id: %llu, log_index %u, "
-			  "log_offset %u\n",
-			  env->peb.id, env->peb.log_index,
-			  env->peb.log_offset);
-			goto try_next_peb;
-	}
-
-	if (env->peb.show_all_logs) {
-		env->peb.log_index++;
-		env->peb.logs_count--;
-		env->peb.log_offset += env->peb.log_size;
-
-		if (env->peb.log_offset < env->peb.peb_size) {
-			if (env->peb.logs_count > 0)
-				goto try_read_segment_header;
-		}
-	}
-
-try_next_peb:
-	if (env->peb.pebs_count > 0) {
-		env->peb.id++;
-		env->peb.pebs_count--;
-
+	while (env->peb.pebs_count > 0) {
 		if (env->peb.id < (env->base.fs_size / env->peb.peb_size)) {
-			env->peb.log_index = log_index;
+			env->peb.log_index = 0;
 			env->peb.logs_count = logs_count;
 			env->peb.log_offset = 0;
-
-			if (env->peb.pebs_count > 0)
-				goto try_find_start_log;
+		} else {
+			SSDFS_DBG(env->base.show_debug,
+				  "peb_id %llu, pebs_count %llu, "
+				  "log_index %u, logs_count %u\n",
+				  env->peb.id, env->peb.pebs_count,
+				  env->peb.log_index, env->peb.logs_count);
+			goto stop_peb_dumping;
 		}
+
+		for (i = 0; i < max_logs; i++) {
+			if (env->peb.log_offset >= env->peb.peb_size) {
+				SSDFS_DBG(env->base.show_debug,
+					  "peb_id %llu, pebs_count %llu, "
+					  "log_index %u, logs_count %u\n",
+					  env->peb.id, env->peb.pebs_count,
+					  env->peb.log_index, env->peb.logs_count);
+				goto stop_peb_dumping;
+			}
+
+			err = ssdfs_dumpfs_read_log_bytes(env, &buf);
+			if (err) {
+				SSDFS_ERR("fail to read log's size in bytes: "
+					  "peb_id %llu, peb_size %u, "
+					  "log_offset %u, err %d\n",
+					  env->peb.id, env->peb.peb_size,
+					  env->peb.log_offset, err);
+				goto finish_peb_dump;
+			}
+
+			if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
+			    le16_to_cpu(buf.magic.key) == SSDFS_SEGMENT_HDR_MAGIC) {
+				err = ssdfs_dumpfs_parse_full_log(env, &buf);
+				if (err) {
+					SSDFS_ERR("fail to parse the full log: "
+						  "err %d\n", err);
+					goto finish_peb_dump;
+				}
+			} else if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
+				   le16_to_cpu(buf.magic.key) == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
+				err = ssdfs_dumpfs_parse_partial_log(env, &buf);
+				if (err) {
+					SSDFS_ERR("fail to parse the partial log: "
+						  "err %d\n", err);
+					goto finish_peb_dump;
+				}
+			} else {
+				SSDFS_DBG(env->base.show_debug,
+					  "LOG ABSENT: peb_id: %llu, log_index %u, "
+					  "log_offset %u\n",
+					  env->peb.id, env->peb.log_index,
+					  env->peb.log_offset);
+					goto try_next_peb;
+			}
+
+			env->peb.log_index++;
+			env->peb.logs_count--;
+			env->peb.log_offset += env->peb.log_size;
+		}
+
+try_next_peb:
+		env->peb.id++;
+		env->peb.pebs_count--;
 	}
 
+stop_peb_dumping:
 	env->peb.id = peb_id;
 	env->peb.pebs_count = pebs_count;
 	env->peb.log_index = log_index;
