@@ -331,3 +331,361 @@ int open_device(struct ssdfs_environment *env, u32 flags)
 
 	return 0;
 }
+
+static inline
+u32 SSDFS_AREA2BUFFER_SIZE(int area_index)
+{
+	u32 size = SSDFS_4KB;
+
+	switch (area_index) {
+//	case SSDFS_BLK_BMAP_INDEX:
+//	case SSDFS_SNAPSHOT_RULES_AREA_INDEX:
+//	case SSDFS_OFF_TABLE_INDEX:
+//	case SSDFS_COLD_PAYLOAD_AREA_INDEX:
+//	case SSDFS_WARM_PAYLOAD_AREA_INDEX:
+//	case SSDFS_HOT_PAYLOAD_AREA_INDEX:
+//	case SSDFS_BLK_DESC_AREA_INDEX:
+//	case SSDFS_MAPTBL_CACHE_INDEX:
+//	case SSDFS_LOG_FOOTER_INDEX:
+//		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
+	return size;
+}
+
+int ssdfs_create_raw_buffers(struct ssdfs_environment *env,
+			     struct ssdfs_raw_dump_environment *raw_dump)
+{
+	int i;
+
+	SSDFS_DBG(env->show_debug, "base %p, raw_dump %p\n",
+		  env, raw_dump);
+
+	memset(raw_dump, 0, sizeof(struct ssdfs_raw_dump_environment));
+
+	raw_dump->seg_hdr.area.offset = 0;
+	raw_dump->seg_hdr.area.size = sizeof(struct ssdfs_segment_header);
+
+	raw_dump->seg_hdr.buffer.size = SSDFS_4KB;
+	raw_dump->seg_hdr.buffer.ptr = calloc(1, raw_dump->seg_hdr.buffer.size);
+	if (!raw_dump->seg_hdr.buffer.ptr) {
+		SSDFS_ERR("fail to allocate header's buffer: "
+			  "size %u, err: %s\n",
+			  raw_dump->seg_hdr.buffer.size,
+			  strerror(errno));
+		goto free_buffers;
+	}
+
+	for (i = 0; i < SSDFS_SEG_HDR_DESC_MAX; i++) {
+		raw_dump->desc[i].area.offset = U64_MAX;
+		raw_dump->desc[i].area.size = U32_MAX;
+
+		raw_dump->desc[i].buffer.size = SSDFS_AREA2BUFFER_SIZE(i);
+		raw_dump->desc[i].buffer.ptr =
+				calloc(1, raw_dump->desc[i].buffer.size);
+		if (!raw_dump->desc[i].buffer.ptr) {
+			SSDFS_ERR("fail to allocate header's buffer: "
+				  "size %u, err: %s\n",
+				  raw_dump->desc[i].buffer.size,
+				  strerror(errno));
+			goto free_buffers;
+		}
+	}
+
+	return 0;
+
+free_buffers:
+	ssdfs_destroy_raw_buffers(raw_dump);
+
+	return errno;
+}
+
+void ssdfs_destroy_raw_buffers(struct ssdfs_raw_dump_environment *raw_dump)
+{
+	int i;
+
+	if (raw_dump->seg_hdr.buffer.ptr) {
+		free(raw_dump->seg_hdr.buffer.ptr);
+		raw_dump->seg_hdr.buffer.ptr = NULL;
+		raw_dump->seg_hdr.buffer.size = 0;
+	}
+
+	for (i = 0; i < SSDFS_SEG_HDR_DESC_MAX; i++) {
+		if (raw_dump->desc[i].buffer.ptr) {
+			free(raw_dump->desc[i].buffer.ptr);
+			raw_dump->desc[i].buffer.ptr = NULL;
+			raw_dump->desc[i].buffer.size = 0;
+		}
+	}
+
+	memset(raw_dump, 0, sizeof(struct ssdfs_raw_dump_environment));
+}
+
+int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
+			      u64 peb_id, u32 peb_size,
+			      u32 area_offset, u32 size,
+			      void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->dev_ops->read(env->fd, offset, size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read block descriptors array: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_read_blk2off_table(struct ssdfs_environment *env,
+			     u64 peb_id, u32 peb_size,
+			     u32 area_offset, u32 size,
+			     void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->dev_ops->read(env->fd, offset, size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read blk2off table: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_read_block_bitmap(struct ssdfs_environment *env,
+			    u64 peb_id, u32 peb_size,
+			    u32 area_offset, u32 size,
+			    void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->dev_ops->read(env->fd, offset, size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read block bitmap: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_read_log_footer(struct ssdfs_environment *env,
+			  u64 peb_id, u32 peb_size,
+			  u32 area_offset, u32 size,
+			  void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->dev_ops->read(env->fd, offset, size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read log footer: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_read_partial_log_footer(struct ssdfs_environment *env,
+				  u64 peb_id, u32 peb_size,
+				  u32 area_offset, u32 size,
+				  void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->dev_ops->read(env->fd, offset, size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read partial log footer: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_read_segment_header(struct ssdfs_environment *env,
+			      u64 peb_id, u32 peb_size,
+			      u32 log_offset, u32 size,
+			      void *buf)
+{
+	size_t sg_size = max_t(size_t,
+				sizeof(struct ssdfs_segment_header),
+				sizeof(struct ssdfs_partial_log_header));
+	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id %llu, peb_size %u, "
+		  "log_offset %u, size %u\n",
+		  peb_id, peb_size, log_offset, size);
+
+	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
+		offset = peb_id * peb_size;
+
+	offset += log_offset;
+
+	SSDFS_DBG(env->show_debug,
+		  "offset %llu, size %zu\n",
+		  offset, sg_size);
+
+	err = env->dev_ops->read(env->fd, offset, sg_size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read segment header: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	SSDFS_DBG(env->show_debug,
+		  "successful read\n");
+
+	return 0;
+}
+
+int ssdfs_read_partial_log_header(struct ssdfs_environment *env,
+				  u64 peb_id, u32 peb_size,
+				  u32 log_offset, u32 size,
+				  void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "peb_id: %llu, peb_size %u, "
+		  "log_offset %u, size %u\n",
+		  peb_id, peb_size,
+		  log_offset, size);
+
+	offset = peb_id * peb_size;
+	offset += log_offset;
+
+	err = env->dev_ops->read(env->fd, offset, size, buf,
+				 env->show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read partial log header: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+#define SSDFS_TOOLS_PEB_SEARCH_SHIFT	(1)
+
+int ssdfs_find_any_valid_peb(struct ssdfs_environment *env,
+			     struct ssdfs_segment_header *hdr)
+{
+	size_t sg_size = sizeof(struct ssdfs_segment_header);
+	u64 offset = SSDFS_RESERVED_VBR_SIZE;
+	u32 peb_size = env->erase_size;
+	u64 factor = 1;
+	int err = -ENODATA;
+
+	do {
+		struct ssdfs_signature *magic = NULL;
+		struct ssdfs_metadata_check *check = NULL;
+
+		SSDFS_DBG(env->show_debug,
+			  "try to read the offset %llu\n",
+			  offset);
+
+		err = ssdfs_read_segment_header(env,
+						offset / peb_size,
+						peb_size,
+						0, peb_size,
+						hdr);
+		if (err) {
+			SSDFS_ERR("fail to read segment header: "
+				  "offset %llu, err %d\n",
+				  offset, err);
+			return err;
+		}
+
+		magic = &hdr->volume_hdr.magic;
+		check = &hdr->volume_hdr.check;
+
+		if (le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
+		    le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC) {
+			if (!is_csum_valid(check, hdr, sg_size))
+				err = -ENODATA;
+		} else
+			err = -ENODATA;
+
+		if (!err)
+			break;
+
+		if (offset == SSDFS_RESERVED_VBR_SIZE)
+			offset = env->erase_size;
+		else {
+			factor <<= SSDFS_TOOLS_PEB_SEARCH_SHIFT;
+			offset += factor * env->erase_size;
+		}
+	} while (offset < env->fs_size);
+
+	if (err) {
+		SSDFS_ERR("SSDFS has not been found on the device %s\n",
+			  env->dev_name);
+		return err;
+	}
+
+	return 0;
+}

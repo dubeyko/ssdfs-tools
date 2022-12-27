@@ -23,12 +23,6 @@
  *                     Show PEB dump command                            *
  ************************************************************************/
 
-union ssdfs_log_header {
-	struct ssdfs_segment_header seg_hdr;
-	struct ssdfs_partial_log_header pl_hdr;
-	struct ssdfs_signature magic;
-};
-
 static
 int is_ssdfs_dumpfs_area_valid(struct ssdfs_metadata_descriptor *desc)
 {

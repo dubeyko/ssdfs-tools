@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.17 [December 26, 2022]
+    (*) [recoverfs] Implement initial logic of PEBs traversing.
+
 v.4.16 [December 25, 2022]
     (*) [dumpfs] Fix issue with calculating maximum number of logs.
 

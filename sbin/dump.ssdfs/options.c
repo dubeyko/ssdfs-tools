@@ -245,7 +245,7 @@ void parse_options(int argc, char *argv[],
 
 			p = optarg;
 			while (*p != '\0') {
-				struct ssdfs_raw_dump_environment *raw_dump;
+				struct ssdfs_dumpfs_raw_dump_environment *raw_dump;
 				char *value;
 				u64 count;
 

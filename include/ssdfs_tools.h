@@ -114,6 +114,115 @@ struct ssdfs_environment {
 };
 
 /*
+ * struct ssdfs_peb_environment - PEB environment
+ * @id: PEB's identification number
+ * @pebs_count: count of PEBs in the range
+ * @peb_size: PEB size in bytes
+ * @log_offset: log offset in bytes
+ * @log_size: log's size in bytes
+ * @log_index: log index in chain
+ * @logs_count: count of logs in the range
+ */
+struct ssdfs_peb_environment {
+	u64 id;
+	u64 pebs_count;
+	u32 peb_size;
+
+	u32 log_offset;
+	u32 log_size;
+	u32 log_index;
+	u32 logs_count;
+};
+
+/*
+ * struct ssdfs_raw_area - raw area decriptor
+ * @offset: area offset from PEB's beginning
+ * @size: area size
+ * @metadata.blk_desc_tbl: block descriptors table header
+ * @metadata.blk2off_tbl.hdr: block2offset table header
+ * @metadata.blk2off_tbl.off_tbl_hdr: phys offsets table header
+ */
+struct ssdfs_raw_area {
+	u64 offset;
+	u32 size;
+
+	union {
+		struct ssdfs_area_block_table blk_desc_tbl;
+		struct {
+			struct ssdfs_blk2off_table_header hdr;
+			struct ssdfs_phys_offset_table_header off_tbl_hdr;
+		} blk2off_tbl;
+	} metadata;
+};
+
+/*
+ * struct ssdfs_raw_buffer - raw buffer descriptor
+ * @ptr: pointer on buffer
+ * @size: buffer size
+ */
+struct ssdfs_raw_buffer {
+	void *ptr;
+	u32 size;
+};
+
+/*
+ * struct ssdfs_raw_area_environment - raw area environment
+ * @area: area descriptor
+ * @buffer: buffer descriptor
+ */
+struct ssdfs_raw_area_environment {
+	struct ssdfs_raw_area area;
+	struct ssdfs_raw_buffer buffer;
+};
+
+/*
+ * struct ssdfs_raw_dump_environment - raw dump environment
+ * @peb_offset: PEB offset in bytes
+ * @seg_hdr: segment header area
+ * @desc: array of log's area descriptors
+ */
+struct ssdfs_raw_dump_environment {
+	u64 peb_offset;
+
+	struct ssdfs_raw_area_environment seg_hdr;
+	struct ssdfs_raw_area_environment desc[SSDFS_SEG_HDR_DESC_MAX];
+};
+
+union ssdfs_log_header {
+	struct ssdfs_segment_header seg_hdr;
+	struct ssdfs_partial_log_header pl_hdr;
+	struct ssdfs_signature magic;
+};
+
+/*
+ * struct ssdfs_thread_state - thread state
+ * @id: thread ID
+ * @thread: thread descriptor
+ * @err: code of error
+ *
+ * @base: basic environment
+ * @peb: PEB environment
+ * @raw_dump: raw dump environment
+ * @output_folder: path to the output folder
+ * @output_fd: output folder descriptor
+ *
+ * @name_buf: name buffer
+ */
+struct ssdfs_thread_state {
+	unsigned int id;
+	pthread_t thread;
+	int err;
+
+	struct ssdfs_environment base;
+	struct ssdfs_peb_environment peb;
+	struct ssdfs_raw_dump_environment raw_dump;
+	const char *output_folder;
+	int output_fd;
+
+	char name_buf[SSDFS_MAX_NAME_LEN + 1];
+};
+
+/*
  * struct ssdfs_dentries_tree_testing - dentries tree testing environment
  * @files_number_threshold: maximum number of files
  */
@@ -340,6 +449,13 @@ struct ssdfs_snapshot_info {
 #define SSDFS_IOC_SHOW_DETAILS		_IOWR(SSDFS_IOCTL_MAGIC, 7, \
 					     struct ssdfs_snapshot_info)
 
+#define SSDFS_SEG_HDR(ptr) \
+	((struct ssdfs_segment_header *)(ptr))
+#define SSDFS_PL_HDR(ptr) \
+	((struct ssdfs_partial_log_header *)(ptr))
+#define SSDFS_LOG_FOOTER(ptr) \
+	((struct ssdfs_log_footer *)(ptr))
+
 /* lib/ssdfs_common.c */
 const char *uuid_string(const unsigned char *uuid);
 __le32 ssdfs_crc32_le(void *data, size_t len);
@@ -353,6 +469,39 @@ int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf);
 u64 ssdfs_current_time_in_nanoseconds(void);
 char *ssdfs_nanoseconds_to_time(u64 nanoseconds);
 int is_zoned_device(int fd);
+int ssdfs_create_raw_buffers(struct ssdfs_environment *base,
+			     struct ssdfs_raw_dump_environment *raw_dump);
+void ssdfs_destroy_raw_buffers(struct ssdfs_raw_dump_environment *raw_dump);
+int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
+			      u64 peb_id, u32 peb_size,
+			      u32 area_offset, u32 size,
+			      void *buf);
+int ssdfs_read_blk2off_table(struct ssdfs_environment *env,
+			     u64 peb_id, u32 peb_size,
+			     u32 area_offset, u32 size,
+			     void *buf);
+int ssdfs_read_block_bitmap(struct ssdfs_environment *env,
+			    u64 peb_id, u32 peb_size,
+			    u32 area_offset, u32 size,
+			    void *buf);
+int ssdfs_read_log_footer(struct ssdfs_environment *env,
+			  u64 peb_id, u32 peb_size,
+			  u32 area_offset, u32 size,
+			  void *buf);
+int ssdfs_read_partial_log_footer(struct ssdfs_environment *env,
+				  u64 peb_id, u32 peb_size,
+				  u32 area_offset, u32 size,
+				  void *buf);
+int ssdfs_read_segment_header(struct ssdfs_environment *env,
+			      u64 peb_id, u32 peb_size,
+			      u32 log_offset, u32 size,
+			      void *buf);
+int ssdfs_read_partial_log_header(struct ssdfs_environment *env,
+				  u64 peb_id, u32 peb_size,
+				  u32 log_offset, u32 size,
+				  void *buf);
+int ssdfs_find_any_valid_peb(struct ssdfs_environment *env,
+			     struct ssdfs_segment_header *hdr);
 
 /* lib/compression.c */
 int ssdfs_zlib_compress(unsigned char *data_in,

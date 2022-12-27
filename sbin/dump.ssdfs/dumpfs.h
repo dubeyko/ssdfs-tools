@@ -85,13 +85,13 @@ struct ssdfs_peb_dump_environment {
 };
 
 /*
- * struct ssdfs_raw_dump_environment - raw dump environment
+ * struct ssdfs_dumpfs_raw_dump_environment - raw dump environment
  * @offset: offset in bytes
  * @size: size of raw dump in bytes
  * @buf: pointer on buffer
  * @buf_size: size of buffer in bytes
  */
-struct ssdfs_raw_dump_environment {
+struct ssdfs_dumpfs_raw_dump_environment {
 	u64 offset;
 	u32 size;
 
@@ -114,7 +114,7 @@ struct ssdfs_raw_dump_environment {
 struct ssdfs_dumpfs_environment {
 	struct ssdfs_environment base;
 	struct ssdfs_peb_dump_environment peb;
-	struct ssdfs_raw_dump_environment raw_dump;
+	struct ssdfs_dumpfs_raw_dump_environment raw_dump;
 
 	int command;
 	int is_raw_dump_requested;

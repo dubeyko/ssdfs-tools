@@ -4,6 +4,8 @@
 AM_CFLAGS = -Wall
 AM_CPPFLAGS = -I$(top_srcdir)/include
 
+LDADD = -lpthread $(top_builddir)/lib/libssdfs.la
+
 sbin_PROGRAMS = recoverfs.ssdfs
 
-recoverfs_ssdfs_SOURCES = recoverfs.c recoverfs.h
+recoverfs_ssdfs_SOURCES = options.c recoverfs.c recoverfs.h
