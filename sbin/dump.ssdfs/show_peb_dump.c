@@ -3226,6 +3226,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			env->peb.log_offset = 0;
 		} else {
 			SSDFS_DBG(env->base.show_debug,
+				  "STOP PEB DUMPING: "
 				  "peb_id %llu, pebs_count %llu, "
 				  "log_index %u, logs_count %u\n",
 				  env->peb.id, env->peb.pebs_count,
@@ -3240,7 +3241,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 					  "log_index %u, logs_count %u\n",
 					  env->peb.id, env->peb.pebs_count,
 					  env->peb.log_index, env->peb.logs_count);
-				goto stop_peb_dumping;
+				goto try_next_peb;
 			}
 
 			err = ssdfs_dumpfs_read_log_bytes(env, &buf);
