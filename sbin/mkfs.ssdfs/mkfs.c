@@ -173,9 +173,16 @@ static int user_data_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	pages_per_peb = erasesize / pagesize;
 
 	if (log_pages >= U16_MAX) {
-		log_pages = pages_per_peb / SSDFS_DATA_LOGS_PER_PEB_DEFAULT;
-		log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
-		layout->user_data_seg.log_pages = (u16)log_pages;
+		if (erasesize < SSDFS_1MB) {
+			log_pages = pages_per_peb;
+			layout->user_data_seg.log_pages = (u16)log_pages;
+		} else {
+			log_pages =
+			    pages_per_peb / SSDFS_DATA_LOGS_PER_PEB_DEFAULT;
+			log_pages =
+			    min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+			layout->user_data_seg.log_pages = (u16)log_pages;
+		}
 	}
 
 	if (log_pages > pages_per_peb) {
