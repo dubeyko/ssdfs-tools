@@ -1158,9 +1158,6 @@ finish_parse_blk2off_table:
 		free(area_buf);
 		area_buf = NULL;
 
-		if (err)
-			goto finish_parse_blk2off_area;
-
 		SSDFS_DUMPFS_DUMP(env, "\n");
 
 		if (env->is_raw_dump_requested) {
@@ -3260,7 +3257,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 				if (err) {
 					SSDFS_ERR("fail to parse the full log: "
 						  "err %d\n", err);
-					goto finish_peb_dump;
+					goto try_next_peb;
 				}
 			} else if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
 				   le16_to_cpu(buf.magic.key) == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
@@ -3268,7 +3265,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 				if (err) {
 					SSDFS_ERR("fail to parse the partial log: "
 						  "err %d\n", err);
-					goto finish_peb_dump;
+					goto try_next_peb;
 				}
 			} else {
 				SSDFS_DBG(env->base.show_debug,
