@@ -29,7 +29,7 @@ int maptbl_cache_create_fragments_array(struct ssdfs_volume_layout *layout)
 	int segs_capacity = layout->segs_capacity;
 	u32 lebs_count = 0;
 	u32 fragments_count;
-	size_t fragment_size = PAGE_CACHE_SIZE;
+	size_t fragment_size = layout->page_size;
 	u32 leb2peb_pair_per_fragment;
 	u32 i, j;
 
@@ -48,7 +48,7 @@ int maptbl_cache_create_fragments_array(struct ssdfs_volume_layout *layout)
 	}
 
 	leb2peb_pair_per_fragment =
-		SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(PAGE_CACHE_SIZE);
+		SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(layout->page_size);
 	fragments_count = lebs_count + leb2peb_pair_per_fragment - 1;
 	fragments_count /= leb2peb_pair_per_fragment;
 
@@ -125,7 +125,7 @@ int maptbl_cache_prepare_fragment(struct ssdfs_volume_layout *layout,
 	}
 
 	ptr = (u8 *)layout->maptbl_cache.fragments_array[sequence_id];
-	memset(ptr, 0, PAGE_CACHE_SIZE);
+	memset(ptr, 0, layout->page_size);
 
 	hdr = (struct ssdfs_maptbl_cache_header *)ptr;
 
@@ -195,7 +195,7 @@ u32 find_fragment_index(struct ssdfs_volume_layout *layout,
 
 	BUG_ON(leb_id == U64_MAX);
 
-	items_per_fragment = SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(PAGE_CACHE_SIZE);
+	items_per_fragment = SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(layout->page_size);
 
 	for (; i < layout->maptbl_cache.fragments_count; i++) {
 		ptr = (u8 *)layout->maptbl_cache.fragments_array[i];
@@ -372,7 +372,7 @@ int add_leb2peb_pair(struct ssdfs_volume_layout *layout,
 
 	hdr = (struct ssdfs_maptbl_cache_header *)fragment;
 
-	items_per_fragment = SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(PAGE_CACHE_SIZE);
+	items_per_fragment = SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(layout->page_size);
 	items_count = le16_to_cpu(hdr->items_count);
 	BUG_ON(items_count > items_per_fragment);
 

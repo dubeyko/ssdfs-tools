@@ -208,7 +208,9 @@ struct ssdfs_segbmap_layout {
  * @compression: compression type
  * @maptbl_pebs: count of PEBs for the whole mapping table
  * @lebtbl_portion_bytes: LEB table's fragments size for one maptbl portion
+ * @lebtbl_portion_mempages: number of memory pages for LEB table's fragments
  * @pebtbl_portion_bytes: PEB table's fragments size for one maptbl portion
+ * @pebtbl_portion_mempages: number of memory pages for PEB table's fragments
  * @lebs_per_portion: LEB descriptors in one portion
  * @pebs_per_portion: PEB descriptors in one portion
  * @portions_count: count of portions in mapping table
@@ -228,7 +230,9 @@ struct ssdfs_maptbl_layout {
 	/* layout */
 	u32 maptbl_pebs;
 	u32 lebtbl_portion_bytes;
+	u32 lebtbl_portion_mempages;
 	u32 pebtbl_portion_bytes;
+	u32 pebtbl_portion_mempages;
 	u16 lebs_per_portion;
 	u16 pebs_per_portion;
 	u32 portions_count;
@@ -458,13 +462,13 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 			   u32 blks_count);
 int pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
-			    u16 valid_blks);
+			    size_t bytes_count, u16 blks_count);
 void commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			 int seg_index, int peb_index,
 			 u16 metadata_blks);
 int pre_commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
-				   u16 valid_blks);
+				   size_t bytes_count, u16 blks_count);
 void commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 				int seg_index, int peb_index,
 				u16 metadata_blks);

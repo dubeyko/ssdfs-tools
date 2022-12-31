@@ -583,6 +583,7 @@ static int alloc_segs_array(struct ssdfs_volume_layout *layout)
 	int segs[SSDFS_ALLOC_POLICY_MAX] = {0};
 	u32 fs_segs_count, fs_metadata_quota_max;
 	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
+	u32 pagesize = layout->page_size;
 	int i, j, k;
 	int err = 0;
 
@@ -684,10 +685,10 @@ static int alloc_segs_array(struct ssdfs_volume_layout *layout)
 		}
 	}
 
-	layout->write_buffer.capacity = SSDFS_4KB;
+	layout->write_buffer.capacity = pagesize;
 	layout->write_buffer.offset = 0;
 	err = posix_memalign((void **)&layout->write_buffer.ptr,
-			     SSDFS_4KB,
+			     pagesize,
 			     layout->write_buffer.capacity);
 	if (err) {
 		layout->write_buffer.capacity = 0;
@@ -1255,6 +1256,7 @@ static int flush_write_buffer(struct ssdfs_volume_layout *layout,
 		.writesize = layout->page_size,
 	};
 	int fd = layout->env.fd;
+	u32 pagesize = layout->page_size;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -1279,7 +1281,7 @@ static int flush_write_buffer(struct ssdfs_volume_layout *layout,
 		return -ERANGE;
 	}
 
-	if (offset % SSDFS_4KB) {
+	if (offset % pagesize) {
 		SSDFS_ERR("unaligned offset %llu\n",
 			  offset);
 		return -ERANGE;
@@ -1367,6 +1369,7 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
 	u32 erase_size = layout->env.erase_size;
+	u32 pagesize = layout->page_size;
 	u64 peb_id;
 	u32 peb_offset = 0;
 	u64 volume_offset;
@@ -1485,8 +1488,8 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 		u32 aligned_size;
 
 		aligned_size = peb_offset - flushed_bytes;
-		aligned_size += SSDFS_4KB - 1;
-		aligned_size = (aligned_size / SSDFS_4KB) * SSDFS_4KB;
+		aligned_size += pagesize - 1;
+		aligned_size = (aligned_size / pagesize) * pagesize;
 
 		err = flush_write_buffer(layout, volume_offset,
 					 aligned_size);

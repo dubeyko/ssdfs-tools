@@ -66,10 +66,12 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u32 maptbl_segs;
 	u32 maptbl_pebs;
 	u32 pebtbl_portion_bytes;
+	u32 pebtbl_portion_mempages;
 	u32 peb_desc_per_stripe;
 	u32 peb_desc_per_portion;
 	u32 lebtbl_portion_bytes;
 	u32 lebtbl_mempages;
+	u32 lebtbl_portion_mempages;
 	u32 leb_desc_per_mempage;
 	u32 leb_desc_per_portion;
 
@@ -139,12 +141,22 @@ define_stripes_per_portion:
 
 	/* re-calculate peb_desc_per_portion */
 	peb_desc_per_portion = peb_desc_per_stripe * stripes_per_portion;
-	pebtbl_portion_bytes = stripes_per_portion * PAGE_CACHE_SIZE;
+	/*
+	 * every PEB table's memory page needs
+	 * to be located into physical page
+	 */
+	pebtbl_portion_bytes = stripes_per_portion * layout->page_size;
+	pebtbl_portion_mempages = stripes_per_portion;
 
 	leb_desc_per_portion = peb_desc_per_portion + leb_desc_per_mempage - 1;
 	lebtbl_mempages = leb_desc_per_portion / leb_desc_per_mempage;
 	leb_desc_per_portion = lebtbl_mempages * leb_desc_per_mempage;
-	lebtbl_portion_bytes = lebtbl_mempages * PAGE_CACHE_SIZE;
+	/*
+	 * every LEB table's memory page needs
+	 * to be located into physical page
+	 */
+	lebtbl_portion_bytes = lebtbl_mempages * layout->page_size;
+	lebtbl_portion_mempages = lebtbl_mempages;
 	leb_desc_per_portion = peb_desc_per_portion;
 
 	portion_size = lebtbl_portion_bytes + pebtbl_portion_bytes;
@@ -229,7 +241,9 @@ define_stripes_per_portion:
 
 	layout->maptbl.maptbl_pebs = maptbl_pebs;
 	layout->maptbl.lebtbl_portion_bytes = lebtbl_portion_bytes;
+	layout->maptbl.lebtbl_portion_mempages = lebtbl_portion_mempages;
 	layout->maptbl.pebtbl_portion_bytes = pebtbl_portion_bytes;
+	layout->maptbl.pebtbl_portion_mempages = pebtbl_portion_mempages;
 	BUG_ON(leb_desc_per_portion >= U16_MAX);
 
 	layout->maptbl.lebs_per_portion = (u16)leb_desc_per_portion;
@@ -245,11 +259,13 @@ define_stripes_per_portion:
 		  "maptbl: segs %d, stripes_per_portion %u, "
 		  "portions_per_fragment %u, maptbl_pebs %u, "
 		  "lebtbl_portion_bytes %u, pebtbl_portion_bytes %u, "
+		  "lebtbl_portion_mempages %u, pebtbl_portion_mempages %u, "
 		  "lebs_per_portion %u, pebs_per_portion %u, "
 		  "portions_count %llu, portion_size %u\n",
 		  *segs, stripes_per_portion, portions_per_fragment,
 		  maptbl_pebs, lebtbl_portion_bytes,
-		  pebtbl_portion_bytes, leb_desc_per_portion,
+		  pebtbl_portion_bytes, lebtbl_portion_mempages,
+		  pebtbl_portion_mempages, leb_desc_per_portion,
 		  peb_desc_per_portion, fragments, portion_size);
 	return seg_state;
 }
@@ -334,7 +350,7 @@ void maptbl_prepare_leb_table(struct ssdfs_volume_layout *layout,
 		  layout, ptr, portion_index, mempage_index);
 
 	leb_desc_per_mempage = SSDFS_LEB_DESC_PER_FRAGMENT(PAGE_CACHE_SIZE);
-	lebtbl_mempages = (u16)(lebtbl_portion_bytes / PAGE_CACHE_SIZE);
+	lebtbl_mempages = (u16)(lebtbl_portion_bytes / layout->page_size);
 	BUG_ON(lebtbl_mempages == 0);
 	BUG_ON(mempage_index >= lebtbl_mempages);
 
@@ -497,20 +513,21 @@ int maptbl_prepare_portion(struct ssdfs_volume_layout *layout,
 	ptr = (u8 *)layout->maptbl.fragments_array[index / portions_per_fragment];
 	ptr += (index % portions_per_fragment) * portion_size;
 
-	lebtbl_mempages = (u16)(lebtbl_portion_bytes / PAGE_CACHE_SIZE);
+	lebtbl_mempages = (u16)(lebtbl_portion_bytes / layout->page_size);
 	BUG_ON(lebtbl_mempages == 0);
 
 	for (i = 0; i < lebtbl_mempages; i++) {
 		u8 *lebtbl_ptr;
 
-		lebtbl_ptr = ptr + (i * PAGE_CACHE_SIZE);
+		lebtbl_ptr = ptr + (i * layout->page_size);
 		maptbl_prepare_leb_table(layout, lebtbl_ptr, index, i);
 	}
 
 	for (i = 0; i < stripes_per_portion; i++) {
 		u8 *pebtbl_ptr;
 
-		pebtbl_ptr = ptr + lebtbl_portion_bytes + (i * PAGE_CACHE_SIZE);
+		pebtbl_ptr = ptr + lebtbl_portion_bytes;
+		pebtbl_ptr += (i * layout->page_size);
 		maptbl_prepare_peb_table(layout, pebtbl_ptr, index, i);
 	}
 
@@ -580,7 +597,7 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
 	for (stripe_id = 0; stripe_id < stripes; stripe_id++) {
-		pebtbl += stripe_id * PAGE_CACHE_SIZE;
+		pebtbl += stripe_id * layout->page_size;
 		hdr = (struct ssdfs_peb_table_fragment_header *)pebtbl;
 		pebs_count = le16_to_cpu(hdr->pebs_count);
 		peb_id = le64_to_cpu(hdr->start_peb);
@@ -747,14 +764,14 @@ u8 *get_lebtbl_fragment(struct ssdfs_volume_layout *layout,
 	leb_desc_per_mempage = SSDFS_LEB_DESC_PER_FRAGMENT(PAGE_CACHE_SIZE);
 	mempage_index = diff_leb_id / leb_desc_per_mempage;
 	lebtbls_per_portion =
-		layout->maptbl.lebtbl_portion_bytes >> PAGE_CACHE_SHIFT;
+		layout->maptbl.lebtbl_portion_bytes / layout->page_size;
 	BUG_ON(mempage_index >= lebtbls_per_portion);
 
 	*leb_desc_index = diff_leb_id % leb_desc_per_mempage;
 
 	fragment = (u8 *)layout->maptbl.fragments_array[*fragment_index];
 	portion = fragment + (*portion_index * layout->maptbl.portion_size);
-	lebtbl = portion + (mempage_index * PAGE_CACHE_SIZE);
+	lebtbl = portion + (mempage_index * layout->page_size);
 
 	return lebtbl;
 }
@@ -779,7 +796,7 @@ u8 *get_pebtbl_fragment(struct ssdfs_volume_layout *layout,
 	portion = fragment + (portion_index * layout->maptbl.portion_size);
 
 	pebtbl = portion + layout->maptbl.lebtbl_portion_bytes;
-	pebtbl += stripe_index * PAGE_CACHE_SIZE;
+	pebtbl += stripe_index * layout->page_size;
 
 	return pebtbl;
 }
@@ -1536,6 +1553,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			err = pre_commit_block_bitmap(layout, seg_index, j,
+						      peb_buffer_size,
 						      valid_blks);
 			if (err)
 				return err;
@@ -1567,7 +1585,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 							j, valid_blks,
 							SSDFS_MAPTBL_INO,
 							payload_offset_in_bytes,
-							PAGE_CACHE_SIZE);
+							layout->page_size);
 			if (err)
 				return err;
 
@@ -1619,9 +1637,10 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				}
 
 				err = pre_commit_block_bitmap_backup(layout,
-								    seg_index,
-								    j,
-								    valid_blks);
+								seg_index,
+								j,
+								peb_buffer_size,
+								valid_blks);
 				if (err)
 					return err;
 			}

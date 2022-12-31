@@ -32,16 +32,16 @@ u32 SEG_BMAP_BYTES(u64 items_count)
 	return (u32)bytes;
 }
 
-u16 SEG_BMAP_FRAGMENTS(u64 items_count)
+u16 SEG_BMAP_FRAGMENTS(u64 items_count, u32 page_size)
 {
 	u32 hdr_size = sizeof(struct ssdfs_segbmap_fragment_header);
 	u32 bytes = SEG_BMAP_BYTES(items_count);
 	u32 pages, fragments;
 
-	pages = (bytes + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	pages = (bytes + page_size - 1) / page_size;
 	bytes += pages * hdr_size;
 
-	fragments = (bytes + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	fragments = (bytes + page_size - 1) / page_size;
 	BUG_ON(fragments >= U16_MAX);
 
 	return (u16)fragments;
@@ -182,7 +182,7 @@ int BYTE_CONTAINS_CLEAN_STATE(u8 *value)
  */
 int SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(struct ssdfs_segbmap_fragment_header *hdr,
 				     u8 *fragment, u64 start_item, u64 max_item,
-				     int state, u64 *found_seg)
+				     u32 page_size, int state, u64 *found_seg)
 {
 	u32 items_per_byte = SSDFS_ITEMS_PER_BYTE(SSDFS_SEG_STATE_BITS);
 	u64 fragment_start_item;
@@ -212,7 +212,7 @@ int SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(struct ssdfs_segbmap_fragment_header *hdr,
 	search_bytes = le16_to_cpu(hdr->fragment_bytes) -
 			sizeof(struct ssdfs_segbmap_fragment_header);
 
-	if (search_bytes == 0 || search_bytes > PAGE_CACHE_SIZE) {
+	if (search_bytes == 0 || search_bytes > page_size) {
 		SSDFS_ERR("invalid fragment_bytes %u\n",
 			  search_bytes);
 		return -ERANGE;

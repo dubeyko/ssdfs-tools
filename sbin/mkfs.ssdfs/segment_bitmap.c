@@ -40,7 +40,7 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 
 	seg_nums = layout->env.fs_size / layout->seg_size;
 	layout->segbmap.bmap_bytes = SEG_BMAP_BYTES(seg_nums);
-	fragments = SEG_BMAP_FRAGMENTS(seg_nums);
+	fragments = SEG_BMAP_FRAGMENTS(seg_nums, PAGE_CACHE_SIZE);
 	pebs_per_seg = (u64)(layout->seg_size / layout->env.erase_size);
 
 	fragments_per_seg = fragments_per_peb * pebs_per_seg;
@@ -300,6 +300,7 @@ try_fragment:
 	bmap = (u8 *)fragment + sizeof(struct ssdfs_segbmap_fragment_header);
 
 	err = SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(hdr, bmap, 0, nsegs,
+						fragment_size,
 						new_state, &found_seg);
 	if (err == -ENODATA || found_seg == U64_MAX) {
 		if ((fragment_index + 1) >= fragments_per_peb) {
@@ -720,6 +721,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			err = pre_commit_block_bitmap(layout, seg_index, j,
+						      peb_buffer_size,
 						      valid_blks);
 			if (err)
 				return err;
@@ -759,7 +761,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 							j, valid_blks,
 							SSDFS_SEG_BMAP_INO,
 							payload_offset_in_bytes,
-							PAGE_CACHE_SIZE);
+							layout->page_size);
 			if (err)
 				return err;
 
@@ -811,9 +813,10 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				}
 
 				err = pre_commit_block_bitmap_backup(layout,
-								    seg_index,
-								    j,
-								    valid_blks);
+								seg_index,
+								j,
+								peb_buffer_size,
+								valid_blks);
 				if (err)
 					return err;
 			}
