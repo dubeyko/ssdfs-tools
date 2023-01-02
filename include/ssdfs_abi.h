@@ -51,13 +51,15 @@
 #define SSDFS_SNAPSHOTS_BTREE_MAGIC		0x536E4274	/* SnBt */
 #define SSDFS_SNAPSHOTS_BNODE_MAGIC		0x736E		/* sn */
 #define SSDFS_SNAPSHOT_RULES_MAGIC		0x536E5275	/* SnRu */
+#define SSDFS_SNAPSHOT_RECORD_MAGIC		0x5372		/* Sr */
+#define SSDFS_PEB2TIME_RECORD_MAGIC		0x5072		/* Pr */
 #define SSDFS_DIFF_BLOB_MAGIC			0x4466		/* Df */
 #define SSDFS_INVEXT_BTREE_MAGIC		0x49784274	/* IxBt */
 #define SSDFS_INVEXT_BNODE_MAGIC		0x4958		/* IX */
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		13
+#define SSDFS_MINOR_REVISION		14
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1407,13 +1409,14 @@ enum {
 /*
  * struct ssdfs_segment_header - header of segment
  * @volume_hdr: copy of static part of superblock
- * @timestamp: creation timestamp
- * @cno: segment starting checkpoint
+ * @timestamp: log creation timestamp
+ * @cno: log checkpoint
  * @log_pages: size of log (partial segment) in pages count
  * @seg_type: type of segment
  * @seg_flags: flags of segment
  * @desc_array: array of segment's metadata descriptors
  * @peb_migration_id: identification number of PEB in migration sequence
+ * @peb_create_time: PEB creation timestamp
  * @payload: space for segment header's payload
  */
 struct ssdfs_segment_header {
@@ -1439,7 +1442,10 @@ struct ssdfs_segment_header {
 	__le8 peb_migration_id[SSDFS_MIGRATING_PEBS_CHAIN];
 
 /* 0x4AA */
-	__le8 payload[0x356];
+	__le64 peb_create_time;
+
+/* 0x4B2 */
+	__le8 payload[0x34E];
 
 /* 0x0800 */
 } __attribute__((packed));
@@ -1493,6 +1499,7 @@ struct ssdfs_segment_header {
  * @log_flags: flags of log
  * @reserved1: reserved field
  * @desc_array: array of footer's metadata descriptors
+ * @peb_create_time: PEB creation timestamp
  * @payload: space for log footer's payload
  */
 struct ssdfs_log_footer {
@@ -1512,7 +1519,10 @@ struct ssdfs_log_footer {
 	struct ssdfs_metadata_descriptor desc_array[SSDFS_LOG_FOOTER_DESC_MAX];
 
 /* 0x0450 */
-	__le8 payload[0x3B0];
+	__le64 peb_create_time;
+
+/* 0x0458 */
+	__le8 payload[0x3A8];
 
 /* 0x0800 */
 } __attribute__((packed));
@@ -1555,8 +1565,9 @@ struct ssdfs_log_footer {
  * @log_erasesize: log2(erase block size)
  * @log_segsize: log2(segment size)
  * @log_pebs_per_seg: log2(erase blocks per segment)
- * @open_zones: number of open/active zones
+ * @peb_create_time: PEB creation timestamp
  * @snapshots_btree: snapshots btree root
+ * @open_zones: number of open/active zones
  *
  * This header is used when the full log needs to be built from several
  * partial logs. The header represents the combination of the most
@@ -1610,14 +1621,14 @@ struct ssdfs_partial_log_header {
 	__le8 log_erasesize;
 	__le8 log_segsize;
 	__le8 log_pebs_per_seg;
-	__le32 open_zones;
-	__le8 reserved1[0x4];
+	__le64 peb_create_time;
 
 /* 0x0360 */
 	struct ssdfs_snapshots_btree snapshots_btree;
 
 /* 0x03E0 */
-	__le8 reserved2[0x20];
+	__le32 open_zones;
+	__le8 reserved2[0x1C];
 
 /* 0x0400 */
 	struct ssdfs_invalidated_extents_btree invextree;
@@ -2286,6 +2297,7 @@ enum {
 	SSDFS_MAPTBL_MIGRATION_DST_DIRTY_STATE,
 	SSDFS_MAPTBL_PRE_ERASE_STATE,
 	SSDFS_MAPTBL_UNDER_ERASE_STATE,
+	SSDFS_MAPTBL_SNAPSHOT_STATE,
 	SSDFS_MAPTBL_RECOVERING_STATE,
 	SSDFS_MAPTBL_PEB_STATE_MAX
 };
@@ -2944,8 +2956,6 @@ struct ssdfs_inodes_btree_node_header {
 
 /*
  * struct ssdfs_snapshot_rule_info - snapshot rule info
- * @name: snapshot rule name
- * @uuid: snapshot UUID
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
  * @type: snapshot type (PERIODIC|ONE-TIME)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
@@ -2953,18 +2963,13 @@ struct ssdfs_inodes_btree_node_header {
  * @snapshots_threshold max number of simultaneously available snapshots
  * @snapshots_number: current number of created snapshots
  * @ino: root object inode ID
- * @flags: various rule's flags
+ * @uuid: snapshot UUID
+ * @name: snapshot rule name
  * @name_hash: name hash
  * @last_snapshot_cno: latest snapshot checkpoint
  */
 struct ssdfs_snapshot_rule_info {
 /* 0x0000 */
-	char name[SSDFS_MAX_SNAP_RULE_NAME_LEN];
-
-/* 0x0010 */
-	__le8 uuid[SSDFS_UUID_SIZE];
-
-/* 0x0020 */
 	__le8 mode;
 	__le8 type;
 	__le8 expiration;
@@ -2972,8 +2977,14 @@ struct ssdfs_snapshot_rule_info {
 	__le16 snapshots_threshold;
 	__le16 snapshots_number;
 
-/* 0x0028 */
+/* 0x0008 */
 	__le64 ino;
+
+/* 0x0010 */
+	__le8 uuid[SSDFS_UUID_SIZE];
+
+/* 0x0020 */
+	char name[SSDFS_MAX_SNAP_RULE_NAME_LEN];
 
 /* 0x0030 */
 	__le64 name_hash;
@@ -3067,11 +3078,12 @@ struct ssdfs_snapshot_rules_header {
 
 /*
  * struct ssdfs_snapshot - snapshot info
- * @uuid: snapshot UUID
- * @name: snapshot name
+ * @magic: magic signature of snapshot
  * @mode: snapshot mode (READ-ONLY|READ-WRITE)
  * @expiration: snapshot expiration time (WEEK|MONTH|YEAR|NEVER)
- * @flags: various flags
+ * @flags: snapshot's flags
+ * @name: snapshot name
+ * @uuid: snapshot UUID
  * @create_time: snapshot's timestamp
  * @create_cno: snapshot's checkpoint
  * @ino: root object inode ID
@@ -3079,13 +3091,14 @@ struct ssdfs_snapshot_rules_header {
  */
 struct ssdfs_snapshot {
 /* 0x0000 */
-	__le8 uuid[SSDFS_UUID_SIZE];
+	__le16 magic;
+	__le8 mode : 4;
+	__le8 expiration : 4;
+	__le8 flags;
+	char name[SSDFS_MAX_SNAPSHOT_NAME_LEN];
 
 /* 0x0010 */
-	char name[SSDFS_MAX_SNAPSHOT_NAME_LEN];
-	__le8 mode;
-	__le8 expiration;
-	__le16 flags;
+	__le8 uuid[SSDFS_UUID_SIZE];
 
 /* 0x0020 */
 	__le64 create_time;
@@ -3101,6 +3114,57 @@ struct ssdfs_snapshot {
 /* snapshot flags */
 #define SSDFS_SNAPSHOT_HAS_EXTERNAL_STRING	(1 << 0)
 #define SSDFS_SNAPSHOT_FLAGS_MASK		0x1
+
+/*
+ * struct ssdfs_peb2time_pair - PEB to timestamp pair
+ * @peb_id: PEB ID
+ * @last_log_time: last log creation time
+ */
+struct ssdfs_peb2time_pair {
+/* 0x0000 */
+	__le64 peb_id;
+	__le64 last_log_time;
+
+/* 0x0010 */
+} __attribute__((packed));
+
+/*
+ * struct ssdfs_peb2time_set - PEB to timestamp set
+ * @magic: magic signature of set
+ * @pairs_count: number of valid pairs in the set
+ * @create_time: create time of the first PEB in pair set
+ * @array: array of PEB to timestamp pairs
+ */
+struct ssdfs_peb2time_set {
+/* 0x0000 */
+	__le16 magic;
+	__le8 pairs_count;
+	__le8 padding[0x5];
+
+/* 0x0008 */
+	__le64 create_time;
+
+/* 0x0010 */
+#define SSDFS_PEB2TIME_ARRAY_CAPACITY		(3)
+	struct ssdfs_peb2time_pair array[SSDFS_PEB2TIME_ARRAY_CAPACITY];
+
+/* 0x0040 */
+} __attribute__((packed));
+
+/*
+ * union ssdfs_snapshot_item - snapshot item
+ * @magic: magic signature
+ * @snapshot: snapshot info
+ * @peb2time: PEB to timestamp set
+ */
+union ssdfs_snapshot_item {
+/* 0x0000 */
+	__le16 magic;
+	struct ssdfs_snapshot snapshot;
+	struct ssdfs_peb2time_set peb2time;
+
+/* 0x0040 */
+} __attribute__((packed));
 
 #define SSDFS_SNAPSHOTS_PAGES_PER_NODE_MAX		(32)
 #define SSDFS_SNAPSHOTS_BMAP_SIZE \

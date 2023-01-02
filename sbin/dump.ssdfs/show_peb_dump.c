@@ -1237,6 +1237,8 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 						le64_to_cpu(vs->free_pages));
 	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_TIME: %s\n",
 		   ssdfs_nanoseconds_to_time(le64_to_cpu(vs->timestamp)));
+	SSDFS_DUMPFS_DUMP(env, "PEB_CREATION_TIME: %s\n",
+		   ssdfs_nanoseconds_to_time(le64_to_cpu(log_footer->peb_create_time)));
 	SSDFS_DUMPFS_DUMP(env, "CHECKPOINT: %llu\n", le64_to_cpu(vs->cno));
 
 	flags = le32_to_cpu(vs->flags);
@@ -2081,6 +2083,8 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 
 	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_TIME: %s\n",
 		   ssdfs_nanoseconds_to_time(le64_to_cpu(hdr->timestamp)));
+	SSDFS_DUMPFS_DUMP(env, "PEB_CREATION_TIME: %s\n",
+		   ssdfs_nanoseconds_to_time(le64_to_cpu(hdr->peb_create_time)));
 	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_CHECKPOINT: %llu\n",
 			  le64_to_cpu(hdr->cno));
 	SSDFS_DUMPFS_DUMP(env, "LOG_PAGES: %u\n",
@@ -2433,6 +2437,8 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 						le64_to_cpu(pl_hdr->free_pages));
 	SSDFS_DUMPFS_DUMP(env, "LOG_CREATION_TIME: %s\n",
 		   ssdfs_nanoseconds_to_time(le64_to_cpu(pl_hdr->timestamp)));
+	SSDFS_DUMPFS_DUMP(env, "PEB_CREATION_TIME: %s\n",
+		   ssdfs_nanoseconds_to_time(le64_to_cpu(pl_hdr->peb_create_time)));
 	SSDFS_DUMPFS_DUMP(env, "CHECKPOINT: %llu\n", le64_to_cpu(pl_hdr->cno));
 	SSDFS_DUMPFS_DUMP(env, "LOG_PAGES: %u\n",
 			  le16_to_cpu(pl_hdr->log_pages));

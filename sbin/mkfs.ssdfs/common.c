@@ -371,6 +371,8 @@ int pre_commit_segment_header(struct ssdfs_volume_layout *layout,
 	hdr->peb_migration_id[SSDFS_CUR_MIGRATING_PEB] =
 					SSDFS_PEB_MIGRATION_ID_START;
 
+	hdr->peb_create_time = cpu_to_le64(layout->create_timestamp);
+
 	return 0;
 }
 
@@ -2036,6 +2038,7 @@ void __commit_log_footer(struct ssdfs_volume_layout *layout,
 	footer = (struct ssdfs_log_footer *)extent->buf;
 	footer->volume_state.magic.key = cpu_to_le16(SSDFS_LOG_FOOTER_MAGIC);
 	footer->timestamp = cpu_to_le64(layout->create_timestamp);
+	footer->peb_create_time = cpu_to_le64(layout->create_timestamp);
 	footer->cno = cpu_to_le64(layout->create_cno);
 
 	footer->log_bytes = cpu_to_le32(blks_count * layout->page_size);
@@ -2120,6 +2123,7 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	pl_footer->magic.version.minor = cpu_to_le8(SSDFS_MINOR_REVISION);
 
 	pl_footer->timestamp = cpu_to_le64(layout->create_timestamp);
+	pl_footer->peb_create_time = cpu_to_le64(layout->create_timestamp);
 	pl_footer->cno = cpu_to_le64(layout->create_cno);
 
 	BUG_ON(blks_count >= USHRT_MAX);
