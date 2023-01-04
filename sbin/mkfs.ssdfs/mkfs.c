@@ -48,6 +48,7 @@ static struct ssdfs_volume_layout volume_layout = {
 	.env.open_zones = 0,
 	.page_size = SSDFS_4KB,
 	.nand_dies_count = SSDFS_NAND_DIES_DEFAULT,
+	.lebs_per_peb_index = SSDFS_LEBS_PER_PEB_INDEX_DEFAULT,
 	.migration_threshold = U16_MAX,
 	.compression = SSDFS_ZLIB_BLOB,
 	.inode_size = sizeof(struct ssdfs_inode),
@@ -289,8 +290,10 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 	u32 erase_size = layout->env.erase_size;
 	u32 page_size = layout->page_size;
 	u64 segs_count;
+	u64 pebs_count;
 	u32 pebs_per_seg;
 	u32 pages_per_seg;
+	u64 pebs_per_nand_die;
 	int res;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -377,6 +380,13 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 	}
 
 	pebs_per_seg = seg_size / erase_size;
+
+	if (pebs_per_seg > 1 && layout->nand_dies_count > 1) {
+		pebs_count = fs_size / erase_size;
+		pebs_per_nand_die = pebs_count / layout->nand_dies_count;
+		BUG_ON(pebs_per_nand_die >= U32_MAX);
+		layout->lebs_per_peb_index = (u32)pebs_per_nand_die;
+	}
 
 	if (layout->migration_threshold >= U16_MAX)
 		layout->migration_threshold = pebs_per_seg;

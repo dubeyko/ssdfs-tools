@@ -1268,6 +1268,7 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	u64 ctime;
 	u64 cno;
 	u32 flags = 0;
+	u32 create_threads_per_seg;
 	u32 calculated;
 	int err;
 
@@ -1343,18 +1344,29 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 
 	vh->flags = cpu_to_le32(flags);
 
+	vh->lebs_per_peb_index = cpu_to_le32(layout->lebs_per_peb_index);
+
+	create_threads_per_seg = min_t(u32, layout->nand_dies_count,
+					    pebs_per_seg);
+	BUG_ON(create_threads_per_seg >= U16_MAX);
+
+	vh->create_threads_per_seg = cpu_to_le16((u16)create_threads_per_seg);
+
 	SSDFS_DBG(layout->env.show_debug,
 		  "log_pagesize %d, log_erasesize %d, "
 		  "log_segsize %d, log_pebs_per_seg %d, "
 		  "megabytes_per_peb %u, pebs_per_seg %u, "
-		  "flags %#x\n",
+		  "flags %#x, lebs_per_peb_index %u, "
+		  "create_threads_per_seg %u\n",
 		  le8_to_cpu(vh->log_pagesize),
 		  le8_to_cpu(vh->log_erasesize),
 		  le8_to_cpu(vh->log_segsize),
 		  le8_to_cpu(vh->log_pebs_per_seg),
 		  le16_to_cpu(vh->megabytes_per_peb),
 		  le16_to_cpu(vh->pebs_per_seg),
-		  le32_to_cpu(vh->flags));
+		  le32_to_cpu(vh->flags),
+		  le32_to_cpu(vh->lebs_per_peb_index),
+		  le16_to_cpu(vh->create_threads_per_seg));
 
 	vh->create_time = cpu_to_le64(ctime);
 	vh->create_cno = cpu_to_le64(cno);

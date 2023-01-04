@@ -1228,6 +1228,7 @@ static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 					   u16 sequence_id, u8 area_type,
 					   u32 logical_start_page,
 					   u16 logical_blk,
+					   u16 start_peb_page,
 					   u16 start_id, u16 valid_blks,
 					   u16 rest_blks, u16 *processed_blks)
 {
@@ -1253,15 +1254,15 @@ static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 	blk_desc_fragments = BLK_DESC_TABLE_FRAGMENTS(valid_blks);
 
 	for (i = 0; i < id_count; ++i, ++*processed_blks) {
-		u16 blk_id = start_id + i;
-		u32 byte_offset = define_block_descriptor_offset(blk_id,
+		u32 logical_offset = logical_start_page + i;
+		u32 peb_page = start_peb_page + i;
+		u32 byte_offset = define_block_descriptor_offset(peb_page,
 							blk_desc_fragments);
-		u32 peb_page = logical_start_page + i;
 		u16 blk = logical_blk + i;
 
-		offsets[i].page_desc.logical_offset = cpu_to_le32(peb_page);
+		offsets[i].page_desc.logical_offset = cpu_to_le32(logical_offset);
 		offsets[i].page_desc.logical_blk = cpu_to_le16(blk);
-		offsets[i].page_desc.peb_page = cpu_to_le16(blk_id);
+		offsets[i].page_desc.peb_page = cpu_to_le16(peb_page);
 
 		offsets[i].blk_state.log_start_page = 0;
 		offsets[i].blk_state.log_area = cpu_to_le8(area_type);
@@ -1324,6 +1325,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	u64 logical_start_page;
 	u16 processed_blks = 0;
 	u32 logical_blk;
+	u32 start_peb_page = 0;
 	u16 i;
 
 	BUG_ON(!layout || !extent);
@@ -1369,13 +1371,14 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	tbl_hdr->offset_table_off = cpu_to_le16(tbl_hdr_size);
 	tbl_hdr->fragments_count = cpu_to_le16(fragments_count);
 
+	start_id = start_logical_blk;
+
 	tbl_hdr->sequence[0].logical_blk = cpu_to_le16((u16)start_logical_blk);
-	tbl_hdr->sequence[0].offset_id = 0;
+	tbl_hdr->sequence[0].offset_id = start_id;
 	tbl_hdr->sequence[0].len = cpu_to_le16(valid_blks);
 	tbl_hdr->sequence[0].sequence_id = 0;
 	tbl_hdr->sequence[0].state = cpu_to_le8(SSDFS_LOGICAL_BLK_USED);
 
-	start_id = 0;
 	rest_blks = valid_blks;
 	logical_start_page = logical_byte_offset / layout->page_size;
 	BUG_ON(logical_start_page >= U32_MAX);
@@ -1392,6 +1395,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 						SSDFS_LOG_BLK_DESC_AREA,
 						(u32)logical_start_page,
 						(u16)logical_blk,
+						(u16)start_peb_page,
 						start_id, valid_blks,
 						rest_blks, &processed_blks);
 
@@ -1399,6 +1403,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 		rest_blks -= processed_blks;
 		logical_start_page += processed_blks;
 		logical_blk += processed_blks;
+		start_peb_page += processed_blks;
 		BUG_ON(start_logical_blk >= U16_MAX);
 	}
 
@@ -2219,6 +2224,8 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	pl_footer->log_erasesize = layout->sb.vh.log_erasesize;
 	pl_footer->log_segsize = layout->sb.vh.log_segsize;
 	pl_footer->log_pebs_per_seg = layout->sb.vh.log_pebs_per_seg;
+	pl_footer->lebs_per_peb_index = layout->sb.vh.lebs_per_peb_index;
+	pl_footer->create_threads_per_seg = layout->sb.vh.create_threads_per_seg;
 	pl_footer->open_zones = cpu_to_le32(layout->calculated_open_zones);
 
 	pl_footer->pl_flags = cpu_to_le32(log_flags);

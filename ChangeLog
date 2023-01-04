@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.21 [January 03, 2023]
+    (*) Fix bugs in functionality of supporting multiple PEBs in segment.
+
 v.4.20 [January 02, 2023]
     (*) Implement support PEB creation and last log timestamps.
 

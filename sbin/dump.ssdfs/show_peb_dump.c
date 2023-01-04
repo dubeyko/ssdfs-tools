@@ -1978,6 +1978,8 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	u16 megabytes_per_peb;
 	u32 vh_flags = 0;
 	u32 seg_size;
+	u32 lebs_per_peb_index;
+	u16 create_threads_per_seg;
 	u64 create_time;
 	u64 create_cno;
 	struct ssdfs_leb2peb_pair *pair1, *pair2;
@@ -1993,11 +1995,13 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	erase_size = 1 << vh->log_erasesize;
 	megabytes_per_peb = le16_to_cpu(vh->megabytes_per_peb);
 	seg_size = 1 << vh->log_segsize;
+	lebs_per_peb_index = le32_to_cpu(vh->lebs_per_peb_index);
 	create_time = le64_to_cpu(vh->create_time);
 	create_cno = le64_to_cpu(vh->create_cno);
 	vh_flags = le32_to_cpu(vh->flags);
 	seg_type = le16_to_cpu(hdr->seg_type);
 	seg_flags = le32_to_cpu(hdr->seg_flags);
+	create_threads_per_seg = le16_to_cpu(vh->create_threads_per_seg);
 
 	ssdfs_dumpfs_parse_magic(env, &vh->magic);
 
@@ -2007,6 +2011,9 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
 			  1 << vh->log_pebs_per_seg);
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
+	SSDFS_DUMPFS_DUMP(env, "LEBS_PER_PEB_INDEX: %u\n", lebs_per_peb_index);
+	SSDFS_DUMPFS_DUMP(env, "CREATION_THREADS_PER_SEG: %u\n",
+			  create_threads_per_seg);
 
 	SSDFS_DUMPFS_DUMP(env, "CREATION_TIME: %s\n",
 			   ssdfs_nanoseconds_to_time(create_time));
@@ -2379,6 +2386,8 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	u32 seg_size;
 	u16 seg_type;
 	const char *seg_type_str = NULL;
+	u32 lebs_per_peb_index;
+	u16 create_threads_per_seg;
 	u64 offset;
 	int err = 0;
 
@@ -2399,6 +2408,8 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	erase_size = 1 << pl_hdr->log_erasesize;
 	seg_size = 1 << pl_hdr->log_segsize;
 	seg_type = le16_to_cpu(pl_hdr->seg_type);
+	lebs_per_peb_index = le32_to_cpu(pl_hdr->lebs_per_peb_index);
+	create_threads_per_seg = le16_to_cpu(pl_hdr->create_threads_per_seg);
 
 	SSDFS_DUMPFS_DUMP(env, "PARTIAL LOG HEADER:\n");
 
@@ -2419,7 +2430,8 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
-	SSDFS_DUMPFS_DUMP(env, "CHECKSUM: %#x\n", le32_to_cpu(pl_hdr->check.csum));
+	SSDFS_DUMPFS_DUMP(env, "CHECKSUM: %#x\n",
+			  le32_to_cpu(pl_hdr->check.csum));
 
 	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
 			  le32_to_cpu(pl_hdr->sequence_id));
@@ -2428,9 +2440,13 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
 			  1 << pl_hdr->log_pebs_per_seg);
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
+	SSDFS_DUMPFS_DUMP(env, "LEBS_PER_PEB_INDEX: %u\n",
+			  lebs_per_peb_index);
+	SSDFS_DUMPFS_DUMP(env, "CREATION_THREADS_PER_SEG: %u\n",
+			  create_threads_per_seg);
 
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT NUMBERS: %llu\n",
-					le64_to_cpu(pl_hdr->nsegs));
+						le64_to_cpu(pl_hdr->nsegs));
 	SSDFS_DUMPFS_DUMP(env, "OPEN/ACTIVE ZONES: %u\n",
 					le32_to_cpu(pl_hdr->open_zones));
 	SSDFS_DUMPFS_DUMP(env, "FREE PAGES: %llu\n",

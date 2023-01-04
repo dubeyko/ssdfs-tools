@@ -182,6 +182,9 @@ static void check_pagesize(int pagesize)
 		break;
 
 	default:
+		SSDFS_ERR("Unsupported page size %d. "
+			  "Please, use 4KB, 8KB, 16KB, 32KB.\n",
+			  pagesize);
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -211,6 +214,8 @@ static void check_segsize(u64 segsize)
 		break;
 
 	default:
+		SSDFS_ERR("Unsupported segment size %llu.\n",
+			  segsize);
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -236,6 +241,8 @@ static void check_erasesize(u64 erasesize)
 		break;
 
 	default:
+		SSDFS_ERR("Unsupported erase size %llu.\n",
+			  erasesize);
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -366,6 +373,8 @@ static int get_compression_id(char *value)
 	else if (strcmp(value, "lzo") == 0)
 		id = SSDFS_LZO_BLOB;
 	else {
+		SSDFS_ERR("Unsupported compression type %s.\n",
+			  value);
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -385,6 +394,9 @@ static void check_btree_node_size(int node_size)
 		break;
 
 	default:
+		SSDFS_ERR("Unsupported btree node size %d. "
+			  "Please, use 4KB, 8KB, 16KB, 32KB, 64KB.\n",
+			  node_size);
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -417,6 +429,9 @@ static void check_inode_size(u16 inode_size)
 		break;
 
 	default:
+		SSDFS_ERR("Unsupported inode size %u. "
+			  "Please, use 256 bytes, 512 bytes, 1KB, 2KB, 4KB.\n",
+			  inode_size);
 		print_usage();
 		exit(EXIT_FAILURE);
 	}

@@ -318,6 +318,7 @@ struct ssdfs_write_buffer {
  * @seg_size: segment size in bytes
  * @page_size: page size in bytes
  * @nand_dies_count: NAND dies count on device
+ * @lebs_per_peb_index: difference of LEB IDs between PEB indexes in segment
  * @volume_label: volume label string
  * @create_timestamp: timestamp of file system creation
  * @create_cno: checkpoint of file system creation
@@ -348,6 +349,7 @@ struct ssdfs_volume_layout {
 	u64 seg_size;
 	u32 page_size;
 	u32 nand_dies_count;
+	u32 lebs_per_peb_index;
 	char volume_label[SSDFS_VOLUME_LABEL_MAX];
 	u64 create_timestamp;
 	u64 create_cno;

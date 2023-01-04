@@ -59,9 +59,8 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 			   fragments_per_peb);
 	}
 
-	layout->segbmap.pebs_per_seg = pebs_per_seg;
 	fragments_per_seg = fragments_per_peb * pebs_per_seg;
-	segbmap_segs =  (u8)((fragments + fragments_per_seg - 1) /
+	segbmap_segs = (u8)((fragments + fragments_per_seg - 1) /
 				fragments_per_seg);
 
 	if (segbmap_segs > SSDFS_SEGBMAP_SEGS) {
@@ -70,6 +69,19 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 			  SSDFS_SEGBMAP_SEGS);
 		return -E2BIG;
 	}
+
+	fragments_per_seg = fragments / segbmap_segs;
+	if (fragments_per_seg == 0)
+		fragments_per_seg = 1;
+
+	fragments_per_peb = fragments_per_seg / pebs_per_seg;
+	if (fragments_per_peb == 0)
+		fragments_per_peb = 1;
+
+	layout->segbmap.fragments_per_peb = fragments_per_peb;
+
+	pebs_per_seg = fragments_per_seg / fragments_per_peb;
+	layout->segbmap.pebs_per_seg = pebs_per_seg;
 
 	if (segs_per_chain != segbmap_segs) {
 		segs_per_chain = segbmap_segs;
@@ -94,9 +106,10 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	SSDFS_DBG(layout->env.show_debug,
 		  "segbmap: segs %d, segs_per_chain %u, "
 		  "fragments_count %u, fragment_size %u, "
-		  "fragments_per_peb %u\n",
+		  "fragments_per_peb %u, pebs_per_seg %u\n",
 		  *segs, segs_per_chain, fragments,
-		  fragment_size, fragments_per_peb);
+		  fragment_size, fragments_per_peb,
+		  pebs_per_seg);
 	return seg_state;
 }
 
@@ -264,13 +277,44 @@ int segbmap_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	return 0;
 }
 
-static void define_leb_id(struct ssdfs_segment_desc *desc)
+static void define_leb_id(struct ssdfs_volume_layout *layout,
+			  struct ssdfs_segment_desc *desc)
 {
-	u64 start_leb_id = desc->seg_id * desc->pebs_capacity;
+	u64 start_leb_id;
+	u32 pebs_capacity = desc->pebs_capacity;
 	int i;
 
-	for (i = 0; i < desc->pebs_capacity; i++)
-		desc->pebs[i].leb_id = start_leb_id + i;
+	if (layout->lebs_per_peb_index == SSDFS_LEBS_PER_PEB_INDEX_DEFAULT)
+		start_leb_id = desc->seg_id * desc->pebs_capacity;
+	else
+		start_leb_id = desc->seg_id;
+
+	for (i = 0; i < pebs_capacity; i++) {
+		desc->pebs[i].leb_id = U64_MAX;
+	}
+
+	switch (desc->seg_type) {
+	case SSDFS_INITIAL_SNAPSHOT:
+		pebs_capacity = 1;
+		break;
+
+	case SSDFS_SEGBMAP:
+		pebs_capacity = layout->segbmap.pebs_per_seg;
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
+	for (i = 0; i < pebs_capacity; i++) {
+		desc->pebs[i].leb_id = start_leb_id +
+					(i * layout->lebs_per_peb_index);
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "seg_id %llu, peb_index %d, leb_id %llu\n",
+			  desc->seg_id, i, desc->pebs[i].leb_id);
+	}
 }
 
 static int define_seg_id(struct ssdfs_volume_layout *layout,
@@ -325,7 +369,7 @@ try_fragment:
 
 	desc->seg_id = found_seg;
 
-	define_leb_id(desc);
+	define_leb_id(layout, desc);
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_type %#x, seg_id %llu\n",

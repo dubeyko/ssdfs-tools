@@ -59,7 +59,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		14
+#define SSDFS_MINOR_REVISION		15
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1168,6 +1168,7 @@ struct ssdfs_inode {
  * @create_time: volume create timestamp (mkfs phase)
  * @create_cno: volume create checkpoint
  * @flags: volume creation flags
+ * @lebs_per_peb_index: difference of LEB IDs between PEB indexes in segment
  * @sb_pebs: array of prev, cur and next superblock's PEB numbers
  * @segbmap: superblock's segment bitmap header
  * @maptbl: superblock's mapping table header
@@ -1178,6 +1179,7 @@ struct ssdfs_inode {
  * @hnodes_seg_log_pages: full log size in hybrid nodes segment (pages count)
  * @inodes_seg_log_pages: full log size in index nodes segment (pages count)
  * @user_data_log_pages: full log size in user data segment (pages count)
+ * @create_threads_per_seg: number of creation threads per segment
  * @dentries_btree: descriptor of all dentries btrees
  * @extents_btree: descriptor of all extents btrees
  * @xattr_btree: descriptor of all extended attributes btrees
@@ -1205,7 +1207,7 @@ struct ssdfs_volume_header {
 #define SSDFS_VH_UNALIGNED_ZONE		(1 << 1)
 #define SSDFS_VH_FLAGS_MASK		(0x3)
 	__le32 flags;
-	__le32 reserved2;
+	__le32 lebs_per_peb_index;
 
 /* 0x0030 */
 #define VH_LIMIT1	SSDFS_SB_CHAIN_MAX
@@ -1226,7 +1228,7 @@ struct ssdfs_volume_header {
 	__le16 hnodes_seg_log_pages;
 	__le16 inodes_seg_log_pages;
 	__le16 user_data_log_pages;
-	__le16 reserved3;
+	__le16 create_threads_per_seg;
 
 /* 0x01E0 */
 	struct ssdfs_dentries_btree_descriptor dentries_btree;
@@ -1245,6 +1247,8 @@ struct ssdfs_volume_header {
 
 /* 0x0400 */
 } __attribute__((packed));
+
+#define SSDFS_LEBS_PER_PEB_INDEX_DEFAULT	(1)
 
 /*
  * struct ssdfs_volume_state - changeable part of superblock
@@ -1565,9 +1569,12 @@ struct ssdfs_log_footer {
  * @log_erasesize: log2(erase block size)
  * @log_segsize: log2(segment size)
  * @log_pebs_per_seg: log2(erase blocks per segment)
- * @peb_create_time: PEB creation timestamp
+ * @lebs_per_peb_index: difference of LEB IDs between PEB indexes in segment
+ * @create_threads_per_seg: number of creation threads per segment
  * @snapshots_btree: snapshots btree root
  * @open_zones: number of open/active zones
+ * @peb_create_time: PEB creation timestamp
+ * @invextree: invalidated extents btree root
  *
  * This header is used when the full log needs to be built from several
  * partial logs. The header represents the combination of the most
@@ -1621,14 +1628,18 @@ struct ssdfs_partial_log_header {
 	__le8 log_erasesize;
 	__le8 log_segsize;
 	__le8 log_pebs_per_seg;
-	__le64 peb_create_time;
+	__le32 lebs_per_peb_index;
+	__le16 create_threads_per_seg;
+	__le8 reserved1[0x2];
 
 /* 0x0360 */
 	struct ssdfs_snapshots_btree snapshots_btree;
 
 /* 0x03E0 */
 	__le32 open_zones;
-	__le8 reserved2[0x1C];
+	__le8 reserved2[0x4];
+	__le64 peb_create_time;
+	__le8 reserved3[0x10];
 
 /* 0x0400 */
 	struct ssdfs_invalidated_extents_btree invextree;
