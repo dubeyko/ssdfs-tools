@@ -2923,12 +2923,35 @@ finish_parse_blk_desc_array:
 
 parse_log_footer:
 	if (!(env->peb.parse_flags & SSDFS_PARSE_LOG_FOOTER))
-		goto close_opened_file;
+		goto show_raw_dump;
 
 	err = ssdfs_dumpfs_parse_log_footer(env, buf);
 	if (err) {
 		SSDFS_ERR("fail to parse log footer: err %d\n", err);
 		goto close_opened_file;
+	}
+
+show_raw_dump:
+	if (env->peb.parse_flags == 0 && env->is_raw_dump_requested) {
+		if (env->peb.id == SSDFS_INITIAL_SNAPSHOT_SEG &&
+		    env->peb.log_index == 0) {
+			env->raw_dump.offset = SSDFS_RESERVED_VBR_SIZE;
+		} else {
+			env->raw_dump.offset = offset;
+			env->raw_dump.offset += env->peb.log_offset;
+		}
+
+		env->raw_dump.size = env->peb.log_size;
+
+		err = ssdfs_dumpfs_show_raw_dump(env);
+		if (err) {
+			SSDFS_ERR("fail to make segment header dump: "
+				  "peb_id %llu, err %d\n",
+				  env->peb.id, err);
+			goto close_opened_file;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
 	}
 
 close_opened_file:
@@ -3089,10 +3112,10 @@ finish_parse_blk_desc_array:
 
 parse_log_footer:
 	if (!(env->peb.parse_flags & SSDFS_PARSE_LOG_FOOTER))
-		goto close_opened_file;
+		goto show_raw_dump;
 
 	if (!has_footer)
-		goto close_opened_file;
+		goto show_raw_dump;
 
 	desc = &buf->pl_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
 	area_offset = le32_to_cpu(desc->offset);
@@ -3149,6 +3172,30 @@ finish_parse_log_footer:
 			goto close_opened_file;
 	}
 
+show_raw_dump:
+	if (env->peb.parse_flags == 0 && env->is_raw_dump_requested) {
+
+		if (env->peb.id == SSDFS_INITIAL_SNAPSHOT_SEG &&
+		    env->peb.log_index == 0) {
+			env->raw_dump.offset = SSDFS_RESERVED_VBR_SIZE;
+		} else {
+			env->raw_dump.offset = offset;
+			env->raw_dump.offset += env->peb.log_offset;
+		}
+
+		env->raw_dump.size = env->peb.log_size;
+
+		err = ssdfs_dumpfs_show_raw_dump(env);
+		if (err) {
+			SSDFS_ERR("fail to make segment header dump: "
+				  "peb_id %llu, err %d\n",
+				  env->peb.id, err);
+			goto close_opened_file;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
 close_opened_file:
 	ssdfs_dumpfs_close_file(env);
 
@@ -3199,8 +3246,11 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 
 		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
 		pagesize = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
-		env->peb.pebs_count = env->base.fs_size / env->peb.peb_size;
 		env->peb.logs_count = env->peb.peb_size / pagesize;
+	}
+
+	if (env->peb.pebs_count == U64_MAX) {
+		env->peb.pebs_count = env->base.fs_size / env->peb.peb_size;
 	}
 
 	SSDFS_DUMPFS_INFO(env->base.show_info,

@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.22 [February 20, 2023]
+    (*) [dumpfs] Fix issue with showing the raw dump only.
+
 v.4.21 [January 03, 2023]
     (*) Fix bugs in functionality of supporting multiple PEBs in segment.
 
