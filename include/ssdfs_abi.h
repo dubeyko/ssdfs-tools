@@ -59,7 +59,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		15
+#define SSDFS_MINOR_REVISION		16
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1737,7 +1737,10 @@ struct ssdfs_fragments_chain_header {
 #define SSDFS_BLK_DESC_CHAIN_HDR	0x3
 #define SSDFS_BLK_DESC_ZLIB_CHAIN_HDR	0x4
 #define SSDFS_BLK_DESC_LZO_CHAIN_HDR	0x5
-#define SSDFS_BLK_BMAP_CHAIN_HDR	0x6
+#define SSDFS_BLK2OFF_CHAIN_HDR		0x6
+#define SSDFS_BLK2OFF_ZLIB_CHAIN_HDR	0x7
+#define SSDFS_BLK2OFF_LZO_CHAIN_HDR	0x8
+#define SSDFS_BLK_BMAP_CHAIN_HDR	0x9
 #define SSDFS_CHAIN_HDR_TYPE_MAX	(SSDFS_BLK_BMAP_CHAIN_HDR + 1)
 
 /* Fragments chain flags */
@@ -1784,7 +1787,13 @@ struct ssdfs_fragment_desc {
 #define SSDFS_DATA_BLK_DESC		5
 #define SSDFS_DATA_BLK_DESC_ZLIB	6
 #define SSDFS_DATA_BLK_DESC_LZO		7
-#define SSDFS_NEXT_TABLE_DESC		8
+#define SSDFS_BLK2OFF_EXTENT_DESC	8
+#define SSDFS_BLK2OFF_EXTENT_DESC_ZLIB	9
+#define SSDFS_BLK2OFF_EXTENT_DESC_LZO	10
+#define SSDFS_BLK2OFF_DESC		11
+#define SSDFS_BLK2OFF_DESC_ZLIB		12
+#define SSDFS_BLK2OFF_DESC_LZO		13
+#define SSDFS_NEXT_TABLE_DESC		14
 #define SSDFS_FRAGMENT_DESC_MAX_TYPE	(SSDFS_NEXT_TABLE_DESC + 1)
 
 /* Fragment descriptor flags */
@@ -2044,15 +2053,15 @@ struct ssdfs_blk2off_table_header {
 	struct ssdfs_metadata_check check;
 
 /* 0x0010 */
-	__le16 extents_off;
-	__le16 extents_count;
-	__le16 offset_table_off;
-	__le16 fragments_count;
-
-/* 0x0018 */
-	struct ssdfs_translation_extent sequence[1];
+	struct ssdfs_fragments_chain_header chain_hdr;
 
 /* 0x0020 */
+#define SSDFS_BLK2OFF_FRAG_CHAIN_MAX	(5)
+#define SSDFS_NEXT_BLK2OFF_TBL_INDEX	SSDFS_BLK2OFF_FRAG_CHAIN_MAX
+#define SSDFS_BLK2OFF_TBL_MAX		(SSDFS_BLK2OFF_FRAG_CHAIN_MAX + 1)
+	struct ssdfs_fragment_desc blk[SSDFS_BLK2OFF_TBL_MAX];
+
+/* 0x0080 */
 } __attribute__((packed));
 
 /*

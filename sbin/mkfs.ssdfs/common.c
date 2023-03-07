@@ -690,7 +690,7 @@ static int ssdfs_fragment_descriptor_init(struct ssdfs_fragment_desc *desc,
 	}
 
 	if (type < SSDFS_FRAGMENT_UNCOMPR_BLOB ||
-	    type > SSDFS_FRAGMENT_LZO_BLOB) {
+	    type > SSDFS_BLK2OFF_DESC_LZO) {
 		SSDFS_ERR("invalid type %#x\n", type);
 		return -EINVAL;
 	}
@@ -1167,12 +1167,19 @@ static u16 calculate_offset_table_fragments(u16 valid_blks)
 {
 	u32 offsets_per_fragment;
 	u32 fragments_count;
+	u16 portions_count;
 
 	offsets_per_fragment = OFF_DESC_PER_FRAGMENT();
 
 	fragments_count = valid_blks + offsets_per_fragment - 1;
 	fragments_count /= offsets_per_fragment;
 	BUG_ON(fragments_count >= U16_MAX);
+
+	portions_count = fragments_count + SSDFS_BLK2OFF_TBL_MAX - 1;
+	portions_count /= SSDFS_BLK2OFF_TBL_MAX;
+
+	/* one extent fragment per portion */
+	fragments_count += portions_count;
 
 	return (u16)fragments_count;
 }
@@ -1181,22 +1188,34 @@ static u64 calculate_offset_table_size(u16 fragments, u16 valid_blks)
 {
 	size_t tbl_hdr_size = sizeof(struct ssdfs_blk2off_table_header);
 	size_t hdr_size = sizeof(struct ssdfs_phys_offset_table_header);
+	size_t extent_desc_size = sizeof(struct ssdfs_translation_extent);
 	size_t item_size = sizeof(struct ssdfs_phys_offset_descriptor);
 	u32 offsets_per_fragment;
 	u32 blks_in_last_fragment;
+	u16 portions_count;
+	u32 item_fragments;
 	u64 allocation_size = 0;
 
 	offsets_per_fragment = OFF_DESC_PER_FRAGMENT();
 	blks_in_last_fragment = (u32)valid_blks % offsets_per_fragment;
 
-	/* the whole table header size */
-	allocation_size = tbl_hdr_size;
+	portions_count = fragments + SSDFS_BLK2OFF_TBL_MAX - 1;
+	portions_count /= SSDFS_BLK2OFF_TBL_MAX;
 
-	/* fragments' header size */
-	allocation_size += fragments * hdr_size;
+	item_fragments = fragments - portions_count;
+
+	/* account table header */
+	allocation_size = tbl_hdr_size * portions_count;
+
+	/* account translation extents area */
+	allocation_size += extent_desc_size * portions_count;
+
+	/* account fragments' header size */
+	allocation_size += hdr_size * item_fragments;
 
 	/* items size */
-	allocation_size += (fragments - 1) * (offsets_per_fragment * item_size);
+	allocation_size +=
+		(item_fragments - 1) * (offsets_per_fragment * item_size);
 	allocation_size += blks_in_last_fragment * item_size;
 
 	return allocation_size;
@@ -1312,21 +1331,29 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 				     u16 valid_blks)
 {
 	struct ssdfs_blk2off_table_header *tbl_hdr;
+	struct ssdfs_translation_extent *trans_extent;
+	struct ssdfs_fragment_desc *frag_desc;
 	size_t tbl_hdr_size = sizeof(struct ssdfs_blk2off_table_header);
+	size_t extent_desc_size = sizeof(struct ssdfs_translation_extent);
 	size_t phys_off_hdr_size = sizeof(struct ssdfs_phys_offset_table_header);
 	size_t item_size = sizeof(struct ssdfs_phys_offset_descriptor);
 	u32 pages_per_seg;
 	u32 pages_per_peb;
-	u16 fragments_count;
+	int fragments_count;
+	u32 cur_fragment = 0;
 	u32 allocation_size;
-	u16 offset;
+	u32 offset = 0;
 	u16 start_id;
 	u16 rest_blks;
 	u64 logical_start_page;
 	u16 processed_blks = 0;
 	u32 logical_blk;
+	u16 portions_count;
+	u8 type;
+	u16 flags;
 	u32 start_peb_page = 0;
-	u16 i;
+	u16 i, j;
+	int err;
 
 	BUG_ON(!layout || !extent);
 	BUG_ON(extent->buf);
@@ -1348,8 +1375,19 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	}
 
 	fragments_count = calculate_offset_table_fragments(valid_blks);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "valid_blks %u, fragments_count %d\n",
+		  valid_blks, fragments_count);
+
 	allocation_size = calculate_offset_table_size(fragments_count,
 							valid_blks);
+	portions_count = fragments_count + SSDFS_BLK2OFF_TBL_MAX - 1;
+	portions_count /= SSDFS_BLK2OFF_TBL_MAX;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "allocation_size %u, portions_count %u\n",
+		  allocation_size, portions_count);
 
 	extent->buf = calloc(1, allocation_size);
 	if (!extent->buf) {
@@ -1358,53 +1396,146 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 		return -ENOMEM;
 	}
 
-	tbl_hdr = (struct ssdfs_blk2off_table_header *)extent->buf;
-
-	tbl_hdr->magic.common = cpu_to_le32(SSDFS_SUPER_MAGIC);
-	tbl_hdr->magic.key = cpu_to_le16(SSDFS_BLK2OFF_TABLE_HDR_MAGIC);
-	tbl_hdr->magic.version.major = cpu_to_le8(SSDFS_MAJOR_REVISION);
-	tbl_hdr->magic.version.minor = cpu_to_le8(SSDFS_MINOR_REVISION);
-
-	offset = offsetof(struct ssdfs_blk2off_table_header, sequence);
-	tbl_hdr->extents_off = cpu_to_le16(offset);
-	tbl_hdr->extents_count = cpu_to_le16(1);
-	tbl_hdr->offset_table_off = cpu_to_le16(tbl_hdr_size);
-	tbl_hdr->fragments_count = cpu_to_le16(fragments_count);
-
-	start_id = start_logical_blk;
-
-	tbl_hdr->sequence[0].logical_blk = cpu_to_le16((u16)start_logical_blk);
-	tbl_hdr->sequence[0].offset_id = start_id;
-	tbl_hdr->sequence[0].len = cpu_to_le16(valid_blks);
-	tbl_hdr->sequence[0].sequence_id = 0;
-	tbl_hdr->sequence[0].state = cpu_to_le8(SSDFS_LOGICAL_BLK_USED);
-
+	start_id = 0;
 	rest_blks = valid_blks;
 	logical_start_page = logical_byte_offset / layout->page_size;
 	BUG_ON(logical_start_page >= U32_MAX);
 	logical_blk = start_logical_blk;
-	for (i = 0; i < fragments_count; i++) {
-		u8 *fragment;
 
-		fragment = (u8 *)extent->buf + tbl_hdr_size +
-				(i * (phys_off_hdr_size +
-					(processed_blks * item_size)));
+	for (i = 0; i < portions_count; i++) {
+		u32 portion_offset = offset;
+		u32 portion_size;
 
-		prepare_offsets_table_fragment(fragment, pages_per_seg,
-						peb_index, i,
-						SSDFS_LOG_BLK_DESC_AREA,
-						(u32)logical_start_page,
-						(u16)logical_blk,
-						(u16)start_peb_page,
-						start_id, valid_blks,
-						rest_blks, &processed_blks);
+		tbl_hdr = BLK2OFF_TBL_HDR((u8 *)extent->buf + offset);
 
-		start_id += processed_blks;
-		rest_blks -= processed_blks;
-		logical_start_page += processed_blks;
-		logical_blk += processed_blks;
-		start_peb_page += processed_blks;
-		BUG_ON(start_logical_blk >= U16_MAX);
+		tbl_hdr->magic.common = cpu_to_le32(SSDFS_SUPER_MAGIC);
+		tbl_hdr->magic.key = cpu_to_le16(SSDFS_BLK2OFF_TABLE_HDR_MAGIC);
+		tbl_hdr->magic.version.major = cpu_to_le8(SSDFS_MAJOR_REVISION);
+		tbl_hdr->magic.version.minor = cpu_to_le8(SSDFS_MINOR_REVISION);
+
+		offset += tbl_hdr_size;
+		j = 0;
+
+		if (i == 0) {
+			trans_extent = TRANS_EXTENT((u8 *)extent->buf + offset);
+
+			trans_extent->logical_blk =
+				cpu_to_le16((u16)start_logical_blk);
+			trans_extent->offset_id = 0;
+			trans_extent->len = cpu_to_le16(valid_blks);
+			trans_extent->sequence_id = 0;
+			trans_extent->state = cpu_to_le8(SSDFS_LOGICAL_BLK_USED);
+
+			frag_desc = &tbl_hdr->blk[j];
+			type = SSDFS_BLK2OFF_EXTENT_DESC;
+			flags = SSDFS_FRAGMENT_HAS_CSUM;
+
+			err = ssdfs_fragment_descriptor_init(frag_desc,
+							(u8 *)trans_extent,
+							offset,
+							(u16)extent_desc_size,
+							(u16)extent_desc_size,
+							(u8)cur_fragment,
+							type,
+							flags);
+			if (err) {
+				SSDFS_ERR("fail to init fragment descriptor: "
+					  "fragment_index %u, err %d\n",
+					  cur_fragment, err);
+				return err;
+			}
+
+			cur_fragment++;
+			fragments_count--;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "cur_fragment %u, fragments_count %d\n",
+				  cur_fragment, fragments_count);
+
+			offset += extent_desc_size;
+			j++;
+		}
+
+		for (/* initialized above */; j < SSDFS_BLK2OFF_TBL_MAX; j++) {
+			u8 *fragment;
+			u32 frag_size;
+
+			if (fragments_count < 0) {
+				SSDFS_ERR("invalid fragments_count %d\n",
+					  fragments_count);
+				return -ERANGE;
+			} else if (fragments_count == 0)
+				break;
+
+			fragment = (u8 *)extent->buf + offset;
+
+			prepare_offsets_table_fragment(fragment, pages_per_seg,
+							peb_index, cur_fragment,
+							SSDFS_LOG_BLK_DESC_AREA,
+							(u32)logical_start_page,
+							(u16)logical_blk,
+							(u16)start_peb_page,
+							start_id, valid_blks,
+							rest_blks,
+							&processed_blks);
+
+			frag_desc = &tbl_hdr->blk[j];
+			frag_size = phys_off_hdr_size +
+					(processed_blks * item_size);
+			type = SSDFS_BLK2OFF_DESC;
+			flags = SSDFS_FRAGMENT_HAS_CSUM;
+
+			err = ssdfs_fragment_descriptor_init(frag_desc,
+							     fragment,
+							     offset,
+							     (u16)frag_size,
+							     (u16)frag_size,
+							     (u8)cur_fragment,
+							     type, flags);
+			if (err) {
+				SSDFS_ERR("fail to init fragment descriptor: "
+					  "fragment_index %u, err %d\n",
+					  cur_fragment, err);
+				return err;
+			}
+
+			start_id += processed_blks;
+			rest_blks -= processed_blks;
+			logical_start_page += processed_blks;
+			logical_blk += processed_blks;
+			start_peb_page += processed_blks;
+			BUG_ON(start_logical_blk >= U16_MAX);
+
+			offset += frag_size;
+
+			cur_fragment++;
+			fragments_count--;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "cur_fragment %u, fragments_count %d\n",
+				  cur_fragment, fragments_count);
+		}
+
+		tbl_hdr->chain_hdr.magic = cpu_to_le8(SSDFS_CHAIN_HDR_MAGIC);
+		tbl_hdr->chain_hdr.type = cpu_to_le8(SSDFS_BLK2OFF_CHAIN_HDR);
+
+		if ((i + 1) < portions_count) {
+			tbl_hdr->chain_hdr.flags =
+				cpu_to_le16(SSDFS_MULTIPLE_HDR_CHAIN);
+		}
+
+		tbl_hdr->chain_hdr.desc_size =
+			cpu_to_le16(sizeof(struct ssdfs_fragment_desc));
+		tbl_hdr->chain_hdr.fragments_count = cpu_to_le16((u16)j);
+
+		portion_size = offset - portion_offset;
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "portion_offset %u, offset %u, portion_size %u\n",
+			  portion_offset, offset, portion_size);
+
+		tbl_hdr->chain_hdr.compr_bytes = cpu_to_le32(portion_size);
+		tbl_hdr->chain_hdr.uncompr_bytes = cpu_to_le32(portion_size);
 	}
 
 	extent->bytes_count = allocation_size;
@@ -1492,6 +1623,7 @@ static void __commit_offset_table(struct ssdfs_volume_layout *layout,
 				  struct ssdfs_extent_desc *extent)
 {
 	struct ssdfs_blk2off_table_header *tbl_hdr;
+	size_t hdr_size = sizeof(struct ssdfs_blk2off_table_header);
 	u16 bytes_count;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -1503,10 +1635,10 @@ static void __commit_offset_table(struct ssdfs_volume_layout *layout,
 
 	tbl_hdr = (struct ssdfs_blk2off_table_header *)extent->buf;
 
-	tbl_hdr->check.bytes = tbl_hdr->offset_table_off;
+	tbl_hdr->check.bytes = le16_to_cpu(hdr_size);
 	tbl_hdr->check.flags = cpu_to_le16(SSDFS_CRC32);
 
-	bytes_count = le16_to_cpu(tbl_hdr->offset_table_off);
+	bytes_count = hdr_size;
 	tbl_hdr->check.csum = 0;
 	tbl_hdr->check.csum = ssdfs_crc32_le(extent->buf, bytes_count);
 }

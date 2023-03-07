@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.23 [March 06, 2023]
+    (*) Introduce blk2off table compression support.
+
 v.4.22 [February 20, 2023]
     (*) [dumpfs] Fix issue with showing the raw dump only.
 

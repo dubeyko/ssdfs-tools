@@ -403,9 +403,9 @@ struct ssdfs_mkfs_operations {
 };
 
 #define OFF_DESC_PER_FRAGMENT() \
-	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_blk2off_table_header) - \
-	 sizeof(struct ssdfs_phys_offset_table_header)) / \
-	 sizeof(struct ssdfs_phys_offset_descriptor))
+	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_translation_extent) - \
+		sizeof(struct ssdfs_phys_offset_table_header)) / \
+			sizeof(struct ssdfs_phys_offset_descriptor))
 
 #define OFF_DESC_HEADER_SIZE(fragments_count) \
 	(sizeof(struct ssdfs_block_state_descriptor) + \
@@ -417,6 +417,11 @@ struct ssdfs_mkfs_operations {
 
 #define BLK_DESC_TABLE_FRAGMENTS(blks_count) \
 	((blks_count + BLK_DESC_PER_FRAGMENT() - 1) / BLK_DESC_PER_FRAGMENT())
+
+#define BLK2OFF_TBL_HDR(ptr) \
+	((struct ssdfs_blk2off_table_header *)(ptr))
+#define TRANS_EXTENT(ptr) \
+	((struct ssdfs_translation_extent *)(ptr))
 
 static inline
 int META2SEG_TYPE(int meta_index)
