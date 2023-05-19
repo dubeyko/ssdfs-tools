@@ -3,13 +3,14 @@
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 AC_PREREQ([2.69])
-AC_INIT(ssdfs-utils, 4.23, slava@dubeyko.com)
+AC_INIT(ssdfs-utils, 4.24, slava@dubeyko.com)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([include/ssdfs_abi.h])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
 # Checks for programs.
+LT_INIT
 AC_PROG_CXX
 AC_PROG_AWK
 AC_PROG_CC

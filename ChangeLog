@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.24 [March 19, 2023]
+    (*) [dumpfs] Implement decompression of blk2off table.
+
 v.4.23 [March 06, 2023]
     (*) Introduce blk2off table compression support.
 

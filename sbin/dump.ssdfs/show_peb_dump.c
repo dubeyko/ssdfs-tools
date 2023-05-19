@@ -606,7 +606,10 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 	for (i = 0; i < fragments_count; i++) {
 		struct ssdfs_fragment_desc *frag;
-		u8 *data;
+		u8 *data = NULL;
+		u8 *uncompr_data = NULL;
+		u32 compr_size;
+		u32 uncompr_size;
 
 		if (i > 0 && ((size - *parsed_bytes) < frag_desc_size)) {
 			SSDFS_ERR("size %u is lesser than %zu\n",
@@ -624,22 +627,65 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 		ssdfs_dumpfs_parse_fragment_header(env, frag);
 
-		if ((size - *parsed_bytes) < le16_to_cpu(frag->compr_size)) {
+		compr_size = le16_to_cpu(frag->compr_size);
+		uncompr_size = le16_to_cpu(frag->uncompr_size);
+
+		if ((size - *parsed_bytes) < compr_size) {
 			SSDFS_ERR("size %u is lesser than %u\n",
 				  size - *parsed_bytes,
-				  le16_to_cpu(frag->compr_size));
+				  compr_size);
 			return -EINVAL;
 		}
 
 		if (!env->is_raw_dump_requested)
 			continue;
 
-		data = (u8 *)area_buf + offset + *parsed_bytes;
+		switch (frag->type) {
+		case SSDFS_FRAGMENT_UNCOMPR_BLOB:
+			data = (u8 *)area_buf + offset + *parsed_bytes;
+			raw_data_bytes = compr_size;
+			break;
+
+		case SSDFS_FRAGMENT_ZLIB_BLOB:
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				SSDFS_ERR("fail to allocate memory\n");
+
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+				raw_data_bytes = compr_size;
+			} else {
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+
+				res = ssdfs_zlib_decompress(data,
+							    uncompr_data,
+							    compr_size,
+							    uncompr_size,
+							    env->base.show_debug);
+				if (res) {
+					SSDFS_ERR("fail to decompress: err %d\n",
+						  res);
+					raw_data_bytes = compr_size;
+				} else {
+					data = uncompr_data;
+					raw_data_bytes = uncompr_size;
+				}
+			}
+			break;
+
+/*
+		case SSDFS_FRAGMENT_LZO_BLOB:
+			break;
+*/
+
+		default:
+			data = (u8 *)area_buf + offset + *parsed_bytes;
+			raw_data_bytes = compr_size;
+			break;
+		}
 
 		SSDFS_DUMPFS_DUMP(env, "RAW DATA:\n");
 
 		displayed_bytes = 0;
-		raw_data_bytes = le16_to_cpu(frag->compr_size);
 
 		do {
 			u8 *ptr = data + displayed_bytes;
@@ -660,7 +706,10 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 			displayed_bytes += res;
 		} while (displayed_bytes < raw_data_bytes);
 
-		*parsed_bytes += raw_data_bytes;
+		if (uncompr_data)
+			free(uncompr_data);
+
+		*parsed_bytes += compr_size;
 
 		SSDFS_DBG(env->base.show_debug,
 			  "offset %u, size %u, "
@@ -865,6 +914,7 @@ finish_parse_block_bitmap_area:
 
 static
 int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *env,
+					      struct ssdfs_fragment_desc *frag_desc,
 					      void *area_buf, u32 area_size,
 					      u32 *parsed_bytes)
 {
@@ -872,21 +922,79 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 	size_t pot_desc_size = sizeof(struct ssdfs_phys_offset_table_header);
 	struct ssdfs_phys_offset_descriptor *off_desc = NULL;
 	size_t off_desc_size = sizeof(struct ssdfs_phys_offset_descriptor);
+	u8 *fragment = NULL;
+	u8 *uncompr_data = NULL;
+	u32 compr_size;
+	u32 uncompr_size;
 	u32 byte_size;
 	u16 start_id;
 	u16 id_count;
-	u16 flags;
+	u16 flags = 0;
 	u32 pot_magic;
 	u8 *magic_common;
 	int i;
+	int err = 0;
 
-	if (area_size < pot_desc_size) {
-		SSDFS_ERR("area_size %u, pot_desc_size %zu\n",
-			  area_size, pot_desc_size);
+	SSDFS_DBG(env->base.show_debug,
+		  "area_size %u\n",
+		  area_size);
+
+	compr_size = le16_to_cpu(frag_desc->compr_size);
+	uncompr_size = le16_to_cpu(frag_desc->uncompr_size);
+
+	if (area_size < compr_size) {
+		SSDFS_ERR("area_size %u < compr_size %u\n",
+			  area_size, compr_size);
 		return -EINVAL;
 	}
 
-	pot_table = (struct ssdfs_phys_offset_table_header *)area_buf;
+	switch (frag_desc->type) {
+	case SSDFS_BLK2OFF_DESC:
+		fragment = area_buf;
+		break;
+
+	case SSDFS_BLK2OFF_DESC_ZLIB:
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory\n");
+			goto finish_parse_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_zlib_decompress(fragment, uncompr_data,
+					    compr_size, uncompr_size,
+					    env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			goto free_buffer;
+		}
+
+		fragment = uncompr_data;
+		break;
+
+	case SSDFS_BLK2OFF_DESC_LZO:
+		SSDFS_DUMPFS_DUMP(env,
+			    "COMPRESSED STATE IS NOT SUPPORTED YET\n");
+		*parsed_bytes += compr_size;
+		goto finish_parse_fragment;
+
+	default:
+		err = -ERANGE;
+		SSDFS_ERR("unexpected fragment type %#x\n",
+			  frag_desc->type);
+		goto finish_parse_fragment;
+	}
+
+	if (compr_size < pot_desc_size) {
+		SSDFS_ERR("compr_size %u < pot_desc_size %zu\n",
+			  compr_size, pot_desc_size);
+		return -EINVAL;
+	}
+
+	pot_table = (struct ssdfs_phys_offset_table_header *)fragment;
 	SSDFS_DUMPFS_DUMP(env, "PHYSICAL OFFSETS TABLE HEADER:\n");
 	start_id = le16_to_cpu(pot_table->start_id);
 	SSDFS_DUMPFS_DUMP(env, "START_ID: %u\n", start_id);
@@ -946,21 +1054,21 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
-	if (area_size < byte_size) {
-		SSDFS_ERR("area_size %u, byte_size %u\n",
-			  area_size, byte_size);
+	if (uncompr_size < byte_size) {
+		SSDFS_ERR("uncompr_size %u < byte_size %u\n",
+			  uncompr_size, byte_size);
 		return -EINVAL;
 	}
 
-	if (area_size < (off_desc_size * id_count)) {
-		SSDFS_ERR("area_size %u, id_count %u, off_desc_size %zu\n",
-			  area_size, id_count, off_desc_size);
+	if (uncompr_size < (off_desc_size * id_count)) {
+		SSDFS_ERR("uncompr_size %u, id_count %u, off_desc_size %zu\n",
+			  uncompr_size, id_count, off_desc_size);
 		return -ERANGE;
 	}
 
 	for (i = 0; i < id_count; i++) {
 		off_desc =
-			(struct ssdfs_phys_offset_descriptor *)((u8*)area_buf +
+			(struct ssdfs_phys_offset_descriptor *)((u8*)fragment +
 							pot_desc_size +
 							(off_desc_size * i));
 
@@ -1011,12 +1119,133 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
-	*parsed_bytes += byte_size;
+	*parsed_bytes += compr_size;
+
+free_buffer:
+	if (uncompr_data)
+		free(uncompr_data);
 
 	if (flags & SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT)
 		return -EAGAIN;
 
-	return 0;
+finish_parse_fragment:
+	return err;
+}
+
+static
+int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
+					struct ssdfs_fragment_desc *frag_desc,
+					void *area_buf, u32 area_size,
+					u32 *parsed_bytes)
+{
+	struct ssdfs_translation_extent *extents = NULL;
+	size_t extent_desc_size = sizeof(struct ssdfs_translation_extent);
+	u8 *fragment = NULL;
+	u32 extents_count;
+	u8 *uncompr_data = NULL;
+	u32 compr_size;
+	u32 uncompr_size;
+	u32 fragment_size = 0;
+	int i;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "area_size %u\n",
+		  area_size);
+
+	compr_size = le16_to_cpu(frag_desc->compr_size);
+	uncompr_size = le16_to_cpu(frag_desc->uncompr_size);
+
+	switch (frag_desc->type) {
+	case SSDFS_BLK2OFF_EXTENT_DESC:
+		fragment = (u8 *)area_buf + *parsed_bytes;
+		fragment_size = compr_size;
+		extents_count = fragment_size / extent_desc_size;
+		break;
+
+	case SSDFS_BLK2OFF_EXTENT_DESC_ZLIB:
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory\n");
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = (u8 *)area_buf + *parsed_bytes;
+
+		err = ssdfs_zlib_decompress(fragment, uncompr_data,
+					    compr_size, uncompr_size,
+					    env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			goto free_buffer;
+		}
+
+		fragment = uncompr_data;
+		fragment_size = uncompr_size;
+		extents_count = fragment_size / extent_desc_size;
+		break;
+
+	case SSDFS_BLK2OFF_EXTENT_DESC_LZO:
+		SSDFS_DUMPFS_DUMP(env,
+				  "COMPRESSED STATE IS NOT SUPPORTED YET\n");
+		*parsed_bytes += compr_size;
+		goto finish_parse_extent_fragment;
+
+	default:
+		err = -ERANGE;
+		SSDFS_ERR("unexpected fragment type %#x\n",
+			  frag_desc->type);
+		goto finish_parse_extent_fragment;
+	}
+
+	SSDFS_DBG(env->base.show_debug,
+		  "fragment_size %u, extents_count %u\n",
+		  fragment_size, extents_count);
+
+	extents = (struct ssdfs_translation_extent *)fragment;
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	for (i = 0; i < extents_count; i++) {
+		SSDFS_DUMPFS_DUMP(env, "EXTENT#%d:\n", i);
+		SSDFS_DUMPFS_DUMP(env, "LOGICAL BLOCK: %u\n",
+				  le16_to_cpu(extents[i].logical_blk));
+		SSDFS_DUMPFS_DUMP(env, "OFFSET_ID: %u\n",
+				  le16_to_cpu(extents[i].offset_id));
+		SSDFS_DUMPFS_DUMP(env, "LENGTH: %u\n",
+				  le16_to_cpu(extents[i].len));
+		SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
+				  extents[i].sequence_id);
+
+		switch (extents[i].state) {
+		case SSDFS_LOGICAL_BLK_FREE:
+			SSDFS_DUMPFS_DUMP(env,
+				"EXTENT STATE: SSDFS_LOGICAL_BLK_FREE\n");
+			break;
+
+		case SSDFS_LOGICAL_BLK_USED:
+			SSDFS_DUMPFS_DUMP(env,
+				"EXTENT STATE: SSDFS_LOGICAL_BLK_USED\n");
+			break;
+
+		default:
+			SSDFS_DUMPFS_DUMP(env, "EXTENT STATE: UNKNOWN\n");
+			break;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
+	*parsed_bytes += compr_size;
+
+free_buffer:
+	if (uncompr_data)
+		free(uncompr_data);
+
+finish_parse_extent_fragment:
+	return err;
 }
 
 static
@@ -1026,18 +1255,18 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 	struct ssdfs_blk2off_table_header *hdr;
 	struct ssdfs_fragment_desc *frag_desc;
 	size_t hdr_size = sizeof(struct ssdfs_blk2off_table_header);
-	struct ssdfs_translation_extent *extents = NULL;
-	size_t extent_desc_size = sizeof(struct ssdfs_translation_extent);
 	u8 *fragment = NULL;
 	u16 flags;
-	u32 extents_count;
 	u32 parsed_bytes = 0;
 	int next_fragment_exist = SSDFS_FALSE;
 	int hdr_index = 0;
 	u16 fragments_count;
-	u32 fragment_size;
-	int i, j;
+	int i;
 	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "area_size %u\n",
+		  area_size);
 
 	if (area_size < hdr_size) {
 		SSDFS_ERR("area_size %u < hdr_size %zu\n",
@@ -1111,65 +1340,27 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 
 			switch (frag_desc->type) {
 			case SSDFS_BLK2OFF_EXTENT_DESC:
-				if (parsed_bytes > area_size) {
-					SSDFS_ERR("parsed_bytes %u > area_size %u\n",
-						  parsed_bytes, area_size);
-					return -E2BIG;
-				}
-
-				fragment = (u8 *)area_buf + parsed_bytes;
-				fragment_size = le16_to_cpu(frag_desc->compr_size);
-				extents_count = fragment_size / extent_desc_size;
-
-				SSDFS_DBG(env->base.show_debug,
-					  "fragment_size %u, extents_count %u\n",
-					  fragment_size, extents_count);
-
-				extents = (struct ssdfs_translation_extent *)fragment;
-
-				SSDFS_DUMPFS_DUMP(env, "\n");
-
-				for (j = 0; j < extents_count; j++) {
-					SSDFS_DUMPFS_DUMP(env, "EXTENT#%d:\n", j);
-					SSDFS_DUMPFS_DUMP(env, "LOGICAL BLOCK: %u\n",
-						    le16_to_cpu(extents[j].logical_blk));
-					SSDFS_DUMPFS_DUMP(env, "OFFSET_ID: %u\n",
-						    le16_to_cpu(extents[j].offset_id));
-					SSDFS_DUMPFS_DUMP(env, "LENGTH: %u\n",
-						    le16_to_cpu(extents[j].len));
-					SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
-						    extents[j].sequence_id);
-
-					switch (extents[j].state) {
-					case SSDFS_LOGICAL_BLK_FREE:
-						SSDFS_DUMPFS_DUMP(env,
-							"EXTENT STATE: SSDFS_LOGICAL_BLK_FREE\n");
-						break;
-
-					case SSDFS_LOGICAL_BLK_USED:
-						SSDFS_DUMPFS_DUMP(env,
-							"EXTENT STATE: SSDFS_LOGICAL_BLK_USED\n");
-						break;
-
-					default:
-						SSDFS_DUMPFS_DUMP(env, "EXTENT STATE: UNKNOWN\n");
-						break;
-					}
-
-					SSDFS_DUMPFS_DUMP(env, "\n");
-				}
-
-				parsed_bytes += fragment_size;
-				break;
-
 			case SSDFS_BLK2OFF_EXTENT_DESC_ZLIB:
 			case SSDFS_BLK2OFF_EXTENT_DESC_LZO:
-				SSDFS_DUMPFS_DUMP(env,
-				    "COMPRESSED STATE IS NOT SUPPORTED YET\n");
-				parsed_bytes += le16_to_cpu(frag_desc->compr_size);
+				err = ssdfs_dumpfs_parse_extents_fragment(env,
+								    frag_desc,
+								    area_buf,
+								    area_size,
+								    &parsed_bytes);
+				if (err) {
+					SSDFS_ERR("fail to parse fragment: "
+						  "index %d,  err %d\n",
+						  i, err);
+				}
 				break;
 
 			case SSDFS_BLK2OFF_DESC:
+			case SSDFS_BLK2OFF_DESC_ZLIB:
+			case SSDFS_BLK2OFF_DESC_LZO:
+				SSDFS_DBG(env->base.show_debug,
+					  "area_size %u\n",
+					  area_size);
+
 				if (parsed_bytes > area_size) {
 					SSDFS_ERR("parsed_bytes %u > area_size %u\n",
 						  parsed_bytes, area_size);
@@ -1178,7 +1369,8 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 
 				fragment = (u8 *)area_buf + parsed_bytes;
 				err = ssdfs_dumpfs_parse_blk2off_table_fragment(env,
-						fragment, area_size - parsed_bytes,
+						frag_desc, fragment,
+						area_size - parsed_bytes,
 						&parsed_bytes);
 				if (err == -EAGAIN) {
 					/* continue logic */
@@ -1187,13 +1379,6 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 						  err);
 					return err;
 				}
-				break;
-
-			case SSDFS_BLK2OFF_DESC_ZLIB:
-			case SSDFS_BLK2OFF_DESC_LZO:
-				SSDFS_DUMPFS_DUMP(env,
-				    "COMPRESSED STATE IS NOT SUPPORTED YET\n");
-				parsed_bytes += le16_to_cpu(frag_desc->compr_size);
 				break;
 
 			case SSDFS_NEXT_TABLE_DESC:
@@ -1205,6 +1390,10 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 
 		hdr_index++;
 	} while (next_fragment_exist == SSDFS_TRUE);
+
+	SSDFS_DBG(env->base.show_debug,
+		  "area_size %u\n",
+		  area_size);
 
 	if (area_size < parsed_bytes) {
 		SSDFS_ERR("area_size %u, parsed_bytes %u\n",
@@ -1227,6 +1416,10 @@ int ssdfs_dumpfs_parse_blk2off_area(struct ssdfs_dumpfs_environment *env,
 
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
+
+	SSDFS_DBG(env->base.show_debug,
+		  "area_offset %u, area_size %u\n",
+		  area_offset, area_size);
 
 	if (is_ssdfs_dumpfs_area_valid(desc)) {
 		area_buf = malloc(area_size);
@@ -1794,7 +1987,7 @@ int ssdfs_dumpfs_parse_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 	u16 fragments_count;
 	u32 parsed_bytes = 0;
 	int i;
-	int err;
+	int err = 0;
 
 	if (area_size < area_hdr_size) {
 		SSDFS_ERR("area_size %u < area_hdr_size %zu\n",
@@ -1822,7 +2015,9 @@ parse_next_area:
 	}
 
 	for (i = 0; i < fragments_count; i++) {
-		u8 *data;
+		u8 *data = NULL;
+		u8 *uncompr_data = NULL;
+		u32 compr_size, uncompr_size;
 
 		frag = &area_hdr->blk[i];
 
@@ -1831,26 +2026,48 @@ parse_next_area:
 
 		ssdfs_dumpfs_parse_fragment_header(env, frag);
 
-		if ((area_size - parsed_bytes) < le16_to_cpu(frag->compr_size)) {
+		compr_size = le16_to_cpu(frag->compr_size);
+		uncompr_size = le16_to_cpu(frag->uncompr_size);
+
+		if ((area_size - parsed_bytes) < compr_size) {
 			SSDFS_ERR("size %u is lesser than %u\n",
 				  area_size - parsed_bytes,
-				  le16_to_cpu(frag->compr_size));
+				  compr_size);
 			return -EINVAL;
 		}
 
 		switch (area_hdr->chain_hdr.type) {
 		case SSDFS_BLK_DESC_ZLIB_CHAIN_HDR:
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				err = -ENOMEM;
+				SSDFS_ERR("fail to allocate memory\n");
+				goto finish_parse_fragment;
+			}
+
+			data = (u8 *)area_buf + parsed_bytes;
+
+			err = ssdfs_zlib_decompress(data, uncompr_data,
+						    compr_size, uncompr_size,
+						    env->base.show_debug);
+			if (err) {
+				SSDFS_ERR("fail to decompress: err %d\n",
+					  err);
+				goto finish_parse_fragment;
+			}
+
+			data = uncompr_data;
+			break;
+
 		case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
 			SSDFS_DUMPFS_DUMP(env,
 				"COMPRESSED STATE IS NOT SUPPORTED YET\n");
 			goto finish_parse_fragment;
 
 		default:
-			/* do nothing */
+			data = (u8 *)area_buf + parsed_bytes;
 			break;
 		}
-
-		data = (u8 *)area_buf + parsed_bytes;
 
 		SSDFS_DUMPFS_DUMP(env, "\n");
 
@@ -1860,11 +2077,13 @@ parse_next_area:
 		if (err) {
 			SSDFS_ERR("fail to parse block descriptors: "
 				  "err %d\n", err);
-			return err;
 		}
 
 finish_parse_fragment:
-		parsed_bytes += le16_to_cpu(frag->compr_size);
+		parsed_bytes += compr_size;
+
+		if (uncompr_data)
+			free(uncompr_data);
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
