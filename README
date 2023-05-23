@@ -6,7 +6,9 @@ SSDFS is flash-friendly file system is designed with the goals:
  (1) take into account the open-channel SSD model;
  (2) decrease as much as possible the write amplification issue;
  (3) decrease as much as possible the GC activity;
- (4) widely use the compression, delta-encoding, and deduplication.
+ (4) widely use the compression, delta-encoding, and deduplication,
+ (5) prolong SSD lifetime,
+ (6) decrease TCO cost of data infrastructure.
 
 * TOOLS
 
@@ -15,7 +17,9 @@ SSDFS is flash-friendly file system is designed with the goals:
  (3) fsck.ssdfs   - file system checking and recovering utility (not implemented).
  (4) tunefs.ssdfs - file system volume's tuning utility (not implemented).
  (5) resize.ssdfs - file system volume's resize utility (not implemented).
- (6) snap.ssdfs   - snapshots management utility (not implemented).
+ (6) snapshotfs.ssdfs - snapshots management utility.
+ (7) recoverfs.ssdfs - extract data from corrupted volume.
+ (8) test.ssdfs - unit-tests for SSDFS file system.
 
 * BEFORE COMPILATION
 
@@ -32,3 +36,5 @@ SSDFS is flash-friendly file system is designed with the goals:
  $ ./autogen.sh
  $ ./configure
  $ make
+
+Please, see wiki (https://github.com/dubeyko/ssdfs-tools/wiki) for more details.
