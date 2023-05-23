@@ -1275,11 +1275,17 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 	}
 
 	do {
+		next_fragment_exist = SSDFS_FALSE;
+
 		if (parsed_bytes > area_size) {
 			SSDFS_ERR("parsed_bytes %u > area_size %u\n",
 				  parsed_bytes, area_size);
 			return -E2BIG;
 		}
+
+		SSDFS_DBG(env->base.show_debug,
+			  "parsed_bytes %u\n",
+			  parsed_bytes);
 
 		hdr = (struct ssdfs_blk2off_table_header *)((u8 *)area_buf +
 								parsed_bytes);
@@ -1334,6 +1340,8 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 			SSDFS_ERR("unexpected flags set %#x\n",
 				  flags);
 		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
 
 		for (i = 0; i < fragments_count; i++) {
 			frag_desc = &hdr->blk[i];
