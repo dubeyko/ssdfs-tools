@@ -44,26 +44,37 @@ int bdev_erase(int fd, u64 offset, size_t size,
 	u64 erased_bytes = 0;
 	int err;
 
-	if (ioctl(fd, BLKDISCARD, &range) < 0) {
+	if (ioctl(fd, BLKSECDISCARD, &range) < 0) {
 		SSDFS_DBG(is_debug,
-			  "BLKDISCARD is not supported: "
-			  "trying write: offset %llu, size %zu\n",
+			  "BLKSECDISCARD is not supported: "
+			  "offset %llu, size %zu\n",
 			   offset, size);
 
-		do {
-			err = ssdfs_pwrite(fd, offset + erased_bytes,
-					   buf_size, buf);
-			if (err) {
-				SSDFS_ERR("fail to erase: "
-					  "offset %llu, erased_bytes %llu, "
-					  "size %zu, buf_size %zu, err %d\n",
-					  offset, erased_bytes,
-					  size, buf_size, err);
-				return err;
-			}
+		if (ioctl(fd, BLKZEROOUT, &range) < 0) {
+			SSDFS_DBG(is_debug,
+				  "BLKZEROOUT is not supported: "
+				  "trying write: offset %llu, size %zu\n",
+				   offset, size);
 
-			erased_bytes += buf_size;
-		} while (erased_bytes < size);
+			do {
+				err = ssdfs_pwrite(fd,
+						   offset + erased_bytes,
+						   buf_size, buf);
+				if (err) {
+					SSDFS_ERR("fail to erase: "
+						  "offset %llu, "
+						  "erased_bytes %llu, "
+						  "size %zu, "
+						  "buf_size %zu, "
+						  "err %d\n",
+						  offset, erased_bytes,
+						  size, buf_size, err);
+					return err;
+				}
+
+				erased_bytes += buf_size;
+			} while (erased_bytes < size);
+		}
 	}
 
 	return 0;
