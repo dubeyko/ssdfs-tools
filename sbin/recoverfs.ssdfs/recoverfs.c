@@ -5,8 +5,9 @@
  * sbin/recoverfs.c - implementation of recoverfs.ssdfs
  *                    (volume recovering) utility.
  *
- * Copyright (c) 2020-2022 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2020-2023 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
+ *              http://www.ssdfs.org/
  *
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
  */

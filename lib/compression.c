@@ -4,8 +4,9 @@
  *
  * lib/compression.c - compression/decompression operations.
  *
- * Copyright (c) 2022 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2022-2023 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
+ *              http://www.ssdfs.org/
  *
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
  */
