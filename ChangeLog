@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.26 [June 09, 2023]
+    (*) Support saving the whole offsets table in every log.
+
 v.4.25 [May 25, 2023]
     (*) Rework erase logic (BLKSECDISCARD + BLKZEROOUT).
 

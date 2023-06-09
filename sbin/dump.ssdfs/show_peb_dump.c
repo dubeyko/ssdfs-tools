@@ -886,9 +886,6 @@ finish_parse_block_bitmap:
 		free(area_buf);
 		area_buf = NULL;
 
-		if (err)
-			goto finish_parse_block_bitmap_area;
-
 		SSDFS_DUMPFS_DUMP(env, "\n");
 
 		if (env->is_raw_dump_requested) {
@@ -2016,12 +2013,15 @@ parse_next_area:
 
 	fragments_count = le16_to_cpu(area_hdr->chain_hdr.fragments_count);
 
-	if (fragments_count > SSDFS_FRAGMENTS_CHAIN_MAX) {
+	if (fragments_count > SSDFS_BLK_TABLE_MAX) {
 		SSDFS_ERR("fragments_count %u > MAX %u\n",
 			  fragments_count,
-			  SSDFS_FRAGMENTS_CHAIN_MAX);
+			  SSDFS_BLK_TABLE_MAX);
 		return -ERANGE;
 	}
+
+	fragments_count = min_t(u16, fragments_count,
+				SSDFS_NEXT_BLK_TABLE_INDEX);
 
 	for (i = 0; i < fragments_count; i++) {
 		u8 *data = NULL;

@@ -2005,7 +2005,8 @@ struct ssdfs_phys_offset_table_header {
 #define SSDFS_OFF_TABLE_HAS_CSUM		(1 << 0)
 #define SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT	(1 << 1)
 #define SSDFS_BLK_DESC_TBL_COMPRESSED		(1 << 2)
-#define SSDFS_OFF_TABLE_FLAGS_MASK		0x7
+#define SSDFS_OFF_TABLE_HAS_OLD_LOG_FRAGMENT	(1 << 3)
+#define SSDFS_OFF_TABLE_FLAGS_MASK		0xF
 
 /*
  * struct ssdfs_translation_extent - logical block to offset id translation

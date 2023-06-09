@@ -1342,6 +1342,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	u32 pages_per_peb;
 	int fragments_count;
 	u32 cur_fragment = 0;
+	u32 cur_phys_off_tbl_frag = 0;
 	u32 allocation_size;
 	u32 offset = 0;
 	u16 start_id;
@@ -1471,7 +1472,8 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 			fragment = (u8 *)extent->buf + offset;
 
 			prepare_offsets_table_fragment(fragment, pages_per_seg,
-							peb_index, cur_fragment,
+							peb_index,
+							cur_phys_off_tbl_frag,
 							SSDFS_LOG_BLK_DESC_AREA,
 							(u32)logical_start_page,
 							(u16)logical_blk,
@@ -1510,6 +1512,7 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 			offset += frag_size;
 
 			cur_fragment++;
+			cur_phys_off_tbl_frag++;
 			fragments_count--;
 
 			SSDFS_DBG(layout->env.show_debug,
