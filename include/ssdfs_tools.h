@@ -433,6 +433,21 @@ struct ssdfs_snapshot_info {
 	struct ssdfs_time_range time_range;
 };
 
+/*
+ * Option possible states
+ */
+enum {
+	/* REQUEST */
+	SSDFS_IGNORE_OPTION,
+	SSDFS_ENABLE_OPTION,
+	SSDFS_DISABLE_OPTION,
+
+	/* RESPONCE */
+	SSDFS_DONT_SUPPORT_OPTION,
+	SSDFS_USE_RECOMMENDED_VALUE,
+	SSDFS_UNRECOGNIZED_VALUE,
+};
+
 #define SSDFS_IOCTL_MAGIC 0xdf
 
 #define SSDFS_IOC_DO_TESTING		_IOW(SSDFS_IOCTL_MAGIC, 1, \

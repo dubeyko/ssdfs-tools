@@ -6,4 +6,4 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 sbin_PROGRAMS = resize.ssdfs
 
-resize_ssdfs_SOURCES = resizefs.c resizefs.h
+resize_ssdfs_SOURCES = resizefs.h options.c resizefs.c

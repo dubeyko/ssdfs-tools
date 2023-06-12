@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.27 [June 11, 2023]
+    (*) [resizefs] Implement parse options logic.
+
 v.4.26 [June 09, 2023]
     (*) Support saving the whole offsets table in every log.
 
