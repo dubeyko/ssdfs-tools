@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.28 [July 08, 2023]
+    (*) Correct maximal threshold of default full log size.
+
 v.4.27 [June 11, 2023]
     (*) [resizefs] Implement parse options logic.
 
