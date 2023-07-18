@@ -60,6 +60,7 @@ static struct ssdfs_dumpfs_environment environment = {
 	.is_raw_dump_requested = SSDFS_FALSE,
 	.fd = -1,
 	.stream = NULL,
+	.output_folder = NULL,
 	.dump_into_files = SSDFS_FALSE,
 };
 
@@ -141,7 +142,7 @@ int main(int argc, char *argv[])
 		break;
 
 	case SSDFS_RAW_DUMP_COMMAND:
-		err = ssdfs_dumpfs_open_file(env_ptr);
+		err = ssdfs_dumpfs_open_file(env_ptr, "raw_dump.bin");
 		if (err) {
 			SSDFS_ERR("fail to open output file: "
 				  "err %d\n", err);

@@ -3118,7 +3118,7 @@ int ssdfs_dumpfs_parse_full_log(struct ssdfs_dumpfs_environment *env,
 
 	offset = env->peb.id * env->peb.peb_size;
 
-	err = ssdfs_dumpfs_open_file(env);
+	err = ssdfs_dumpfs_open_file(env, NULL);
 	if (err) {
 		SSDFS_ERR("unable to open output file: "
 			  "PEB %llu, log_index %u, "
@@ -3321,7 +3321,7 @@ int ssdfs_dumpfs_parse_partial_log(struct ssdfs_dumpfs_environment *env,
 	has_footer =
 		le32_to_cpu(buf->pl_hdr.pl_flags) & SSDFS_LOG_HAS_FOOTER;
 
-	err = ssdfs_dumpfs_open_file(env);
+	err = ssdfs_dumpfs_open_file(env, NULL);
 	if (err) {
 		SSDFS_ERR("unable to open output file: "
 			  "PEB %llu, log_index %u, "

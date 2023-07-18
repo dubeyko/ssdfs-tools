@@ -27,23 +27,50 @@
 
 #define SSDFS_DUMPFS_PEB_SEARCH_SHIFT	(1)
 
-int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env)
+int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env,
+			   char *file_name)
 {
 #define SSDFS_DUMPFS_PATH_LEN		(256)
 	char buf[SSDFS_DUMPFS_PATH_LEN];
+	struct stat st = {0};
 
 	if (!env->dump_into_files)
 		return 0;
 
+	if (stat(env->output_folder, &st) == -1) {
+		mkdir(env->output_folder, S_IRWXU | S_IRWXG | S_IRWXO);
+	}
+
 	memset(buf, 0, SSDFS_DUMPFS_PATH_LEN);
 
-	snprintf(buf, SSDFS_DUMPFS_PATH_LEN - 1,
-		 "%speb-%llu-log-%u-dump.txt",
-		 env->output_folder,
-		 env->peb.id,
-		 env->peb.log_index);
+	if (env->output_folder == NULL) {
+		if (file_name == NULL) {
+			snprintf(buf, SSDFS_DUMPFS_PATH_LEN - 1,
+				 "peb-%llu-log-%u-dump.txt",
+				 env->peb.id,
+				 env->peb.log_index);
+		} else {
+			snprintf(buf, SSDFS_DUMPFS_PATH_LEN - 1,
+				 "%s", file_name);
+		}
+	} else {
+		if (file_name == NULL) {
+			snprintf(buf, SSDFS_DUMPFS_PATH_LEN - 1,
+				 "%s/peb-%llu-log-%u-dump.txt",
+				 env->output_folder,
+				 env->peb.id,
+				 env->peb.log_index);
+		} else {
+			snprintf(buf, SSDFS_DUMPFS_PATH_LEN - 1,
+				 "%s/%s",
+				 env->output_folder,
+				 file_name);
+		}
+	}
 
-	env->fd = creat(buf, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	env->fd = creat(buf, S_IRUSR | S_IWUSR |
+			     S_IRGRP | S_IWGRP |
+			     S_IROTH | S_IWOTH);
 	if (env->fd == -1) {
 		SSDFS_ERR("unable to create %s: %s\n",
 			  buf, strerror(errno));
