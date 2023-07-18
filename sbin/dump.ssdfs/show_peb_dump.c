@@ -3585,7 +3585,10 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 
 		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
 		pagesize = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
-		env->peb.logs_count = env->peb.peb_size / pagesize;
+
+		if (env->peb.logs_count >= U32_MAX) {
+			env->peb.logs_count = env->peb.peb_size / pagesize;
+		}
 	}
 
 	if (env->peb.pebs_count == U64_MAX) {
@@ -3625,12 +3628,16 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		  env->peb.id, env->peb.pebs_count,
 		  env->peb.log_index, env->peb.logs_count);
 
-	max_logs = env->peb.show_all_logs ? env->peb.logs_count : 1;
+	if (env->peb.show_all_logs) {
+		max_logs = env->peb.log_index + env->peb.logs_count;
+	} else {
+		max_logs = 1;
+	}
 
 	while (env->peb.pebs_count > 0) {
 		if (env->peb.id < (env->base.fs_size / env->peb.peb_size)) {
 			env->peb.log_index = 0;
-			env->peb.logs_count = logs_count;
+			env->peb.logs_count = max_logs;
 			env->peb.log_offset = 0;
 		} else {
 			SSDFS_DBG(env->base.show_debug,
@@ -3642,7 +3649,19 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			goto stop_peb_dumping;
 		}
 
+		SSDFS_DBG(env->base.show_debug,
+			  "peb_id %llu, pebs_count %llu, "
+			  "log_index %u, logs_count %u\n",
+			  env->peb.id, env->peb.pebs_count,
+			  env->peb.log_index, env->peb.logs_count);
+
 		for (i = 0; i < max_logs; i++) {
+			SSDFS_DBG(env->base.show_debug,
+				  "peb_id %llu, pebs_count %llu, "
+				  "log_index %u, max_logs %u\n",
+				  env->peb.id, env->peb.pebs_count,
+				  i, max_logs);
+
 			if (env->peb.log_offset >= env->peb.peb_size) {
 				SSDFS_DBG(env->base.show_debug,
 					  "peb_id %llu, pebs_count %llu, "
@@ -3660,6 +3679,10 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 					  env->peb.id, env->peb.peb_size,
 					  env->peb.log_offset, err);
 				goto finish_peb_dump;
+			}
+
+			if (i < log_index) {
+				goto try_next_log;
 			}
 
 			if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
@@ -3687,6 +3710,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 					goto try_next_peb;
 			}
 
+try_next_log:
 			env->peb.log_index++;
 			env->peb.logs_count--;
 			env->peb.log_offset += env->peb.log_size;

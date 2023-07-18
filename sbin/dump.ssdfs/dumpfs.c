@@ -141,13 +141,29 @@ int main(int argc, char *argv[])
 		break;
 
 	case SSDFS_RAW_DUMP_COMMAND:
+		err = ssdfs_dumpfs_open_file(env_ptr);
+		if (err) {
+			SSDFS_ERR("fail to open output file: "
+				  "err %d\n", err);
+			goto destroy_buffers;
+		}
+
 		err = ssdfs_dumpfs_show_raw_dump(env_ptr);
+		if (err) {
+			SSDFS_ERR("fail to show raw dump: "
+				  "err %d\n", err);
+			goto close_opened_file;
+		}
+
+close_opened_file:
+		ssdfs_dumpfs_close_file(env_ptr);
 		break;
 
 	default:
 		err = -EOPNOTSUPP;
 	}
 
+destroy_buffers:
 	ssdfs_dumpfs_destroy_buffers(env_ptr);
 
 close_device:
