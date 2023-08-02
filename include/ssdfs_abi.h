@@ -1118,7 +1118,6 @@ struct ssdfs_inode {
 	__le32 checksum;		/* inode checksum */
 
 /* 0x0068 */
-/* TODO: maybe use the hash code of file name as inode number */
 	__le64 ino;			/* Inode number */
 	__le64 hash_code;		/* hash code of file name */
 	__le16 name_len;		/* lengh of file name */

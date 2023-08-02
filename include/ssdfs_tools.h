@@ -95,6 +95,7 @@ struct ssdfs_device_ops {
  * @fs_size: size in bytes of selected partition
  * @erase_size: PEB size in bytes
  * @open_zones: number of open/active zones
+ * @page_size: logical block size in bytes
  * @device_type: opened device type
  * @dev_name: name of device
  * @fd: device's file descriptor
@@ -107,6 +108,7 @@ struct ssdfs_environment {
 	u64 fs_size;
 	u32 erase_size;
 	u32 open_zones;
+	u32 page_size;
 
 	int device_type;
 	const char *dev_name;
@@ -136,27 +138,6 @@ struct ssdfs_peb_environment {
 };
 
 /*
- * struct ssdfs_raw_area - raw area decriptor
- * @offset: area offset from PEB's beginning
- * @size: area size
- * @metadata.blk_desc_tbl: block descriptors table header
- * @metadata.blk2off_tbl.hdr: block2offset table header
- * @metadata.blk2off_tbl.off_tbl_hdr: phys offsets table header
- */
-struct ssdfs_raw_area {
-	u64 offset;
-	u32 size;
-
-	union {
-		struct ssdfs_area_block_table blk_desc_tbl;
-		struct {
-			struct ssdfs_blk2off_table_header hdr;
-			struct ssdfs_phys_offset_table_header off_tbl_hdr;
-		} blk2off_tbl;
-	} metadata;
-};
-
-/*
  * struct ssdfs_raw_buffer - raw buffer descriptor
  * @ptr: pointer on buffer
  * @size: buffer size
@@ -164,6 +145,72 @@ struct ssdfs_raw_area {
 struct ssdfs_raw_buffer {
 	void *ptr;
 	u32 size;
+};
+
+/*
+ * struct ssdfs_raw_content_iterator - raw content iterator
+ * @state: content state
+ * @portion_offset: offset of block descriptors table's portion
+ * @portion_size: size of portion in bytes
+ * @fragment_index: index of fragment in portion
+ * @fragment_size: size of fragment in bytes
+ * @item_offset: item offset in bytes from area beginning
+ * @item_size: item size in bytes
+ */
+struct ssdfs_raw_content_iterator {
+	int state;
+
+	u32 portion_offset;
+	u32 portion_size;
+
+	int fragment_index;
+	u32 fragment_size;
+
+	u32 item_offset;
+	u32 item_size;
+};
+
+/*
+ * Content states
+ */
+enum {
+	SSDFS_RAW_AREA_CONTENT_UNKNOWN_STATE,
+	SSDFS_RAW_AREA_CONTENT_ITERATOR_INITIALIZED,
+	SSDFS_RAW_AREA_CONTENT_PROCESSED,
+	SSDFS_RAW_AREA_CONTENT_STATE_MAX
+};
+
+/*
+ * struct ssdfs_raw_area - raw area decriptor
+ * @offset: area offset from PEB's beginning
+ * @size: area size
+ * @content.iter: iterator on current item
+ * @content.metadata.raw_buffer: raw buffer
+ * @content.metadata.blk_desc_hdr: block descriptors table header
+ * @content.metadata.blk2off_tbl.hdr: block2offset table header
+ * @content.metadata.blk2off_tbl.off_tbl_hdr: phys offsets table header
+ * @content.uncompressed: decompressed content buffer
+ * @content.delta: delta buffer
+ */
+struct ssdfs_raw_area {
+	u64 offset;
+	u32 size;
+
+	struct {
+		struct ssdfs_raw_content_iterator iter;
+
+		union {
+			u8 raw_buffer;
+			struct ssdfs_area_block_table blk_desc_hdr;
+			struct {
+				struct ssdfs_blk2off_table_header hdr;
+				struct ssdfs_phys_offset_table_header off_tbl_hdr;
+			} blk2off_tbl;
+		} metadata;
+
+		struct ssdfs_raw_buffer uncompressed;
+		struct ssdfs_raw_buffer delta;
+	} content;
 };
 
 /*
@@ -181,13 +228,36 @@ struct ssdfs_raw_area_environment {
  * @peb_offset: PEB offset in bytes
  * @seg_hdr: segment header area
  * @desc: array of log's area descriptors
+ * @content: extracted dump of data
  */
 struct ssdfs_raw_dump_environment {
 	u64 peb_offset;
 
 	struct ssdfs_raw_area_environment seg_hdr;
 	struct ssdfs_raw_area_environment desc[SSDFS_SEG_HDR_DESC_MAX];
+
+	struct ssdfs_raw_buffer content;
 };
+
+#define SSDFS_CONTENT_BUFFER(area) \
+	((struct ssdfs_raw_buffer *)(&area->content.uncompressed))
+#define SSDFS_CONTENT_DELTA_BUFFER(area) \
+	((struct ssdfs_raw_buffer *)(&area->content.delta))
+#define SSDFS_CONTENT_ITER(area) \
+	((struct ssdfs_raw_content_iterator *)(&area->content.iter))
+#define SSDFS_CONTENT_BLK_DESC_HDR(area) \
+	((struct ssdfs_area_block_table *)(&area->content.metadata.blk_desc_hdr))
+#define SSDFS_RAW_SEG_HDR(dump_env) \
+	((struct ssdfs_raw_buffer *)(&dump_env->seg_hdr.buffer))
+#define SSDFS_RAW_AREA_ENV(dump_env, area_index) \
+	((struct ssdfs_raw_area_environment *)(&dump_env->desc[area_index]))
+#define SSDFS_COMPR_CONTENT(dump_env, area_index) \
+	((struct ssdfs_raw_buffer *)(&SSDFS_RAW_AREA_ENV(dump_env, area_index)->buffer))
+#define SSDFS_UNCOMPR_BUFFER(dump_env, area_index) \
+	((struct ssdfs_raw_buffer *)(&SSDFS_RAW_AREA_ENV(dump_env, \
+					area_index)->area.content.uncompressed))
+#define SSDFS_DUMP_DATA(dump_env) \
+	((struct ssdfs_raw_buffer *)(&dump_env->content))
 
 union ssdfs_log_header {
 	struct ssdfs_segment_header seg_hdr;
@@ -206,6 +276,7 @@ union ssdfs_log_header {
  * @raw_dump: raw dump environment
  * @output_folder: path to the output folder
  * @output_fd: output folder descriptor
+ * @checkpoint_fd: checkpoint folder descriptor
  *
  * @name_buf: name buffer
  */
@@ -219,6 +290,7 @@ struct ssdfs_thread_state {
 	struct ssdfs_raw_dump_environment raw_dump;
 	const char *output_folder;
 	int output_fd;
+	int checkpoint_fd;
 
 	char name_buf[SSDFS_MAX_NAME_LEN + 1];
 };
@@ -472,6 +544,120 @@ enum {
 #define SSDFS_LOG_FOOTER(ptr) \
 	((struct ssdfs_log_footer *)(ptr))
 
+/* Inline methods */
+static inline
+void SSDFS_CREATE_CONTENT_ITERATOR(struct ssdfs_raw_content_iterator *iter)
+{
+	iter->portion_offset = U32_MAX;
+	iter->portion_size = 0;
+	iter->fragment_index = -1;
+	iter->fragment_size = 0;
+	iter->item_offset = U32_MAX;
+	iter->item_size = 0;
+	iter->state = SSDFS_RAW_AREA_CONTENT_UNKNOWN_STATE;
+}
+
+static inline
+void SSDFS_INIT_CONTENT_ITERATOR(struct ssdfs_raw_content_iterator *iter,
+				 u32 portion_offset,
+				 u32 portion_size,
+				 int fragment_index,
+				 u32 fragment_size,
+				 u32 item_offset,
+				 u32 item_size)
+{
+	iter->portion_offset = portion_offset;
+	iter->portion_size = portion_size;
+	iter->fragment_index = fragment_index;
+	iter->fragment_size = fragment_size;
+	iter->item_offset = item_offset;
+	iter->item_size = item_size;
+	iter->state = SSDFS_RAW_AREA_CONTENT_ITERATOR_INITIALIZED;
+}
+
+static inline
+int SSDFS_CONTENT_ITERATOR_INCREMENT(struct ssdfs_raw_content_iterator *iter)
+{
+	switch (iter->state) {
+	case SSDFS_RAW_AREA_CONTENT_ITERATOR_INITIALIZED:
+		/* expected state */
+		break;
+
+	case SSDFS_RAW_AREA_CONTENT_PROCESSED:
+		return -ENODATA;
+
+	default:
+		SSDFS_ERR("invalid iterator state %#x\n",
+			  iter->state);
+		return -EINVAL;
+	}
+
+	if ((iter->item_offset + iter->item_size) > iter->fragment_size) {
+		SSDFS_ERR("invalid item size: "
+			  "item_offset %u, item_size %u, "
+			  "fragment_size %u\n",
+			  iter->item_offset,
+			  iter->item_size,
+			  iter->fragment_size);
+		return -ERANGE;
+	}
+
+	iter->item_offset += iter->item_size;
+
+	if (iter->item_offset >= iter->fragment_size) {
+		iter->state = SSDFS_RAW_AREA_CONTENT_PROCESSED;
+		return -ENODATA;
+	}
+
+	return 0;
+}
+
+#define SSDFS_AREA_TYPE2INDEX(type)({ \
+	int index; \
+	switch (type) { \
+	case SSDFS_LOG_BLK_DESC_AREA: \
+		index = SSDFS_BLK_DESC_AREA_INDEX; \
+		break; \
+	case SSDFS_LOG_MAIN_AREA: \
+		index = SSDFS_COLD_PAYLOAD_AREA_INDEX; \
+		break; \
+	case SSDFS_LOG_DIFFS_AREA: \
+		index = SSDFS_WARM_PAYLOAD_AREA_INDEX; \
+		break; \
+	case SSDFS_LOG_JOURNAL_AREA: \
+		index = SSDFS_HOT_PAYLOAD_AREA_INDEX; \
+		break; \
+	default: \
+		BUG(); \
+	}; \
+	index; \
+})
+
+static inline
+u32 SSDFS_AREA2BUFFER_SIZE(int area_index)
+{
+	u32 size = SSDFS_4KB;
+
+	switch (area_index) {
+//	case SSDFS_BLK_BMAP_INDEX:
+//	case SSDFS_SNAPSHOT_RULES_AREA_INDEX:
+//	case SSDFS_OFF_TABLE_INDEX:
+//	case SSDFS_COLD_PAYLOAD_AREA_INDEX:
+//	case SSDFS_WARM_PAYLOAD_AREA_INDEX:
+//	case SSDFS_HOT_PAYLOAD_AREA_INDEX:
+//	case SSDFS_BLK_DESC_AREA_INDEX:
+//	case SSDFS_MAPTBL_CACHE_INDEX:
+//	case SSDFS_LOG_FOOTER_INDEX:
+//		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
+	return size;
+}
+
 /* lib/ssdfs_common.c */
 const char *uuid_string(const unsigned char *uuid);
 __le32 ssdfs_crc32_le(void *data, size_t len);
@@ -485,9 +671,23 @@ int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf);
 u64 ssdfs_current_time_in_nanoseconds(void);
 char *ssdfs_nanoseconds_to_time(u64 nanoseconds);
 int is_zoned_device(int fd);
-int ssdfs_create_raw_buffers(struct ssdfs_environment *base,
-			     struct ssdfs_raw_dump_environment *raw_dump);
-void ssdfs_destroy_raw_buffers(struct ssdfs_raw_dump_environment *raw_dump);
+int ssdfs_create_raw_buffer(struct ssdfs_raw_buffer *buf,
+			    size_t buf_size);
+int ssdfs_create_raw_area(struct ssdfs_raw_area *area,
+			  u64 offset, u32 size);
+int ssdfs_create_raw_area_environment(struct ssdfs_raw_area_environment *env,
+				      u64 area_offset, u32 area_size,
+				      size_t raw_buffer_size);
+int ssdfs_create_raw_dump_environment(struct ssdfs_environment *env,
+				struct ssdfs_raw_dump_environment *raw_dump);
+void ssdfs_destroy_raw_buffer(struct ssdfs_raw_buffer *buf);
+void ssdfs_destroy_raw_area(struct ssdfs_raw_area *area);
+void ssdfs_destroy_raw_area_environment(struct ssdfs_raw_area_environment *env);
+void ssdfs_destroy_raw_dump_environment(struct ssdfs_raw_dump_environment *env);
+int ssdfs_read_area_content(struct ssdfs_environment *env,
+			      u64 peb_id, u32 peb_size,
+			      u32 area_offset, u32 size,
+			      void *buf);
 int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
 			      u64 peb_id, u32 peb_size,
 			      u32 area_offset, u32 size,

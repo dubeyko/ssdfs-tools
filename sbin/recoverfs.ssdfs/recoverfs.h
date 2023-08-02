@@ -47,6 +47,28 @@ struct ssdfs_recoverfs_environment {
 	int output_fd;
 };
 
+/* Inline functions */
+
+static inline
+int is_pagesize_valid(int pagesize)
+{
+	switch (pagesize) {
+	case SSDFS_4KB:
+	case SSDFS_8KB:
+	case SSDFS_16KB:
+	case SSDFS_32KB:
+	case SSDFS_64KB:
+	case SSDFS_128KB:
+		/* do nothing: proper value */
+		break;
+
+	default:
+		return SSDFS_FALSE;
+	}
+
+	return SSDFS_TRUE;
+}
+
 /* options.c */
 void print_usage(void);
 void parse_options(int argc, char *argv[],

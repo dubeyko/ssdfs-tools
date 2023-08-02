@@ -333,100 +333,214 @@ int open_device(struct ssdfs_environment *env, u32 flags)
 	return 0;
 }
 
-static inline
-u32 SSDFS_AREA2BUFFER_SIZE(int area_index)
+int ssdfs_create_raw_buffer(struct ssdfs_raw_buffer *buf,
+			    size_t buf_size)
 {
-	u32 size = SSDFS_4KB;
-
-	switch (area_index) {
-//	case SSDFS_BLK_BMAP_INDEX:
-//	case SSDFS_SNAPSHOT_RULES_AREA_INDEX:
-//	case SSDFS_OFF_TABLE_INDEX:
-//	case SSDFS_COLD_PAYLOAD_AREA_INDEX:
-//	case SSDFS_WARM_PAYLOAD_AREA_INDEX:
-//	case SSDFS_HOT_PAYLOAD_AREA_INDEX:
-//	case SSDFS_BLK_DESC_AREA_INDEX:
-//	case SSDFS_MAPTBL_CACHE_INDEX:
-//	case SSDFS_LOG_FOOTER_INDEX:
-//		break;
-
-	default:
-		/* do nothing */
-		break;
+	if (!buf) {
+		SSDFS_ERR("empty pointer on buffer\n");
+		return -EINVAL;
 	}
 
-	return size;
-}
+	if (buf->ptr == NULL) {
+		if (buf_size == 0) {
+			buf->ptr = NULL;
+			buf->size = 0;
+		} else {
+			buf->ptr = calloc(1, buf_size);
+			if (!buf->ptr) {
+				SSDFS_ERR("fail to allocate buffer: "
+					  "buf_size %zu, err: %s\n",
+					  buf_size, strerror(errno));
+				return errno;
+			}
 
-int ssdfs_create_raw_buffers(struct ssdfs_environment *env,
-			     struct ssdfs_raw_dump_environment *raw_dump)
-{
-	int i;
+			buf->size = buf_size;
+		}
+	} else {
+		if (buf_size == 0) {
+			free(buf->ptr);
+			buf->ptr = NULL;
+			buf->size = 0;
+		} else if (buf->size < buf_size) {
+			buf->ptr = realloc(buf->ptr, buf_size);
+			if (!buf->ptr) {
+				SSDFS_ERR("fail to re-allocate buffer: "
+					  "size %zu, err: %s\n",
+					  buf_size,
+					  strerror(errno));
+				return errno;
+			}
+			buf->size = buf_size;
 
-	SSDFS_DBG(env->show_debug, "base %p, raw_dump %p\n",
-		  env, raw_dump);
-
-	memset(raw_dump, 0, sizeof(struct ssdfs_raw_dump_environment));
-
-	raw_dump->seg_hdr.area.offset = 0;
-	raw_dump->seg_hdr.area.size = sizeof(struct ssdfs_segment_header);
-
-	raw_dump->seg_hdr.buffer.size = SSDFS_4KB;
-	raw_dump->seg_hdr.buffer.ptr = calloc(1, raw_dump->seg_hdr.buffer.size);
-	if (!raw_dump->seg_hdr.buffer.ptr) {
-		SSDFS_ERR("fail to allocate header's buffer: "
-			  "size %u, err: %s\n",
-			  raw_dump->seg_hdr.buffer.size,
-			  strerror(errno));
-		goto free_buffers;
-	}
-
-	for (i = 0; i < SSDFS_SEG_HDR_DESC_MAX; i++) {
-		raw_dump->desc[i].area.offset = U64_MAX;
-		raw_dump->desc[i].area.size = U32_MAX;
-
-		raw_dump->desc[i].buffer.size = SSDFS_AREA2BUFFER_SIZE(i);
-		raw_dump->desc[i].buffer.ptr =
-				calloc(1, raw_dump->desc[i].buffer.size);
-		if (!raw_dump->desc[i].buffer.ptr) {
-			SSDFS_ERR("fail to allocate header's buffer: "
-				  "size %u, err: %s\n",
-				  raw_dump->desc[i].buffer.size,
-				  strerror(errno));
-			goto free_buffers;
+			memset(buf->ptr, 0, buf->size);
 		}
 	}
 
 	return 0;
+}
+
+int ssdfs_create_raw_area(struct ssdfs_raw_area *area,
+			  u64 offset, u32 size)
+{
+	if (!area) {
+		SSDFS_ERR("empty pointer on area\n");
+		return -EINVAL;
+	}
+
+	area->offset = offset;
+	area->size = size;
+
+	SSDFS_CREATE_CONTENT_ITERATOR(SSDFS_CONTENT_ITER(area));
+	memset(&area->content.metadata, 0, sizeof(area->content.metadata));
+
+	ssdfs_create_raw_buffer(SSDFS_CONTENT_BUFFER(area), 0);
+	ssdfs_create_raw_buffer(SSDFS_CONTENT_DELTA_BUFFER(area), 0);
+
+	return 0;
+}
+
+int ssdfs_create_raw_area_environment(struct ssdfs_raw_area_environment *env,
+				      u64 area_offset, u32 area_size,
+				      size_t raw_buffer_size)
+{
+	int err;
+
+	if (!env) {
+		SSDFS_ERR("empty pointer on area environment\n");
+		return -EINVAL;
+	}
+
+	err = ssdfs_create_raw_area(&env->area, area_offset, area_size);
+	if (err) {
+		SSDFS_ERR("fail to create raw area: "
+			  "area_offset %llu, area_size %u, err %d\n",
+			  area_offset, area_size, err);
+		return err;
+	}
+
+	err = ssdfs_create_raw_buffer(&env->buffer, raw_buffer_size);
+	if (err) {
+		SSDFS_ERR("fail to create raw buffer: "
+			  "raw_buffer_size %zu, err %d\n",
+			  raw_buffer_size, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_create_raw_dump_environment(struct ssdfs_environment *env,
+				      struct ssdfs_raw_dump_environment *raw_dump)
+{
+	u64 area_offset;
+	u32 area_size;
+	size_t raw_buffer_size;
+	int i;
+	int err;
+
+	SSDFS_DBG(env->show_debug, "base %p, raw_dump %p\n",
+		  env, raw_dump);
+
+	if (!raw_dump) {
+		SSDFS_ERR("empty pointer on raw dump environment\n");
+		return -EINVAL;
+	}
+
+	memset(raw_dump, 0, sizeof(struct ssdfs_raw_dump_environment));
+
+	raw_dump->peb_offset = U64_MAX;
+
+	area_offset = 0;
+	area_size = sizeof(struct ssdfs_segment_header);
+	raw_buffer_size = SSDFS_4KB;
+
+	err = ssdfs_create_raw_area_environment(&raw_dump->seg_hdr,
+						area_offset, area_size,
+						raw_buffer_size);
+	if (err) {
+		SSDFS_ERR("fail to create segment header area: "
+			  "area_offset %llu, area_size %u, "
+			  "raw_buffer_size %zu, err %d\n",
+			  area_offset, area_size,
+			  raw_buffer_size, err);
+		goto free_buffers;
+	}
+
+	for (i = 0; i < SSDFS_SEG_HDR_DESC_MAX; i++) {
+		area_offset = U64_MAX;
+		area_size = U32_MAX;
+		raw_buffer_size = SSDFS_AREA2BUFFER_SIZE(i);
+
+		err = ssdfs_create_raw_area_environment(&raw_dump->desc[i],
+							area_offset, area_size,
+							raw_buffer_size);
+		if (err) {
+			SSDFS_ERR("fail to create area %d: "
+				  "area_offset %llu, area_size %u, "
+				  "raw_buffer_size %zu, err %d\n",
+				  i,
+				  area_offset, area_size,
+				  raw_buffer_size, err);
+			goto free_buffers;
+		}
+	}
+
+	ssdfs_create_raw_buffer(&raw_dump->content, 0);
+
+	return 0;
 
 free_buffers:
-	ssdfs_destroy_raw_buffers(raw_dump);
+	ssdfs_destroy_raw_dump_environment(raw_dump);
 
 	return errno;
 }
 
-void ssdfs_destroy_raw_buffers(struct ssdfs_raw_dump_environment *raw_dump)
+void ssdfs_destroy_raw_buffer(struct ssdfs_raw_buffer *buf)
+{
+	if (buf) {
+		if (buf->ptr) {
+			free(buf->ptr);
+			buf->ptr = NULL;
+			buf->size = 0;
+		}
+	}
+}
+
+void ssdfs_destroy_raw_area(struct ssdfs_raw_area *area)
+{
+	if (area) {
+		ssdfs_destroy_raw_buffer(&area->content.uncompressed);
+		ssdfs_destroy_raw_buffer(&area->content.delta);
+		SSDFS_CREATE_CONTENT_ITERATOR(SSDFS_CONTENT_ITER(area));
+	}
+}
+
+void ssdfs_destroy_raw_area_environment(struct ssdfs_raw_area_environment *env)
+{
+	if (env) {
+		ssdfs_destroy_raw_area(&env->area);
+		ssdfs_destroy_raw_buffer(&env->buffer);
+	}
+}
+
+void ssdfs_destroy_raw_dump_environment(struct ssdfs_raw_dump_environment *env)
 {
 	int i;
 
-	if (raw_dump->seg_hdr.buffer.ptr) {
-		free(raw_dump->seg_hdr.buffer.ptr);
-		raw_dump->seg_hdr.buffer.ptr = NULL;
-		raw_dump->seg_hdr.buffer.size = 0;
-	}
+	if (env) {
+		ssdfs_destroy_raw_area_environment(&env->seg_hdr);
 
-	for (i = 0; i < SSDFS_SEG_HDR_DESC_MAX; i++) {
-		if (raw_dump->desc[i].buffer.ptr) {
-			free(raw_dump->desc[i].buffer.ptr);
-			raw_dump->desc[i].buffer.ptr = NULL;
-			raw_dump->desc[i].buffer.size = 0;
+		for (i = 0; i < SSDFS_SEG_HDR_DESC_MAX; i++) {
+			ssdfs_destroy_raw_area_environment(&env->desc[i]);
 		}
-	}
 
-	memset(raw_dump, 0, sizeof(struct ssdfs_raw_dump_environment));
+		ssdfs_destroy_raw_buffer(&env->content);
+
+		memset(env, 0, sizeof(struct ssdfs_raw_dump_environment));
+	}
 }
 
-int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
+int ssdfs_read_area_content(struct ssdfs_environment *env,
 			      u64 peb_id, u32 peb_size,
 			      u32 area_offset, u32 size,
 			      void *buf)
@@ -435,8 +549,10 @@ int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
 	int err;
 
 	SSDFS_DBG(env->show_debug,
-		  "peb_id: %llu, peb_size %u\n",
-		  peb_id, peb_size);
+		  "peb_id: %llu, peb_size %u, "
+		  "area_offset %u, size %u\n",
+		  peb_id, peb_size,
+		  area_offset, size);
 
 	offset = peb_id * peb_size;
 	offset += area_offset;
@@ -444,13 +560,24 @@ int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
 	err = env->dev_ops->read(env->fd, offset, size, buf,
 				 env->show_debug);
 	if (err) {
-		SSDFS_ERR("fail to read block descriptors array: "
-			  "offset %llu, err %d\n",
-			  offset, err);
+		SSDFS_ERR("fail to read area content: "
+			  "offset %llu, size %u, err %d\n",
+			  offset, size, err);
 		return err;
 	}
 
 	return 0;
+}
+
+int ssdfs_read_blk_desc_array(struct ssdfs_environment *env,
+			      u64 peb_id, u32 peb_size,
+			      u32 area_offset, u32 size,
+			      void *buf)
+{
+	return ssdfs_read_area_content(env,
+					peb_id, peb_size,
+					area_offset, size,
+					buf);
 }
 
 int ssdfs_read_blk2off_table(struct ssdfs_environment *env,
@@ -458,26 +585,10 @@ int ssdfs_read_blk2off_table(struct ssdfs_environment *env,
 			     u32 area_offset, u32 size,
 			     void *buf)
 {
-	u64 offset;
-	int err;
-
-	SSDFS_DBG(env->show_debug,
-		  "peb_id: %llu, peb_size %u\n",
-		  peb_id, peb_size);
-
-	offset = peb_id * peb_size;
-	offset += area_offset;
-
-	err = env->dev_ops->read(env->fd, offset, size, buf,
-				 env->show_debug);
-	if (err) {
-		SSDFS_ERR("fail to read blk2off table: "
-			  "offset %llu, err %d\n",
-			  offset, err);
-		return err;
-	}
-
-	return 0;
+	return ssdfs_read_area_content(env,
+					peb_id, peb_size,
+					area_offset, size,
+					buf);
 }
 
 int ssdfs_read_block_bitmap(struct ssdfs_environment *env,
@@ -485,26 +596,10 @@ int ssdfs_read_block_bitmap(struct ssdfs_environment *env,
 			    u32 area_offset, u32 size,
 			    void *buf)
 {
-	u64 offset;
-	int err;
-
-	SSDFS_DBG(env->show_debug,
-		  "peb_id: %llu, peb_size %u\n",
-		  peb_id, peb_size);
-
-	offset = peb_id * peb_size;
-	offset += area_offset;
-
-	err = env->dev_ops->read(env->fd, offset, size, buf,
-				 env->show_debug);
-	if (err) {
-		SSDFS_ERR("fail to read block bitmap: "
-			  "offset %llu, err %d\n",
-			  offset, err);
-		return err;
-	}
-
-	return 0;
+	return ssdfs_read_area_content(env,
+					peb_id, peb_size,
+					area_offset, size,
+					buf);
 }
 
 int ssdfs_read_log_footer(struct ssdfs_environment *env,
