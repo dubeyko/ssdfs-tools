@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.32 [August 28, 2023]
+    (*) [testfs] Introduce unit-tests for memory primitives.
+
 v.4.31 [August 01, 2023]
     (*) [recoverfs] Implement log parsing and data extraction.
 

@@ -352,6 +352,27 @@ struct ssdfs_peb_mapping_table_testing {
 };
 
 /*
+ * struct ssdfs_memory_primitives_testing - memory primitives testing environment
+ * @iterations_number: total iterations number
+ * @capacity: total capacity of items
+ * @count: total count of items
+ * @item_size: item size in bytes
+ * @test_types: type of tests
+ */
+struct ssdfs_memory_primitives_testing {
+	u32 iterations_number;
+	u64 capacity;
+	u64 count;
+	u32 item_size;
+	u32 test_types;
+};
+
+/* Types of memory primitives tests */
+#define SSDFS_ENABLE_FOLIO_VECTOR_TESTING	(1 << 0)
+#define SSDFS_ENABLE_FOLIO_ARRAY_TESTING	(1 << 1)
+#define SSDFS_ENABLE_DYNAMIC_ARRAY_TESTING	(1 << 2)
+
+/*
  * struct ssdfs_segment_bitmap_testing - segment bitmap testing environment
  * @iterations_number: total iterations number
  * @using_segs_per_iteration: number of using segments per iteration
@@ -426,6 +447,8 @@ struct ssdfs_snapshots_tree_testing {
  * @extents_tree: extents tree testing environment
  * @block_bitmap: block bitmap testing environment
  * @blk2off_table: blk2off table testing environment
+ * @mapping_table: mapping table testing environment
+ * @memory_primitives: memory primitives testing environment
  * @segment_bitmap: segment bitmap testing environment
  * @shared_dictionary: shared dictionary testing environment
  * @xattr_tree: xattr tree testing environment
@@ -441,6 +464,7 @@ struct ssdfs_testing_environment {
 	struct ssdfs_block_bitmap_testing block_bitmap;
 	struct ssdfs_blk2off_testing blk2off_table;
 	struct ssdfs_peb_mapping_table_testing mapping_table;
+	struct ssdfs_memory_primitives_testing memory_primitives;
 	struct ssdfs_segment_bitmap_testing segment_bitmap;
 	struct ssdfs_shared_dictionary_testing shared_dictionary;
 	struct ssdfs_xattr_tree_testing xattr_tree;
@@ -454,11 +478,12 @@ struct ssdfs_testing_environment {
 #define SSDFS_ENABLE_BLOCK_BMAP_TESTING		(1 << 2)
 #define SSDFS_ENABLE_BLK2OFF_TABLE_TESTING	(1 << 3)
 #define SSDFS_ENABLE_PEB_MAPPING_TABLE_TESTING	(1 << 4)
-#define SSDFS_ENABLE_SEGMENT_BITMAP_TESTING	(1 << 5)
-#define SSDFS_ENABLE_SHARED_DICTIONARY_TESTING	(1 << 6)
-#define SSDFS_ENABLE_XATTR_TREE_TESTING		(1 << 7)
-#define SSDFS_ENABLE_SHEXTREE_TESTING		(1 << 8)
-#define SSDFS_ENABLE_SNAPSHOTS_TREE_TESTING	(1 << 9)
+#define SSDFS_ENABLE_MEMORY_PRIMITIVES_TESTING	(1 << 5)
+#define SSDFS_ENABLE_SEGMENT_BITMAP_TESTING	(1 << 6)
+#define SSDFS_ENABLE_SHARED_DICTIONARY_TESTING	(1 << 7)
+#define SSDFS_ENABLE_XATTR_TREE_TESTING		(1 << 8)
+#define SSDFS_ENABLE_SHEXTREE_TESTING		(1 << 9)
+#define SSDFS_ENABLE_SNAPSHOTS_TREE_TESTING	(1 << 10)
 
 /*
  * struct ssdfs_time_range - time range definition

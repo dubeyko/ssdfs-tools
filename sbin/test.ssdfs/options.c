@@ -50,6 +50,11 @@ void print_usage(void)
 		   "add_migrations_per_iter=value,"
 		   "exclude_migrations_per_iter=value]\t  "
 		   "define PEB mapping table testing options.\n");
+	SSDFS_INFO("\t [-M|--memory-primitives iterations=value,"
+		   "capacity=value,count=value,item_size=value,"
+		   "test_folio_vector,test_folio_array,"
+		   "test_dynamic_array,test_all]\t  "
+		   "define memory primitives testing options.\n");
 	SSDFS_INFO("\t [-n|--snapshots-tree snapshots_number=value]\t  "
 		   "define snapshots tree testing options.\n");
 	SSDFS_INFO("\t [-o|--offset-table capacity=value]\t\t  "
@@ -57,7 +62,7 @@ void print_usage(void)
 	SSDFS_INFO("\t [-p|--pagesize size]\t  page size of target device "
 		   "(4096|8192|16384|32768 bytes).\n");
 	SSDFS_INFO("\t [-s|--subsystem dentries_tree,extents_tree,"
-		   "block_bitmap,offset_table,mapping_table,"
+		   "block_bitmap,offset_table,mapping_table,memory_primitives,"
 		   "segment_bitmap,shared_dictionary,xattr_tree,"
 		   "shared_extents_tree,snapshots_tree]\t  "
 		   "define testing subsystems.\n");
@@ -126,6 +131,17 @@ static void check_pagesize(int pagesize)
 #define PEBTBL_DEL_MIGRATIONS(env) \
 	(env->mapping_table.exclude_migrations_per_iteration)
 
+#define MEM_PRIMITIVES_ITERATIONS(env) \
+	(env->memory_primitives.iterations_number)
+#define MEM_PRIMITIVES_CAPACITY(env) \
+	(env->memory_primitives.capacity)
+#define MEM_PRIMITIVES_COUNT(env) \
+	(env->memory_primitives.count)
+#define MEM_PRIMITIVES_ITEM_SIZE(env) \
+	(env->memory_primitives.item_size)
+#define MEM_PRIMITIVES_TEST_TYPES(env) \
+	(env->memory_primitives.test_types)
+
 #define BLK2OFF_CAPACITY(env) \
 	(env->blk2off_table.capacity)
 
@@ -169,7 +185,7 @@ void parse_options(int argc, char *argv[],
 	int c;
 	int oi = 1;
 	char *p;
-	char sopts[] = "ab:d:D:e:f:hm:n:o:p:s:S:Vx:";
+	char sopts[] = "ab:d:D:e:f:hm:M:n:o:p:s:S:Vx:";
 	static const struct option lopts[] = {
 		{"all", 0, NULL, 'a'},
 		{"block-bitmap", 1, NULL, 'b'},
@@ -179,6 +195,7 @@ void parse_options(int argc, char *argv[],
 		{"file", 1, NULL, 'f'},
 		{"help", 0, NULL, 'h'},
 		{"mapping-table", 1, NULL, 'm'},
+		{"memory-primitives", 1, NULL, 'M'},
 		{"snapshots-tree", 1, NULL, 'n'},
 		{"offset-table", 1, NULL, 'o'},
 		{"pagesize", 1, NULL, 'p'},
@@ -259,6 +276,30 @@ void parse_options(int argc, char *argv[],
 		NULL
 	};
 	enum {
+		MEMORY_PRIMITIVES_ITERATIONS_OPT = 0,
+		MEMORY_PRIMITIVES_CAPACITY_OPT,
+		MEMORY_PRIMITIVES_COUNT_OPT,
+		MEMORY_PRIMITIVES_ITEM_SIZE_OPT,
+		MEMORY_PRIMITIVES_TEST_FOLIO_VECTOR_OPT,
+		MEMORY_PRIMITIVES_TEST_FOLIO_ARRAY_OPT,
+		MEMORY_PRIMITIVES_TEST_DYNAMIC_ARRAY_OPT,
+		MEMORY_PRIMITIVES_TEST_ALL_OPT,
+	};
+	char *const memory_primitives_tokens[] = {
+		[MEMORY_PRIMITIVES_ITERATIONS_OPT]	= "iterations",
+		[MEMORY_PRIMITIVES_CAPACITY_OPT]	= "capacity",
+		[MEMORY_PRIMITIVES_COUNT_OPT]		= "count",
+		[MEMORY_PRIMITIVES_ITEM_SIZE_OPT]	= "item_size",
+		[MEMORY_PRIMITIVES_TEST_FOLIO_VECTOR_OPT] =
+							  "test_folio_vector",
+		[MEMORY_PRIMITIVES_TEST_FOLIO_ARRAY_OPT] =
+							  "test_folio_array",
+		[MEMORY_PRIMITIVES_TEST_DYNAMIC_ARRAY_OPT] =
+							  "test_dynamic_array",
+		[MEMORY_PRIMITIVES_TEST_ALL_OPT] 	= "test_all",
+		NULL
+	};
+	enum {
 		OFFSET_TABLE_CAPACITY_OPT = 0,
 	};
 	char *const offset_table_tokens[] = {
@@ -316,6 +357,7 @@ void parse_options(int argc, char *argv[],
 		BLOCK_BMAP_SUBSYSTEM_OPT,
 		BLK2OFF_TABLE_SUBSYSTEM_OPT,
 		PEB_MAPPING_TABLE_SUBSYSTEM_OPT,
+		MEMORY_PRIMITIVES_SUBSYSTEM_OPT,
 		SEGMENT_BITMAP_SUBSYSTEM_OPT,
 		SHARED_DICTIONARY_SUBSYSTEM_OPT,
 		XATTR_TREE_SUBSYSTEM_OPT,
@@ -328,6 +370,7 @@ void parse_options(int argc, char *argv[],
 		[BLOCK_BMAP_SUBSYSTEM_OPT]		= "block_bitmap",
 		[BLK2OFF_TABLE_SUBSYSTEM_OPT]		= "offset_table",
 		[PEB_MAPPING_TABLE_SUBSYSTEM_OPT]	= "mapping_table",
+		[MEMORY_PRIMITIVES_SUBSYSTEM_OPT]	= "memory_primitives",
 		[SEGMENT_BITMAP_SUBSYSTEM_OPT]		= "segment_bitmap",
 		[SHARED_DICTIONARY_SUBSYSTEM_OPT]	= "shared_dictionary",
 		[XATTR_TREE_SUBSYSTEM_OPT]		= "xattr_tree",
@@ -345,6 +388,7 @@ void parse_options(int argc, char *argv[],
 			env->subsystems |= SSDFS_ENABLE_BLK2OFF_TABLE_TESTING;
 			env->subsystems |=
 					SSDFS_ENABLE_PEB_MAPPING_TABLE_TESTING;
+			env->subsystems |= SSDFS_ENABLE_MEMORY_PRIMITIVES_TESTING;
 			env->subsystems |= SSDFS_ENABLE_SEGMENT_BITMAP_TESTING;
 			env->subsystems |=
 					SSDFS_ENABLE_SHARED_DICTIONARY_TESTING;
@@ -497,6 +541,53 @@ void parse_options(int argc, char *argv[],
 				};
 			};
 			break;
+		case 'M':
+			p = optarg;
+			while (*p != '\0') {
+				char *value;
+
+				switch (getsubopt(&p, memory_primitives_tokens,
+						  &value)) {
+				case MEMORY_PRIMITIVES_ITERATIONS_OPT:
+					MEM_PRIMITIVES_ITERATIONS(env) =
+								atoi(value);
+					break;
+				case MEMORY_PRIMITIVES_CAPACITY_OPT:
+					MEM_PRIMITIVES_CAPACITY(env) =
+								atoll(value);
+					break;
+				case MEMORY_PRIMITIVES_COUNT_OPT:
+					MEM_PRIMITIVES_COUNT(env) =
+								atoll(value);
+					break;
+				case MEMORY_PRIMITIVES_ITEM_SIZE_OPT:
+					MEM_PRIMITIVES_ITEM_SIZE(env) =
+								atoi(value);
+					break;
+				case MEMORY_PRIMITIVES_TEST_FOLIO_VECTOR_OPT:
+					MEM_PRIMITIVES_TEST_TYPES(env) |=
+						SSDFS_ENABLE_FOLIO_VECTOR_TESTING;
+					break;
+				case MEMORY_PRIMITIVES_TEST_FOLIO_ARRAY_OPT:
+					MEM_PRIMITIVES_TEST_TYPES(env) |=
+						SSDFS_ENABLE_FOLIO_ARRAY_TESTING;
+					break;
+				case MEMORY_PRIMITIVES_TEST_DYNAMIC_ARRAY_OPT:
+					MEM_PRIMITIVES_TEST_TYPES(env) |=
+						SSDFS_ENABLE_DYNAMIC_ARRAY_TESTING;
+					break;
+				case MEMORY_PRIMITIVES_TEST_ALL_OPT:
+					MEM_PRIMITIVES_TEST_TYPES(env) |=
+						SSDFS_ENABLE_FOLIO_VECTOR_TESTING |
+						SSDFS_ENABLE_FOLIO_ARRAY_TESTING |
+						SSDFS_ENABLE_DYNAMIC_ARRAY_TESTING;
+					break;
+				default:
+					print_usage();
+					exit(EXIT_FAILURE);
+				};
+			};
+			break;
 		case 'n':
 			p = optarg;
 			while (*p != '\0') {
@@ -555,6 +646,10 @@ void parse_options(int argc, char *argv[],
 				case BLK2OFF_TABLE_SUBSYSTEM_OPT:
 					env->subsystems |=
 					    SSDFS_ENABLE_BLK2OFF_TABLE_TESTING;
+					break;
+				case MEMORY_PRIMITIVES_SUBSYSTEM_OPT:
+					env->subsystems |=
+					    SSDFS_ENABLE_MEMORY_PRIMITIVES_TESTING;
 					break;
 				case PEB_MAPPING_TABLE_SUBSYSTEM_OPT:
 					env->subsystems |=

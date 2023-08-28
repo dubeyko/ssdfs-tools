@@ -68,6 +68,16 @@ int main(int argc, char *argv[])
 	testing_env.mapping_table.exclude_migrations_per_iteration =
 				SSDFS_TESTFS_DEFAULT_DELETE_MIGRATIONS_PER_ITER;
 
+	testing_env.memory_primitives.iterations_number =
+				SSDFS_TESTFS_DEFAULT_MEM_PRIMITIVES_ITERATIONS;
+	testing_env.memory_primitives.capacity =
+				SSDFS_TESTFS_DEFAULT_MEM_PRIMITIVES_CAPACITY;
+	testing_env.memory_primitives.count =
+				SSDFS_TESTFS_DEFAULT_MEM_PRIMITIVES_COUNT;
+	testing_env.memory_primitives.item_size =
+				SSDFS_TESTFS_DEFAULT_MEM_PRIMITIVES_ITEM_SIZE;
+	testing_env.memory_primitives.test_types = 0;
+
 	testing_env.segment_bitmap.iterations_number =
 				SSDFS_TESTFS_DEFAULT_SEGBMAP_ITERATIONS;
 	testing_env.segment_bitmap.using_segs_per_iteration =
