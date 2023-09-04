@@ -130,6 +130,13 @@ char *ssdfs_nanoseconds_to_time(u64 nanoseconds)
 	return ctime(&time);
 }
 
+void ssdfs_nanoseconds_to_localtime(u64 nanoseconds,
+				    struct tm *local_time)
+{
+	time_t time = (time_t)(nanoseconds / BILLION);
+	localtime_r(&time, local_time);
+}
+
 int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf)
 {
 	ssize_t ret;

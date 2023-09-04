@@ -24,6 +24,7 @@
 
 #include <zlib.h>
 #include <sys/ioctl.h>
+#include <time.h>
 
 #include "kerncompat.h"
 #include "ssdfs_abi.h"
@@ -87,6 +88,28 @@ struct ssdfs_device_ops {
 	int (*check_peb)(int fd, u64 offset, u32 erasesize,
 			 int need_close_zone, int is_debug);
 };
+
+/*
+ * struct ssdfs_time_range - time range definition
+ * @minute: minute of the time range
+ * @hour: hour of the time range
+ * @day: day of the time range
+ * @month: month of the time range
+ * @year: year of the time range
+ */
+struct ssdfs_time_range {
+	u32 minute;
+	u32 hour;
+	u32 day;
+	u32 month;
+	u32 year;
+};
+
+#define SSDFS_ANY_MINUTE			U32_MAX
+#define SSDFS_ANY_HOUR				U32_MAX
+#define SSDFS_ANY_DAY				U32_MAX
+#define SSDFS_ANY_MONTH				U32_MAX
+#define SSDFS_ANY_YEAR				U32_MAX
 
 /*
  * struct ssdfs_environment - tool's environment
@@ -266,6 +289,40 @@ union ssdfs_log_header {
 };
 
 /*
+ * struct ssdfs_folder_environment - output folder environment
+ * @name: path to the folder
+ * @fd: folder descriptor
+ * @content.namelist: list of directory entries in the folder
+ * @content.count: number of items in the list
+ */
+struct ssdfs_folder_environment {
+	const char *name;
+	int fd;
+
+	struct {
+		struct dirent **namelist;
+		int count;
+	} content;
+};
+
+/*
+ * struct ssdfs_file_environment - data file environment
+ * @fd: file descriptor
+ * @inode_id: inode ID of processing file
+ * @content.buffer: buffer for file's content
+ * @content.size: buffer size in bytes
+ */
+struct ssdfs_file_environment {
+	int fd;
+	u64 inode_id;
+
+	struct {
+		u8 *buffer;
+		size_t size;
+	} content;
+};
+
+/*
  * struct ssdfs_thread_state - thread state
  * @id: thread ID
  * @thread: thread descriptor
@@ -274,9 +331,10 @@ union ssdfs_log_header {
  * @base: basic environment
  * @peb: PEB environment
  * @raw_dump: raw dump environment
- * @output_folder: path to the output folder
- * @output_fd: output folder descriptor
- * @checkpoint_fd: checkpoint folder descriptor
+ * @output_folder: output folder environment
+ * @checkpoint_folder: checkpoint folder environment
+ * @data_file: data file environment
+ * @timestamp: timestamp defining the state of files
  *
  * @name_buf: name buffer
  */
@@ -288,11 +346,24 @@ struct ssdfs_thread_state {
 	struct ssdfs_environment base;
 	struct ssdfs_peb_environment peb;
 	struct ssdfs_raw_dump_environment raw_dump;
-	const char *output_folder;
-	int output_fd;
-	int checkpoint_fd;
+	struct ssdfs_folder_environment output_folder;
+	struct ssdfs_folder_environment checkpoint_folder;
+	struct ssdfs_file_environment data_file;
+	struct ssdfs_time_range timestamp;
 
 	char name_buf[SSDFS_MAX_NAME_LEN + 1];
+};
+
+/*
+ * struct ssdfs_threads_environment - threads environment
+ * @jobs: thread state array
+ * @capacity: capacity of the array
+ * @requested_jobs: number of really requested jobs
+ */
+struct ssdfs_threads_environment {
+	struct ssdfs_thread_state *jobs;
+	unsigned int capacity;
+	unsigned int requested_jobs;
 };
 
 /*
@@ -486,28 +557,6 @@ struct ssdfs_testing_environment {
 #define SSDFS_ENABLE_SNAPSHOTS_TREE_TESTING	(1 << 10)
 
 /*
- * struct ssdfs_time_range - time range definition
- * @minute: minute of the time range
- * @hour: hour of the time range
- * @day: day of the time range
- * @month: month of the time range
- * @year: year of the time range
- */
-struct ssdfs_time_range {
-	u32 minute;
-	u32 hour;
-	u32 day;
-	u32 month;
-	u32 year;
-};
-
-#define SSDFS_ANY_MINUTE			U32_MAX
-#define SSDFS_ANY_HOUR				U32_MAX
-#define SSDFS_ANY_DAY				U32_MAX
-#define SSDFS_ANY_MONTH				U32_MAX
-#define SSDFS_ANY_YEAR				U32_MAX
-
-/*
  * struct ssdfs_snapshot_info - snapshot details
  * @name: snapshot name
  * @uuid: snapshot UUID
@@ -683,6 +732,24 @@ u32 SSDFS_AREA2BUFFER_SIZE(int area_index)
 	return size;
 }
 
+static inline
+void ssdfs_init_folder_environment(struct ssdfs_folder_environment *env)
+{
+	env->name = NULL;
+	env->fd = -1;
+	env->content.namelist = NULL;
+	env->content.count = 0;
+}
+
+static inline
+void ssdfs_init_file_environment(struct ssdfs_file_environment *env)
+{
+	env->fd = -1;
+	env->inode_id = U64_MAX;
+	env->content.buffer = NULL;
+	env->content.size = 0;
+}
+
 /* lib/ssdfs_common.c */
 const char *uuid_string(const unsigned char *uuid);
 __le32 ssdfs_crc32_le(void *data, size_t len);
@@ -695,6 +762,8 @@ int ssdfs_pread(int fd, u64 offset, size_t size, void *buf);
 int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf);
 u64 ssdfs_current_time_in_nanoseconds(void);
 char *ssdfs_nanoseconds_to_time(u64 nanoseconds);
+void ssdfs_nanoseconds_to_localtime(u64 nanoseconds,
+				    struct tm *local_time);
 int is_zoned_device(int fd);
 int ssdfs_create_raw_buffer(struct ssdfs_raw_buffer *buf,
 			    size_t buf_size);
