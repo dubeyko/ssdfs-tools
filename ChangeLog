@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.34 [September 07, 2023]
+    (*) [dumpfs] Fix issue with maximum logs number calculation.
+
 v.4.33 [September 04, 2023]
     (*) [recoverfs] Implement logic of block synthesis into files.
 

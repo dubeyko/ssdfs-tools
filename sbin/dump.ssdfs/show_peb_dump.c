@@ -3584,11 +3584,12 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		step++;
 
 		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
-		pagesize = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
+	}
 
-		if (env->peb.logs_count >= U32_MAX) {
-			env->peb.logs_count = env->peb.peb_size / pagesize;
-		}
+	pagesize = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
+
+	if (env->peb.logs_count >= U32_MAX) {
+		env->peb.logs_count = env->peb.peb_size / pagesize;
 	}
 
 	if (env->peb.pebs_count == U64_MAX) {

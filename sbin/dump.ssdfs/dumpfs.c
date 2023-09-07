@@ -127,11 +127,6 @@ int main(int argc, char *argv[])
 			env_ptr->base.fs_size / env_ptr->base.erase_size;
 	}
 
-	if (env_ptr->peb.logs_count >= U32_MAX) {
-		env_ptr->peb.logs_count =
-			env_ptr->base.erase_size / SSDFS_512B;
-	}
-
 	switch (env_ptr->command) {
 	case SSDFS_DUMP_GRANULARITY_COMMAND:
 		err = ssdfs_dumpfs_show_granularity(env_ptr);
