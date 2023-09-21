@@ -310,6 +310,18 @@ int ssdfs_recoverfs_delete_folder(struct ssdfs_recoverfs_environment *env,
 int ssdfs_recoverfs_build_files_in_folder(struct ssdfs_recoverfs_environment *env,
 					  const char *folder_name);
 
+/* inline_files.c */
+int ssdfs_recoverfs_find_first_valid_node(struct ssdfs_recoverfs_environment *env,
+					  int fd,
+					  u32 *node_size,
+					  u32 *node_offset,
+					  u32 *nodes_count);
+int ssdfs_recoverfs_node_extract_inline_file(struct ssdfs_recoverfs_environment *env,
+					     int fd,
+					     u32 node_offset,
+					     u32 node_size,
+					     u8 *buffer);
+
 /* options.c */
 void print_usage(void);
 void parse_options(int argc, char *argv[],

@@ -216,6 +216,106 @@ int ssdfs_recoverfs_synthesize_files(struct ssdfs_recoverfs_environment *env)
 	return 0;
 }
 
+static
+int ssdfs_recoverfs_extract_inline_files(struct ssdfs_recoverfs_environment *env)
+{
+	char name[SSDFS_MAX_NAME_LEN];
+	u8 *buffer = NULL;
+	int fd;
+	u32 node_size;
+	u32 node_offset;
+	u32 nodes_count = 0;
+	int i;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "output_folder %s\n",
+		  env->output_folder.name);
+
+	memset(name, 0, sizeof(name));
+
+	snprintf(name, sizeof(name) - 1,
+		 "%u", SSDFS_INODES_BTREE_INO);
+
+	fd = openat(env->output_folder.fd,
+		    name,
+		    O_RDWR | O_LARGEFILE,
+		    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	if (fd < 0) {
+		err = errno;
+		SSDFS_ERR("unable to open %s: %s\n",
+			  name, strerror(errno));
+		return err;
+	}
+
+	err = ssdfs_recoverfs_find_first_valid_node(env, fd,
+						    &node_size,
+						    &node_offset,
+						    &nodes_count);
+	if (err == -ENOENT) {
+		err = 0;
+		SSDFS_DBG(env->base.show_debug,
+			  "unable to find any valid node: "
+			  "output_folder %s, file %s\n",
+			  env->output_folder.name,
+			  name);
+		goto close_file;
+	} else if (err) {
+		SSDFS_ERR("fail to find valid node: "
+			  "output_folder %s, file %s\n",
+			  env->output_folder.name,
+			  name);
+		goto close_file;
+	}
+
+	if (nodes_count == 0) {
+		err = 0;
+		SSDFS_DBG(env->base.show_debug,
+			  "nodes_count %u, "
+			  "output_folder %s, file %s\n",
+			  nodes_count,
+			  env->output_folder.name,
+			  name);
+		goto close_file;
+	} else if (nodes_count >= U32_MAX) {
+		err = -ERANGE;
+		SSDFS_ERR("fail to calculate nodes count\n");
+		goto close_file;
+	}
+
+	buffer = malloc(node_size);
+	if (!buffer) {
+		err = -ENOMEM;
+		SSDFS_ERR("fail to allocate buffer: "
+			  "node_size %u\n",
+			  node_size);
+		goto close_file;
+	}
+
+	memset(buffer, 0, node_size);
+
+	for (i = 0; i < nodes_count; i++) {
+		err = ssdfs_recoverfs_node_extract_inline_file(env, fd,
+								node_offset,
+								node_size,
+								buffer);
+		if (err) {
+			SSDFS_ERR("fail to process node: "
+				  "index %d, node_offset %u, err %d\n",
+				  i, node_offset, err);
+		}
+
+		node_offset += node_size;
+	}
+
+	free(buffer);
+
+close_file:
+	close(fd);
+
+	return err;
+}
+
 int main(int argc, char *argv[])
 {
 	struct ssdfs_recoverfs_environment env = {
@@ -357,6 +457,19 @@ int main(int argc, char *argv[])
 
 	SSDFS_RECOVERFS_INFO(env.base.show_info,
 			     "[005]\t[SUCCESS]\n");
+
+	SSDFS_RECOVERFS_INFO(env.base.show_info,
+			     "[006]\tEXTRACT INLINE FILES...\n");
+
+	err = ssdfs_recoverfs_extract_inline_files(&env);
+	if (err) {
+		SSDFS_ERR("fail to extract inline files: err %d\n",
+			  err);
+		goto free_threads_pool;
+	}
+
+	SSDFS_RECOVERFS_INFO(env.base.show_info,
+			     "[006]\t[SUCCESS]\n");
 
 free_threads_pool:
 	if (env.threads.jobs) {
