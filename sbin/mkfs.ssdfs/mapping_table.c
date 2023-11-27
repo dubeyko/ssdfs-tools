@@ -268,6 +268,7 @@ define_stripes_per_portion:
 		  pebtbl_portion_bytes, lebtbl_portion_mempages,
 		  pebtbl_portion_mempages, leb_desc_per_portion,
 		  peb_desc_per_portion, fragments, portion_size);
+
 	return seg_state;
 }
 
@@ -1529,7 +1530,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				layout->segs[seg_index].pebs_capacity);
 			peb_desc = &layout->segs[seg_index].pebs[j];
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_MAPTBL_SEG_TYPE,
+							peb_desc,
 							SSDFS_SEG_HEADER);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -1545,7 +1548,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				return err;
 			}
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_MAPTBL_SEG_TYPE,
+							peb_desc,
 							SSDFS_BLOCK_BITMAP);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -1559,7 +1564,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_MAPTBL_SEG_TYPE,
+							peb_desc,
 							SSDFS_OFFSET_TABLE);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -1574,7 +1581,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+						      SSDFS_MAPTBL_SEG_TYPE,
+						      peb_desc,
 						      SSDFS_BLOCK_DESCRIPTORS);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -1590,7 +1599,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_MAPTBL_SEG_TYPE,
+							peb_desc,
 							SSDFS_LOG_PAYLOAD);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -1613,7 +1624,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			extent->bytes_count = peb_buffer_size;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_MAPTBL_SEG_TYPE,
+							peb_desc,
 							SSDFS_LOG_FOOTER);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -1629,7 +1642,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			if (layout->blkbmap.has_backup_copy) {
-				err = set_extent_start_offset(layout, peb_desc,
+				err = set_extent_start_offset(layout,
+						    SSDFS_MAPTBL_SEG_TYPE,
+						    peb_desc,
 						    SSDFS_BLOCK_BITMAP_BACKUP);
 				if (err) {
 					SSDFS_ERR("fail to define offset: "
@@ -1647,7 +1662,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			if (layout->blk2off_tbl.has_backup_copy) {
-				err = set_extent_start_offset(layout, peb_desc,
+				err = set_extent_start_offset(layout,
+						    SSDFS_MAPTBL_SEG_TYPE,
+						    peb_desc,
 						    SSDFS_OFFSET_TABLE_BACKUP);
 				if (err) {
 					SSDFS_ERR("fail to define offset: "
@@ -1664,7 +1681,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 					return err;
 			}
 
-			blks = calculate_log_pages(layout, peb_desc);
+			blks = calculate_log_pages(layout,
+						   SSDFS_MAPTBL_SEG_TYPE,
+						   peb_desc);
 			log_pages = max_t(u32, blks, log_pages);
 
 			fragment_index++;
@@ -1731,7 +1750,7 @@ void calculate_peb_fragments_checksum(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
-	lebtbl_mempages = (u16)(lebtbl_portion_bytes / PAGE_CACHE_SIZE);
+	lebtbl_mempages = (u16)(lebtbl_portion_bytes / layout->page_size);
 	BUG_ON(lebtbl_mempages == 0);
 
 	for (i = 0; i < portions_per_fragment; i++) {
@@ -1740,7 +1759,7 @@ void calculate_peb_fragments_checksum(struct ssdfs_volume_layout *layout,
 		for (j = 0; j < lebtbl_mempages; j++) {
 			u8 *lebtbl_ptr;
 
-			lebtbl_ptr = ptr + (j * PAGE_CACHE_SIZE);
+			lebtbl_ptr = ptr + (j * layout->page_size);
 			calculate_lebtbl_fragment_checksum(lebtbl_ptr);
 		}
 
@@ -1749,7 +1768,7 @@ void calculate_peb_fragments_checksum(struct ssdfs_volume_layout *layout,
 		for (j = 0; j < stripes_per_portion; j++) {
 			u8 *pebtbl_ptr;
 
-			pebtbl_ptr = ptr + (j * PAGE_CACHE_SIZE);
+			pebtbl_ptr = ptr + (j * layout->page_size);
 			calculate_pebtbl_fragment_checksum(pebtbl_ptr);
 		}
 	}
@@ -1857,7 +1876,8 @@ int maptbl_mkfs_commit(struct ssdfs_volume_layout *layout)
 							  seg_index, j);
 
 			metadata_blks = calculate_metadata_blks(layout,
-								peb_desc);
+							SSDFS_MAPTBL_SEG_TYPE,
+							peb_desc);
 
 			commit_block_bitmap(layout, seg_index, j,
 					    metadata_blks);
@@ -1874,7 +1894,9 @@ int maptbl_mkfs_commit(struct ssdfs_volume_layout *layout)
 							   j);
 			}
 
-			blks = calculate_log_pages(layout, peb_desc);
+			blks = calculate_log_pages(layout,
+						   SSDFS_MAPTBL_SEG_TYPE,
+						   peb_desc);
 			commit_log_footer(layout, seg_index, j, blks);
 			commit_segment_header(layout, seg_index, j,
 					      blks);

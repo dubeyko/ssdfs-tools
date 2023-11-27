@@ -741,7 +741,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				layout->segs[seg_index].pebs_capacity);
 			peb_desc = &layout->segs[seg_index].pebs[j];
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_SEGBMAP_SEG_TYPE,
+							peb_desc,
 							SSDFS_SEG_HEADER);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -757,7 +759,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				return err;
 			}
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_SEGBMAP_SEG_TYPE,
+							peb_desc,
 							SSDFS_BLOCK_BITMAP);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -771,7 +775,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_SEGBMAP_SEG_TYPE,
+							peb_desc,
 							SSDFS_OFFSET_TABLE);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -786,7 +792,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+						      SSDFS_SEGBMAP_SEG_TYPE,
+						      peb_desc,
 						      SSDFS_BLOCK_DESCRIPTORS);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -810,7 +818,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_SEGBMAP_SEG_TYPE,
+							peb_desc,
 							SSDFS_LOG_PAYLOAD);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -833,7 +843,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			extent->bytes_count = peb_buffer_size;
 
-			err = set_extent_start_offset(layout, peb_desc,
+			err = set_extent_start_offset(layout,
+							SSDFS_SEGBMAP_SEG_TYPE,
+							peb_desc,
 							SSDFS_LOG_FOOTER);
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
@@ -849,7 +861,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			if (layout->blkbmap.has_backup_copy) {
-				err = set_extent_start_offset(layout, peb_desc,
+				err = set_extent_start_offset(layout,
+						    SSDFS_SEGBMAP_SEG_TYPE,
+						    peb_desc,
 						    SSDFS_BLOCK_BITMAP_BACKUP);
 				if (err) {
 					SSDFS_ERR("fail to define offset: "
@@ -867,7 +881,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			if (layout->blk2off_tbl.has_backup_copy) {
-				err = set_extent_start_offset(layout, peb_desc,
+				err = set_extent_start_offset(layout,
+						    SSDFS_SEGBMAP_SEG_TYPE,
+						    peb_desc,
 						    SSDFS_OFFSET_TABLE_BACKUP);
 				if (err) {
 					SSDFS_ERR("fail to define offset: "
@@ -884,7 +900,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 					return err;
 			}
 
-			blks = calculate_log_pages(layout, peb_desc);
+			blks = calculate_log_pages(layout,
+						   SSDFS_SEGBMAP_SEG_TYPE,
+						   peb_desc);
 			log_pages = max_t(u32, blks, log_pages);
 
 			fragment_index++;
@@ -1020,7 +1038,8 @@ int segbmap_mkfs_commit(struct ssdfs_volume_layout *layout)
 							   seg_index, j);
 
 			metadata_blks = calculate_metadata_blks(layout,
-								peb_desc);
+							SSDFS_SEGBMAP_SEG_TYPE,
+							peb_desc);
 
 			commit_block_bitmap(layout, seg_index, j,
 					    metadata_blks);
@@ -1037,7 +1056,9 @@ int segbmap_mkfs_commit(struct ssdfs_volume_layout *layout)
 							   j);
 			}
 
-			blks = calculate_log_pages(layout, peb_desc);
+			blks = calculate_log_pages(layout,
+						   SSDFS_SEGBMAP_SEG_TYPE,
+						   peb_desc);
 			commit_log_footer(layout, seg_index, j, blks);
 			commit_segment_header(layout, seg_index, j,
 					      blks);

@@ -84,7 +84,8 @@ int snap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	peb_index = 0;
 	peb_desc = &layout->segs[seg_index].pebs[peb_index];
 
-	err = set_extent_start_offset(layout, peb_desc, SSDFS_SEG_HEADER);
+	err = set_extent_start_offset(layout, SSDFS_INITIAL_SNAPSHOT_SEG_TYPE,
+					peb_desc, SSDFS_SEG_HEADER);
 	if (err) {
 		SSDFS_ERR("fail to define extent's start offset: "
 			  "err %d\n", err);
@@ -103,7 +104,8 @@ int snap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 	/* TODO: define payload's layout */
 
-	err = set_extent_start_offset(layout, peb_desc, SSDFS_LOG_FOOTER);
+	err = set_extent_start_offset(layout, SSDFS_INITIAL_SNAPSHOT_SEG_TYPE,
+				      peb_desc, SSDFS_LOG_FOOTER);
 	if (err) {
 		SSDFS_ERR("fail to define extent's start offset: "
 			  "err %d\n", err);
@@ -162,7 +164,9 @@ int snap_mkfs_commit(struct ssdfs_volume_layout *layout)
 	if (err)
 		return err;
 
-	blks = calculate_log_pages(layout, peb_desc);
+	blks = calculate_log_pages(layout,
+				   SSDFS_INITIAL_SNAPSHOT_SEG_TYPE,
+				   peb_desc);
 	commit_log_footer(layout, seg_index, peb_index, blks);
 	commit_segment_header(layout, seg_index, peb_index, blks);
 

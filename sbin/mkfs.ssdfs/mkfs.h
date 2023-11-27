@@ -454,11 +454,14 @@ void parse_options(int argc, char *argv[],
 int reserve_segments(struct ssdfs_volume_layout *layout,
 		     int meta_index);
 int set_extent_start_offset(struct ssdfs_volume_layout *layout,
+			    int seg_type,
 			    struct ssdfs_peb_content *desc,
 			    int extent_index);
 u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
+			int seg_type,
 			struct ssdfs_peb_content *desc);
 u32 calculate_metadata_blks(struct ssdfs_volume_layout *layout,
+			    int seg_type,
 			    struct ssdfs_peb_content *desc);
 int define_segment_header_layout(struct ssdfs_volume_layout *layout,
 				 int seg_index, int peb_index);

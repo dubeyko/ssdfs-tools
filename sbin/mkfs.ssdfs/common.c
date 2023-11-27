@@ -68,6 +68,7 @@ int reserve_segments(struct ssdfs_volume_layout *layout,
 }
 
 int set_extent_start_offset(struct ssdfs_volume_layout *layout,
+			    int seg_type,
 			    struct ssdfs_peb_content *desc,
 			    int extent_index)
 {
@@ -75,9 +76,20 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	u32 inline_capacity = layout->page_size - hdr_size;
 	u32 bytes_count;
 	u32 offset = desc->extents[SSDFS_SEG_HEADER].offset;
+	u32 page_size = layout->page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "extent_index %d\n", extent_index);
+
+	switch (seg_type) {
+	case SSDFS_SB_SEG_TYPE:
+		page_size = PAGE_CACHE_SIZE;
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
 
 	switch (extent_index) {
 	case SSDFS_MAPTBL_CACHE:
@@ -116,8 +128,8 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	if (extent_index < SSDFS_MAPTBL_CACHE)
 		goto set_extent_offset;
 
-	offset += layout->page_size - 1;
-	offset = (offset / layout->page_size) * layout->page_size;
+	offset += page_size - 1;
+	offset = (offset / page_size) * page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "STEP 2: offset %u\n", offset);
@@ -130,16 +142,16 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 
 	case SSDFS_LOG_FOOTER:
 		offset += desc->extents[SSDFS_LOG_PAYLOAD].bytes_count;
-		offset += layout->page_size - 1;
-		offset = (offset / layout->page_size) * layout->page_size;
+		offset += page_size - 1;
+		offset = (offset / page_size) * page_size;
 		/* pass through */
 
 	case SSDFS_LOG_PAYLOAD:
 		bytes_count = desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
 		if (bytes_count > inline_capacity)
 			offset += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
-		offset += layout->page_size - 1;
-		offset = (offset / layout->page_size) * layout->page_size;
+		offset += page_size - 1;
+		offset = (offset / page_size) * page_size;
 		break;
 
 	case SSDFS_MAPTBL_CACHE:
@@ -169,8 +181,8 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 		BUG();
 	}
 
-	offset += layout->page_size - 1;
-	offset = (offset / layout->page_size) * layout->page_size;
+	offset += page_size - 1;
+	offset = (offset / page_size) * page_size;
 
 set_extent_offset:
 	SSDFS_DBG(layout->env.show_debug,
@@ -182,12 +194,26 @@ set_extent_offset:
 }
 
 u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
+			int seg_type,
 			struct ssdfs_peb_content *desc)
 {
 	size_t hdr_size = sizeof(struct ssdfs_segment_header);
-	u32 inline_capacity = layout->page_size - hdr_size;
+	u32 page_size = layout->page_size;
+	u32 inline_capacity;
 	u32 bytes_count = 0;
 	u32 pages_count;
+
+	switch (seg_type) {
+	case SSDFS_SB_SEG_TYPE:
+		page_size = PAGE_CACHE_SIZE;
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
+	inline_capacity = page_size - hdr_size;
 
 	bytes_count += desc->extents[SSDFS_SEG_HEADER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP].bytes_count;
@@ -195,15 +221,14 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 	bytes_count += desc->extents[SSDFS_BLOCK_DESCRIPTORS].bytes_count;
 
 	if (desc->extents[SSDFS_MAPTBL_CACHE].bytes_count > inline_capacity) {
-		bytes_count += layout->page_size - 1;
-		bytes_count =
-			(bytes_count / layout->page_size) * layout->page_size;
+		bytes_count += page_size - 1;
+		bytes_count = (bytes_count / page_size) * page_size;
 	}
 
 	bytes_count += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
 
-	bytes_count += layout->page_size - 1;
-	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+	bytes_count += page_size - 1;
+	bytes_count = (bytes_count / page_size) * page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "bytes_count: SEG_HDR %u, BLK_BMAP %u, "
@@ -218,8 +243,8 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 
 	bytes_count += desc->extents[SSDFS_LOG_PAYLOAD].bytes_count;
 
-	bytes_count += layout->page_size - 1;
-	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+	bytes_count += page_size - 1;
+	bytes_count = (bytes_count / page_size) * page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "bytes_count: PAYLOAD %u, total %u\n",
@@ -230,8 +255,8 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE_BACKUP].bytes_count;
 
-	bytes_count += layout->page_size - 1;
-	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+	bytes_count += page_size - 1;
+	bytes_count = (bytes_count / page_size) * page_size;
 	BUG_ON(bytes_count > layout->env.erase_size);
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -242,7 +267,7 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 		  desc->extents[SSDFS_OFFSET_TABLE_BACKUP].bytes_count,
 		  bytes_count);
 
-	pages_count = bytes_count / layout->page_size;
+	pages_count = bytes_count / page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "bytes_count %u, pages_count %u\n",
@@ -252,31 +277,43 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 }
 
 u32 calculate_metadata_blks(struct ssdfs_volume_layout *layout,
+			    int seg_type,
 			    struct ssdfs_peb_content *desc)
 {
+	u32 page_size = layout->page_size;
 	u32 bytes_count = 0;
 	u32 pages_count;
+
+	switch (seg_type) {
+	case SSDFS_SB_SEG_TYPE:
+		page_size = PAGE_CACHE_SIZE;
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
 
 	bytes_count += desc->extents[SSDFS_SEG_HEADER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE].bytes_count;
 
-	bytes_count += layout->page_size - 1;
-	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+	bytes_count += page_size - 1;
+	bytes_count = (bytes_count / page_size) * page_size;
 
 	bytes_count += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
 
-	bytes_count += layout->page_size - 1;
-	bytes_count = (bytes_count / layout->page_size) * layout->page_size;
+	bytes_count += page_size - 1;
+	bytes_count = (bytes_count / page_size) * page_size;
 
 	bytes_count += desc->extents[SSDFS_LOG_FOOTER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE_BACKUP].bytes_count;
 
-	bytes_count += layout->page_size - 1;
+	bytes_count += page_size - 1;
 	BUG_ON(bytes_count > layout->env.erase_size);
 
-	pages_count = bytes_count / layout->page_size;
+	pages_count = bytes_count / page_size;
 
 	return pages_count;
 }
@@ -2143,8 +2180,8 @@ int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 
 static
 void __commit_log_footer(struct ssdfs_volume_layout *layout,
-			 int seg_index, int peb_index,
-			 u32 blks_count)
+			 int seg_type, int seg_index,
+			 int peb_index, u32 blks_count)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
@@ -2153,14 +2190,26 @@ void __commit_log_footer(struct ssdfs_volume_layout *layout,
 	size_t footer_len = sizeof(struct ssdfs_log_footer);
 	struct ssdfs_metadata_descriptor *meta_desc;
 	u32 log_flags = 0;
+	u32 page_size = layout->page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "seg_index %d, peb_index %d, blks_count %u\n",
-		  seg_index, peb_index, blks_count);
+		  "seg_type %#x, seg_index %d, "
+		  "peb_index %d, blks_count %u\n",
+		  seg_type, seg_index, peb_index, blks_count);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_WARN("seg_index %d >= segs_capacity %d\n",
 			   seg_index, layout->segs_capacity);
+	}
+
+	switch (seg_type) {
+	case SSDFS_SUPERBLOCK:
+		page_size = SSDFS_4KB;
+		break;
+
+	default:
+		/* do nothing */
+		break;
 	}
 
 	seg_desc = &layout->segs[seg_index];
@@ -2182,7 +2231,7 @@ void __commit_log_footer(struct ssdfs_volume_layout *layout,
 	footer->peb_create_time = cpu_to_le64(layout->create_timestamp);
 	footer->cno = cpu_to_le64(layout->create_cno);
 
-	footer->log_bytes = cpu_to_le32(blks_count * layout->page_size);
+	footer->log_bytes = cpu_to_le32(blks_count * page_size);
 
 	if (layout->blkbmap.has_backup_copy &&
 	    peb_desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count > 0) {
@@ -2393,13 +2442,15 @@ void commit_log_footer(struct ssdfs_volume_layout *layout,
 
 	switch (seg_desc->seg_type) {
 	case SSDFS_INITIAL_SNAPSHOT:
-		__commit_log_footer(layout, seg_index,
-				    peb_index, blks_count);
+		__commit_log_footer(layout, seg_desc->seg_type,
+				    seg_index, peb_index,
+				    blks_count);
 		break;
 
 	case SSDFS_SUPERBLOCK:
-		__commit_log_footer(layout, seg_index,
-				    peb_index, blks_count);
+		__commit_log_footer(layout, seg_desc->seg_type,
+				    seg_index, peb_index,
+				    blks_count);
 		break;
 
 	case SSDFS_SEGBMAP:
@@ -2411,8 +2462,11 @@ void commit_log_footer(struct ssdfs_volume_layout *layout,
 			__commit_partial_log_header(layout, seg_index,
 						    peb_index, blks_count);
 		} else {
-			__commit_log_footer(layout, seg_index,
-					    peb_index, blks_count);
+			__commit_log_footer(layout,
+					    seg_desc->seg_type,
+					    seg_index,
+					    peb_index,
+					    blks_count);
 		}
 		break;
 
@@ -2425,8 +2479,11 @@ void commit_log_footer(struct ssdfs_volume_layout *layout,
 			__commit_partial_log_header(layout, seg_index,
 						    peb_index, blks_count);
 		} else {
-			__commit_log_footer(layout, seg_index,
-					    peb_index, blks_count);
+			__commit_log_footer(layout,
+					    seg_desc->seg_type,
+					    seg_index,
+					    peb_index,
+					    blks_count);
 		}
 		break;
 

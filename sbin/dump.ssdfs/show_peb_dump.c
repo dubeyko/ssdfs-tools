@@ -2698,8 +2698,12 @@ int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
 		} else if (key == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
 			env->peb.log_size =
 				le32_to_cpu(buf->pl_hdr.log_bytes);
-		} else
-			BUG();
+		} else {
+			SSDFS_ERR("corrupted magic: common %#x, key %#x\n",
+				  le32_to_cpu(buf->magic.common),
+				  le16_to_cpu(buf->magic.key));
+			return -EIO;
+		}
 	} else {
 		if (env->peb.log_size == U32_MAX) {
 			SSDFS_INFO("PLEASE, DEFINE LOG SIZE\n");
@@ -3547,7 +3551,6 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 	union ssdfs_log_header buf;
 	u64 peb_id;
 	u64 pebs_count;
-	u32 pagesize;
 	int log_index;
 	u32 logs_count;
 	u32 max_logs;
@@ -3586,10 +3589,8 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
 	}
 
-	pagesize = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
-
 	if (env->peb.logs_count >= U32_MAX) {
-		env->peb.logs_count = env->peb.peb_size / pagesize;
+		env->peb.logs_count = env->peb.peb_size / SSDFS_4KB;
 	}
 
 	if (env->peb.pebs_count == U64_MAX) {
@@ -3712,9 +3713,27 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			}
 
 try_next_log:
+			SSDFS_DBG(env->base.show_debug,
+				  "CURRENT LOG: peb_id %llu, pebs_count %llu, "
+				  "log_index %u, logs_count %u, "
+				  "log_size %u, log_offset %u\n",
+				  env->peb.id, env->peb.pebs_count,
+				  env->peb.log_index, env->peb.logs_count,
+				  env->peb.log_size,
+				  env->peb.log_offset);
+
 			env->peb.log_index++;
 			env->peb.logs_count--;
 			env->peb.log_offset += env->peb.log_size;
+
+			SSDFS_DBG(env->base.show_debug,
+				  "NEXT LOG: peb_id %llu, pebs_count %llu, "
+				  "log_index %u, logs_count %u, "
+				  "log_size %u, log_offset %u\n",
+				  env->peb.id, env->peb.pebs_count,
+				  env->peb.log_index, env->peb.logs_count,
+				  env->peb.log_size,
+				  env->peb.log_offset);
 		}
 
 try_next_peb:
