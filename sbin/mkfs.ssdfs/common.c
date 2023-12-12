@@ -758,6 +758,7 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 				     struct ssdfs_extent_desc *extent,
 				     int peb_index,
 				     size_t bytes_count,
+				     u32 start_logical_blk,
 				     u16 blks_count)
 {
 	struct ssdfs_block_bitmap_header *bmp_hdr;
@@ -782,8 +783,10 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "layout %p, extent %p, "
-		  "bytes_count %zu, blks_count %u\n",
-		  layout, extent, bytes_count, blks_count);
+		  "bytes_count %zu, start_logical_blk %u "
+		  "blks_count %u\n",
+		  layout, extent, bytes_count,
+		  start_logical_blk, blks_count);
 
 	BUG_ON(!layout || !extent);
 	BUG_ON(extent->buf);
@@ -887,18 +890,21 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	}
 
 	if (valid_blks > 0) {
-		err = ssdfs_blkbmap_set_area(bmap, 0, valid_blks,
+		err = ssdfs_blkbmap_set_area(bmap, start_logical_blk,
+					     valid_blks,
 					     SSDFS_BLK_VALID);
 		if (err) {
 			SSDFS_ERR("fail to set block bitmap: "
-				  "valid_blks %u, err %d\n",
-				  valid_blks, err);
+				  "start_logical_blk %u, valid_blks %u, "
+				  "err %d\n",
+				  start_logical_blk, valid_blks, err);
 			goto fail_pre_commit_blk_bmap;
 		}
 	}
 
 	if (pre_allocated_blks > 0) {
-		err = ssdfs_blkbmap_set_area(bmap, valid_blks,
+		err = ssdfs_blkbmap_set_area(bmap,
+					     start_logical_blk + valid_blks,
 					     pre_allocated_blks,
 					     SSDFS_BLK_PRE_ALLOCATED);
 		if (err) {
@@ -1071,7 +1077,8 @@ fail_pre_commit_blk_bmap:
 
 int pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
-			    size_t bytes_count, u16 blks_count)
+			    size_t bytes_count,
+			    u32 start_logical_blk, u16 blks_count)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
@@ -1079,8 +1086,10 @@ int pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d, "
-		  "bytes_count %zu, blks_count %u\n",
-		  seg_index, peb_index, bytes_count, blks_count);
+		  "bytes_count %zu, start_logical_blk %u, "
+		  "blks_count %u\n",
+		  seg_index, peb_index, bytes_count,
+		  start_logical_blk, blks_count);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_ERR("seg_index %d >= segs_capacity %d\n",
@@ -1100,12 +1109,14 @@ int pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 	extent = &peb_desc->extents[SSDFS_BLOCK_BITMAP];
 
 	return __pre_commit_block_bitmap(layout, extent, peb_index,
-					 bytes_count, blks_count);
+					 bytes_count,
+					 start_logical_blk, blks_count);
 }
 
 int pre_commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
-				   size_t bytes_count, u16 blks_count)
+				   size_t bytes_count,
+				   u32 start_logical_blk, u16 blks_count)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
@@ -1113,8 +1124,10 @@ int pre_commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d, "
-		  "bytes_count %zu, blks_count %u\n",
-		  seg_index, peb_index, bytes_count, blks_count);
+		  "bytes_count %zu, start_logical_blk %u, "
+		  "blks_count %u\n",
+		  seg_index, peb_index, bytes_count,
+		  start_logical_blk, blks_count);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_ERR("seg_index %d >= segs_capacity %d\n",
@@ -1134,7 +1147,8 @@ int pre_commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 	extent = &peb_desc->extents[SSDFS_BLOCK_BITMAP_BACKUP];
 
 	return __pre_commit_block_bitmap(layout, extent, peb_index,
-					 bytes_count, blks_count);
+					 bytes_count,
+					 start_logical_blk, blks_count);
 }
 
 static void __commit_block_bitmap(struct ssdfs_volume_layout *layout,
@@ -1287,7 +1301,10 @@ static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 					   u16 logical_blk,
 					   u16 start_peb_page,
 					   u16 start_id, u16 valid_blks,
-					   u16 rest_blks, u16 *processed_blks)
+					   u16 rest_blks,
+					   u32 used_logical_blks,
+					   u32 last_allocated_blk,
+					   u16 *processed_blks)
 {
 	struct ssdfs_phys_offset_table_header *hdr;
 	size_t hdr_size = sizeof(struct ssdfs_phys_offset_table_header);
@@ -1303,6 +1320,9 @@ static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 	BUG_ON(valid_blks == 0);
 	BUG_ON(area_type >= SSDFS_LOG_AREA_MAX);
 	BUG_ON(peb_index >= U16_MAX);
+	BUG_ON((last_allocated_blk + 1) != used_logical_blks);
+	BUG_ON(used_logical_blks >= U16_MAX);
+	BUG_ON(last_allocated_blk >= U16_MAX);
 
 	hdr = (struct ssdfs_phys_offset_table_header *)fragment;
 	offsets = (struct ssdfs_phys_offset_descriptor *)(fragment + hdr_size);
@@ -1345,10 +1365,12 @@ static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 	hdr->flags = cpu_to_le16(flags);
 
 	free_items = min_t(u32, pages_per_seg, (u32)OFF_DESC_PER_FRAGMENT());
-	free_items -= id_count;
-	hdr->used_logical_blks = cpu_to_le16(id_count);
+	BUG_ON(used_logical_blks > free_items);
+	free_items -= used_logical_blks;
+
+	hdr->used_logical_blks = cpu_to_le16((u16)used_logical_blks);
 	hdr->free_logical_blks = cpu_to_le16(free_items);
-	hdr->last_allocated_blk = cpu_to_le16(id_count - 1);
+	hdr->last_allocated_blk = cpu_to_le16((u16)last_allocated_blk);
 
 	BUG_ON(byte_size >= U16_MAX);
 
@@ -1366,7 +1388,9 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 				     struct ssdfs_extent_desc *extent,
 				     u64 logical_byte_offset,
 				     u32 start_logical_blk,
-				     u16 valid_blks)
+				     u16 valid_blks,
+				     u32 used_logical_blks,
+				     u32 last_allocated_blk)
 {
 	struct ssdfs_blk2off_table_header *tbl_hdr;
 	struct ssdfs_translation_extent *trans_extent;
@@ -1398,8 +1422,11 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	BUG_ON(extent->buf);
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "layout %p, peb_index %d, extent %p, valid_blks %u\n",
-		  layout, peb_index, extent, valid_blks);
+		  "layout %p, peb_index %d, extent %p, "
+		  "valid_blks %u, used_logical_blks %u, "
+		  "last_allocated_blk %u\n",
+		  layout, peb_index, extent, valid_blks,
+		  used_logical_blks, last_allocated_blk);
 
 	BUG_ON(start_logical_blk >= U16_MAX);
 	BUG_ON(layout->page_size == 0);
@@ -1517,6 +1544,8 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 							(u16)start_peb_page,
 							start_id, valid_blks,
 							rest_blks,
+							used_logical_blks,
+							last_allocated_blk,
 							&processed_blks);
 
 			frag_desc = &tbl_hdr->blk[j];
@@ -1588,7 +1617,9 @@ int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
 			    u64 logical_byte_offset,
 			    u32 start_logical_blk,
-			    u16 valid_blks)
+			    u16 valid_blks,
+			    u32 used_logical_blks,
+			    u32 last_allocated_blk)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
@@ -1596,8 +1627,10 @@ int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d, "
-		  "valid_blks %u\n",
-		  seg_index, peb_index, valid_blks);
+		  "valid_blks %u, used_logical_blks %u, "
+		  "last_allocated_blk %u\n",
+		  seg_index, peb_index, valid_blks,
+		  used_logical_blks, last_allocated_blk);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_ERR("seg_index %d >= segs_capacity %d\n",
@@ -1619,14 +1652,18 @@ int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 	return __pre_commit_offset_table(layout, peb_index, extent,
 					 logical_byte_offset,
 					 start_logical_blk,
-					 valid_blks);
+					 valid_blks,
+					 used_logical_blks,
+					 last_allocated_blk);
 }
 
 int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
 				   u64 logical_byte_offset,
 				   u32 start_logical_blk,
-				   u16 valid_blks)
+				   u16 valid_blks,
+				   u32 used_logical_blks,
+				   u32 last_allocated_blk)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
@@ -1634,8 +1671,10 @@ int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d, "
-		  "valid_blks %u\n",
-		  seg_index, peb_index, valid_blks);
+		  "valid_blks %u, used_logical_blks %u, "
+		  "last_allocated_blk %u\n",
+		  seg_index, peb_index, valid_blks,
+		  used_logical_blks, last_allocated_blk);
 
 	if (seg_index >= layout->segs_capacity) {
 		SSDFS_ERR("seg_index %d >= segs_capacity %d\n",
@@ -1657,7 +1696,9 @@ int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 	return __pre_commit_offset_table(layout, peb_index, extent,
 					 logical_byte_offset,
 					 start_logical_blk,
-					 valid_blks);
+					 valid_blks,
+					 used_logical_blks,
+					 last_allocated_blk);
 }
 
 static void __commit_offset_table(struct ssdfs_volume_layout *layout,

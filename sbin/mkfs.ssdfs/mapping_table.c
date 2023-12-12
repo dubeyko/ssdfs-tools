@@ -223,6 +223,9 @@ define_stripes_per_portion:
 	maptbl_pebs = (fragments + portions_per_fragment - 1) / portions_per_fragment;
 	maptbl_segs = (maptbl_pebs + pebs_per_seg - 1) / pebs_per_seg;
 
+	maptbl_pebs = maptbl_segs * pebs_per_seg;
+	fragments = maptbl_pebs * portions_per_fragment;
+
 	if (layout->maptbl.has_backup_copy)
 		*segs = maptbl_segs * 2;
 	else
@@ -1103,13 +1106,19 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 	u32 portions_per_seg =
 		pebs_per_seg * layout->maptbl.portions_per_fragment;
-	u32 segs_per_copy = layout->maptbl.portions_count / portions_per_seg;
+	u32 segs_per_copy = (layout->maptbl.portions_count +
+				portions_per_seg - 1) / portions_per_seg;
 	int seg_index;
 	u64 seg_id = U64_MAX;
 	u32 extent_len;
 	int i, j;
 
-	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
+	SSDFS_DBG(layout->env.show_debug,
+		  "layout %p, pebs_per_seg %u, portions_per_seg %u, "
+		  "portions_count %u, segs_per_copy %u\n",
+		  layout, pebs_per_seg, portions_per_seg,
+		  layout->maptbl.portions_count,
+		  segs_per_copy);
 
 	BUG_ON(seg_chain_type < SSDFS_MAIN_MAPTBL_SEG ||
 		seg_chain_type >= SSDFS_MAPTBL_SEG_COPY_MAX);
@@ -1148,6 +1157,11 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 			extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
 			extent->flags = 0;
 
+			SSDFS_DBG(layout->env.show_debug,
+				  "extent (index %d, seg_id %llu, "
+				  "extent_len %u)\n",
+				  j, seg_id, extent_len);
+
 			seg_id = cur_seg_id;
 			extent_len = 1;
 			j++;
@@ -1165,6 +1179,11 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 		extent->len = cpu_to_le32(extent_len);
 		extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
 		extent->flags = 0;
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "extent (index %d, seg_id %llu, "
+			  "extent_len %u)\n",
+			  j, seg_id, extent_len);
 	}
 }
 
@@ -1471,6 +1490,8 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	u32 log_pages = 0;
 	u32 payload_offset_in_bytes = 0;
 	u32 start_logical_blk;
+	u32 used_logical_blks = 0;
+	u32 last_allocated_blk = U16_MAX;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1506,6 +1527,21 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 	for (i = 0; i < segs_count; i++) {
 		start_logical_blk = 0;
+
+		used_logical_blks = 0;
+		last_allocated_blk = U16_MAX;
+
+		for (j = 0; j < pebs_per_seg; j++) {
+			used_logical_blks += valid_blks;
+
+			if (used_logical_blks == 0) {
+				SSDFS_ERR("invalid used_logical_blks %u\n",
+					  used_logical_blks);
+				return -ERANGE;
+			}
+
+			last_allocated_blk = used_logical_blks - 1;
+		}
 
 		for (j = 0; j < pebs_per_seg; j++) {
 			struct ssdfs_peb_content *peb_desc;
@@ -1560,6 +1596,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			err = pre_commit_block_bitmap(layout, seg_index, j,
 						      peb_buffer_size,
+						      start_logical_blk,
 						      valid_blks);
 			if (err)
 				return err;
@@ -1577,7 +1614,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			err = pre_commit_offset_table(layout, seg_index, j,
 							logical_byte_offset,
 							start_logical_blk,
-							valid_blks);
+							valid_blks,
+							used_logical_blks,
+							last_allocated_blk);
 			if (err)
 				return err;
 
@@ -1656,6 +1695,7 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 								seg_index,
 								j,
 								peb_buffer_size,
+								start_logical_blk,
 								valid_blks);
 				if (err)
 					return err;
@@ -1676,7 +1716,9 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 							seg_index, j,
 							logical_byte_offset,
 							start_logical_blk,
-							valid_blks);
+							valid_blks,
+							used_logical_blks,
+							last_allocated_blk);
 				if (err)
 					return err;
 			}

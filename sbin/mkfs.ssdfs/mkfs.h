@@ -473,13 +473,15 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 			   u32 blks_count);
 int pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
-			    size_t bytes_count, u16 blks_count);
+			    size_t bytes_count,
+			    u32 start_logical_blk, u16 blks_count);
 void commit_block_bitmap(struct ssdfs_volume_layout *layout,
 			 int seg_index, int peb_index,
 			 u16 metadata_blks);
 int pre_commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
-				   size_t bytes_count, u16 blks_count);
+				   size_t bytes_count,
+				   u32 start_logical_blk, u16 blks_count);
 void commit_block_bitmap_backup(struct ssdfs_volume_layout *layout,
 				int seg_index, int peb_index,
 				u16 metadata_blks);
@@ -487,14 +489,18 @@ int pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 			    int seg_index, int peb_index,
 			    u64 logical_byte_offset,
 			    u32 start_logical_blk,
-			    u16 valid_blks);
+			    u16 valid_blks,
+			    u32 used_logical_blks,
+			    u32 last_allocated_blk);
 void commit_offset_table(struct ssdfs_volume_layout *layout,
 			 int seg_index, int peb_index);
 int pre_commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				   int seg_index, int peb_index,
 				   u64 logical_byte_offset,
 				   u32 start_logical_blk,
-				   u16 valid_blks);
+				   u16 valid_blks,
+				   u32 used_logical_blks,
+				   u32 last_allocated_blk);
 void commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				int seg_index, int peb_index);
 int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,

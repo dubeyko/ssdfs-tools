@@ -684,6 +684,8 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	u32 log_pages = 0;
 	u32 payload_offset_in_bytes = 0;
 	u32 start_logical_blk;
+	u32 used_logical_blks = 0;
+	u32 last_allocated_blk = U16_MAX;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -717,6 +719,21 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 	for (i = 0; i < segs_count; i++) {
 		start_logical_blk = 0;
+
+		used_logical_blks = 0;
+		last_allocated_blk = U16_MAX;
+
+		for (j = 0; j < pebs_per_seg; j++) {
+			used_logical_blks += valid_blks;
+
+			if (used_logical_blks == 0) {
+				SSDFS_ERR("invalid used_logical_blks %u\n",
+					  used_logical_blks);
+				return -ERANGE;
+			}
+
+			last_allocated_blk = used_logical_blks - 1;
+		}
 
 		for (j = 0; j < pebs_per_seg; j++) {
 			struct ssdfs_peb_content *peb_desc;
@@ -771,6 +788,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			err = pre_commit_block_bitmap(layout, seg_index, j,
 						      peb_buffer_size,
+						      start_logical_blk,
 						      valid_blks);
 			if (err)
 				return err;
@@ -788,7 +806,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			err = pre_commit_offset_table(layout, seg_index, j,
 							logical_byte_offset,
 							start_logical_blk,
-							valid_blks);
+							valid_blks,
+							used_logical_blks,
+							last_allocated_blk);
 			if (err)
 				return err;
 
@@ -875,6 +895,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 								seg_index,
 								j,
 								peb_buffer_size,
+								start_logical_blk,
 								valid_blks);
 				if (err)
 					return err;
@@ -895,7 +916,9 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 							seg_index, j,
 							logical_byte_offset,
 							start_logical_blk,
-							valid_blks);
+							valid_blks,
+							used_logical_blks,
+							last_allocated_blk);
 				if (err)
 					return err;
 			}

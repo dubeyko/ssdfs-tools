@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.37 [December 12, 2023]
+    (*) Fix bugs in supporting multiple erase blocks in segment.
+
 v.4.36 [November 27, 2023]
     (*) Fix bugs in supporting logical block size bigger than 4KB.
 
