@@ -1,10 +1,11 @@
-//SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  * ssdfs-utils -- SSDFS file system utilities.
  *
  * sbin/recoverfs.ssdfs/delete_folder.c - implementation of delete folder logic.
  *
- * Copyright (c) 2023 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2023-2024 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

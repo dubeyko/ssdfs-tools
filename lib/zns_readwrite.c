@@ -1,10 +1,11 @@
-//SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  * ssdfs-utils -- SSDFS file system utilities.
  *
  * lib/zns_readwrite.c - ZNS read/write operations.
  *
- * Copyright (c) 2022-2023 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2022-2024 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

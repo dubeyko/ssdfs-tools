@@ -1,11 +1,12 @@
-//SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  * ssdfs-utils -- SSDFS file system utilities.
  *
  * sbin/recoverfs.ssdfs/recoverfs.c - implementation of recoverfs.ssdfs
  *                                    (volume recovering) utility.
  *
- * Copyright (c) 2020-2023 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2020-2024 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

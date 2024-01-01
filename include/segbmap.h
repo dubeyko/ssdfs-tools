@@ -1,12 +1,13 @@
-//SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  * ssdfs-utils -- SSDFS file system utilities.
  *
  * include/segbmap.h - segment bitmap declarations.
  *
  * Copyright (c) 2014-2019 HGST, a Western Digital Company.
  *              http://www.hgst.com/
- * Copyright (c) 2014-2023 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2014-2024 Viacheslav Dubeyko <slava@dubeyko.com>
  *              http://www.ssdfs.org/
  *
  * (C) Copyright 2014-2019, HGST, Inc., All rights reserved.
