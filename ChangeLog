@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.38 [January 27, 2024]
+    (*) [dumpfs] Fix issue with parsing block descriptors array.
+
 v.4.37 [December 12, 2023]
     (*) Fix bugs in supporting multiple erase blocks in segment.
 

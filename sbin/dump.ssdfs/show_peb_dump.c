@@ -2099,6 +2099,8 @@ finish_parse_fragment:
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
 	if (le16_to_cpu(area_hdr->chain_hdr.flags) & SSDFS_MULTIPLE_HDR_CHAIN) {
+		u32 rest_bytes;
+
 		frag = &area_hdr->blk[SSDFS_NEXT_BLK_TABLE_INDEX];
 
 		if (le8_to_cpu(frag->type) != SSDFS_NEXT_TABLE_DESC) {
@@ -2108,10 +2110,28 @@ finish_parse_fragment:
 		}
 
 		if (le32_to_cpu(frag->offset) != parsed_bytes) {
-			SSDFS_ERR("offset %u != parsed_bytes %u\n",
-				  le32_to_cpu(frag->offset),
-				  parsed_bytes);
-			return -ERANGE;
+			rest_bytes = parsed_bytes % SSDFS_4KB;
+			rest_bytes = SSDFS_4KB - rest_bytes;
+
+			if (rest_bytes >= area_hdr_size) {
+				SSDFS_ERR("offset %u != parsed_bytes %u\n",
+					  le32_to_cpu(frag->offset),
+					  parsed_bytes);
+				return -ERANGE;
+			} else if (le32_to_cpu(frag->offset) % SSDFS_4KB) {
+				SSDFS_ERR("unaligned offset %u\n",
+					  le32_to_cpu(frag->offset));
+				return -ERANGE;
+			}
+
+			parsed_bytes += rest_bytes;
+
+			if (le32_to_cpu(frag->offset) != parsed_bytes) {
+				SSDFS_ERR("offset %u != parsed_bytes %u\n",
+					  le32_to_cpu(frag->offset),
+					  parsed_bytes);
+				return -ERANGE;
+			}
 		}
 
 		goto parse_next_area;
