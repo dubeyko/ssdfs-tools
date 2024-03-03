@@ -334,6 +334,28 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 		return -EINVAL;
 	}
 
+	switch (erase_size) {
+	case SSDFS_128KB:
+		switch (page_size) {
+		case SSDFS_32KB:
+		case SSDFS_64KB:
+		case SSDFS_128KB:
+			SSDFS_ERR("Page size %u is big for erase size %u. "
+				  "Please, use smaller page size [4K, 8K, 16K].\n",
+				  page_size, erase_size);
+			return -EINVAL;
+
+		default:
+			/* do nothing */
+			break;
+		}
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
 	switch (layout->env.device_type) {
 	case SSDFS_ZNS_DEVICE:
 		info.erasesize = layout->env.erase_size;

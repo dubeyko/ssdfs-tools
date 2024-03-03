@@ -1434,19 +1434,26 @@ static void maptbl_set_log_pages(struct ssdfs_volume_layout *layout,
 		}
 	}
 
-	SSDFS_DBG(layout->env.show_debug,
-		  "log_pages %u\n",
-		  log_pages);
-
 try_align_log_pages:
+	SSDFS_DBG(layout->env.show_debug,
+		  "TRY ALIGN LOG PAGES: "
+		  "log_pages %u, blks_count %u\n",
+		  log_pages, blks);
+
 	while (layout->env.erase_size % (log_pages * layout->page_size))
 		log_pages++;
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "log_pages %u\n",
+		  "ALIGNED: log_pages %u\n",
 		  log_pages);
 
-	if ((log_pages - blks) < 3) {
+	BUG_ON(log_pages > pages_per_peb);
+
+	if (log_pages == pages_per_peb) {
+		/*
+		 * Stop align log_pages
+		 */
+	} else if ((log_pages - blks) < 3) {
 		log_pages += 3;
 		goto try_align_log_pages;
 	}

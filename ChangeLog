@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.39 [March 03, 2024]
+    (*) [mkfs] Prevent creating volume with 32KB logical block size
+               for 128KB erase block size.
+
 v.4.38 [January 27, 2024]
     (*) [dumpfs] Fix issue with parsing block descriptors array.
 

@@ -646,10 +646,25 @@ static void segbmap_set_log_pages(struct ssdfs_volume_layout *layout,
 	}
 
 try_align_log_pages:
+	SSDFS_DBG(layout->env.show_debug,
+		  "TRY ALIGN LOG PAGES: "
+		  "log_pages %u, blks_count %u\n",
+		  log_pages, blks);
+
 	while (layout->env.erase_size % (log_pages * layout->page_size))
 		log_pages++;
 
-	if ((log_pages - blks) < 3) {
+	SSDFS_DBG(layout->env.show_debug,
+		  "ALIGNED: log_pages %u\n",
+		  log_pages);
+
+	BUG_ON(log_pages > pages_per_peb);
+
+	if (log_pages == pages_per_peb) {
+		/*
+		 * Stop align log_pages
+		 */
+	} else if ((log_pages - blks) < 3) {
 		log_pages += 3;
 		goto try_align_log_pages;
 	}
@@ -662,6 +677,10 @@ try_align_log_pages:
 	log_pages_default = pages_per_peb / SSDFS_LOGS_PER_PEB_DEFAULT;
 	log_pages = max_t(u32, log_pages, log_pages_default);
 	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "SET LOG PAGES: log_pages %u\n",
+		  log_pages);
 
 	layout->segbmap.log_pages = log_pages;
 	BUG_ON(log_pages >= U16_MAX);
