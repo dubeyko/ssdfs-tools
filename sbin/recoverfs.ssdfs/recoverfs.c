@@ -384,7 +384,8 @@ int main(int argc, char *argv[])
 	env.base.page_size = 1 << buf.seg_hdr.volume_hdr.log_pagesize;
 
 	pebs_count = env.base.fs_size / env.base.erase_size;
-	pebs_per_thread = pebs_count / env.threads.capacity;
+	pebs_per_thread = (pebs_count + env.threads.capacity - 1);
+	pebs_per_thread /= env.threads.capacity;
 
 	SSDFS_RECOVERFS_INFO(env.base.show_info,
 			     "[003]\tCREATE THREADS...\n");

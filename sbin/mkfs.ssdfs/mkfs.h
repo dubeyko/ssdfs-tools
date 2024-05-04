@@ -30,6 +30,8 @@
 
 #define mkfs_fmt(fmt) "mkfs.ssdfs: " SSDFS_UTILS_VERSION ": " fmt
 
+#include <pthread.h>
+
 #include "ssdfs_tools.h"
 #include "segbmap.h"
 
@@ -40,7 +42,9 @@
 		} \
 	} while (0)
 
-#define SSDFS_CREATE_CNO	(0)
+#define SSDFS_CREATE_CNO		(0)
+#define SSDFS_MKFS_UNKNOWN_THREADS	(0)
+#define SSDFS_MKFS_DEFAULT_THREADS	(1)
 
 enum {
 	SSDFS_SEG_HEADER,
@@ -342,6 +346,7 @@ struct ssdfs_write_buffer {
  * @calculated_open_zones: calculated number of open zones
  * @write_buf: buffer for alligned write of prepared metadata
  * @env: environment
+ * @threads: threads environment
  * @is_volume_erased: inform that volume has been erased
  */
 struct ssdfs_volume_layout {
@@ -379,6 +384,7 @@ struct ssdfs_volume_layout {
 	struct ssdfs_write_buffer write_buffer;
 
 	struct ssdfs_environment env;
+	struct ssdfs_threads_environment threads;
 	int is_volume_erased;
 };
 
@@ -443,6 +449,68 @@ int META2SEG_TYPE(int meta_index)
 	}
 
 	return SSDFS_UNKNOWN_SEG_TYPE;
+}
+
+static inline
+void ssdfs_init_thread_descriptor(struct ssdfs_thread_state *state,
+				  int thread_id)
+{
+	state->id = thread_id;
+	state->err = 0;
+}
+
+static inline
+void ssdfs_init_base_environment(struct ssdfs_thread_state *state,
+				 struct ssdfs_environment *base)
+{
+	memcpy(&state->base, base, sizeof(struct ssdfs_environment));
+}
+
+static inline
+void ssdfs_init_peb_environment(struct ssdfs_thread_state *state,
+				int thread_id, u64 pebs_per_thread,
+				u64 pebs_count, u32 erase_size)
+{
+	state->peb.id = (u64)thread_id * pebs_per_thread;
+	state->peb.pebs_count = min_t(u64,
+					pebs_count - state->peb.id,
+					pebs_per_thread);
+	state->peb.peb_size = erase_size;
+}
+
+static inline
+int ssdfs_mkfs_init_thread_state(struct ssdfs_thread_state *state,
+				 int thread_id,
+				 struct ssdfs_environment *base,
+				 u64 pebs_per_thread,
+				 u64 pebs_count,
+				 u32 erase_size)
+{
+	ssdfs_init_thread_descriptor(state, thread_id);
+	ssdfs_init_base_environment(state, base);
+	ssdfs_init_peb_environment(state, thread_id, pebs_per_thread,
+				   pebs_count, erase_size);
+
+	return 0;
+}
+
+static inline
+void ssdfs_wait_threads_activity_ending(struct ssdfs_volume_layout *layout)
+{
+	int i;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "requested_jobs %u, tasks_capacity %u\n",
+		  layout->threads.requested_jobs, layout->threads.capacity);
+
+	for (i = 0; i < layout->threads.requested_jobs; i++) {
+		pthread_join(layout->threads.jobs[i].thread, NULL);
+
+		if (layout->threads.jobs[i].err != 0) {
+			SSDFS_ERR("thread %d has failed: err %d\n",
+				  i, layout->threads.jobs[i].err);
+		}
+	}
 }
 
 /* options.c */

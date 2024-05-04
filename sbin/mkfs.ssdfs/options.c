@@ -77,6 +77,7 @@ void print_usage(void)
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
 	SSDFS_INFO("\t [-i|--inode_size size]\t  inode size in bytes "
 		   "(265B|512B|1KB|2KB|4KB).\n");
+	SSDFS_INFO("\t [-j|--threads]\t\t  define erase threads number.\n");
 	SSDFS_INFO("\t [-K|--not-erase-device]  do not erase device by mkfs.\n");
 	SSDFS_INFO("\t [-L|--label]\t\t  set a volume label.\n");
 	SSDFS_INFO("\t [-M|--maptbl has_copy,stripes_per_fragment=value,"
@@ -457,7 +458,7 @@ void parse_options(int argc, char *argv[],
 	int oi = 1;
 	char *p;
 	u64 granularity;
-	char sopts[] = "B:C:D:de:fhi:KL:M:m:O:p:qS:s:T:U:V";
+	char sopts[] = "B:C:D:de:fhi:j:KL:M:m:O:p:qS:s:T:U:V";
 	static const struct option lopts[] = {
 		{"blkbmap", 1, NULL, 'B'},
 		{"compression", 1, NULL, 'C'},
@@ -467,6 +468,7 @@ void parse_options(int argc, char *argv[],
 		{"force", 0, NULL, 'f'},
 		{"help", 0, NULL, 'h'},
 		{"inode_size", 1, NULL, 'i'},
+		{"threads", 1, NULL, 'j'},
 		{"not-erase-device", 0, NULL, 'K'},
 		{"label", 1, NULL, 'L'},
 		{"maptbl", 1, NULL, 'M'},
@@ -621,6 +623,9 @@ void parse_options(int argc, char *argv[],
 				check_inode_size(granularity);
 				layout->inode_size = (u16)granularity;
 			}
+			break;
+		case 'j':
+			layout->threads.capacity = atoi(optarg);
 			break;
 		case 'K':
 			layout->need_erase_device = SSDFS_FALSE;

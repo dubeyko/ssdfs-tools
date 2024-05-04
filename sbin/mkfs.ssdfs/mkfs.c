@@ -29,68 +29,17 @@
 #include <getopt.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sched.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <paths.h>
 #include <blkid/blkid.h>
 #include <uuid/uuid.h>
 #include <limits.h>
+#include <pthread.h>
 
 #include "mkfs.h"
 #include <mtd/mtd-abi.h>
-
-/* Volume layout description */
-static struct ssdfs_volume_layout volume_layout = {
-	.force_overwrite = SSDFS_FALSE,
-	.need_erase_device = SSDFS_TRUE,
-	.env.show_debug = SSDFS_FALSE,
-	.env.show_info = SSDFS_TRUE,
-	.seg_size = SSDFS_8MB,
-	.env.erase_size = SSDFS_8MB,
-	.env.open_zones = 0,
-	.page_size = SSDFS_4KB,
-	.nand_dies_count = SSDFS_NAND_DIES_DEFAULT,
-	.lebs_per_peb_index = SSDFS_LEBS_PER_PEB_INDEX_DEFAULT,
-	.migration_threshold = U16_MAX,
-	.compression = SSDFS_ZLIB_BLOB,
-	.inode_size = sizeof(struct ssdfs_inode),
-	.sb.log_pages = U16_MAX,
-	.blkbmap.has_backup_copy = SSDFS_FALSE,
-	.blkbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
-	.blk2off_tbl.has_backup_copy = SSDFS_FALSE,
-	.blk2off_tbl.compression = SSDFS_UNKNOWN_COMPRESSION,
-	.blk2off_tbl.pages_per_seg = U32_MAX,
-	.segbmap.has_backup_copy = SSDFS_FALSE,
-	.segbmap.segs_per_chain = SSDFS_SEGBMAP_SEGS_PER_CHAIN_DEFAULT,
-	.segbmap.fragments_per_peb = SSDFS_SEGBMAP_FRAG_PER_PEB_DEFAULT,
-	.segbmap.log_pages = U16_MAX,
-	.segbmap.migration_threshold = U16_MAX,
-	.segbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
-	.segbmap.fragments_count = 0,
-	.segbmap.fragment_size = PAGE_CACHE_SIZE,
-	.segbmap.fragments_array = NULL,
-	.maptbl.has_backup_copy = SSDFS_FALSE,
-	.maptbl.stripes_per_portion = SSDFS_MAPTBL_STRIPES_PER_FRAG_DEFAULT,
-	.maptbl.portions_per_fragment = SSDFS_MAPTBL_FRAG_PER_PEB_DEFAULT,
-	.maptbl.log_pages = U16_MAX,
-	.maptbl.migration_threshold = U16_MAX,
-	.maptbl.reserved_pebs_per_fragment = U16_MAX,
-	.maptbl.compression = SSDFS_UNKNOWN_COMPRESSION,
-	.btree.node_size = SSDFS_8KB,
-	.btree.min_index_area_size = 0,
-	.btree.lnode_log_pages = U16_MAX,
-	.btree.hnode_log_pages = U16_MAX,
-	.btree.inode_log_pages = U16_MAX,
-	.user_data_seg.log_pages = U16_MAX,
-	.user_data_seg.migration_threshold = U16_MAX,
-	.user_data_seg.compression = SSDFS_UNKNOWN_COMPRESSION,
-	.env.device_type = SSDFS_DEVICE_TYPE_MAX,
-	.calculated_open_zones = 0,
-	.write_buffer.ptr = NULL,
-	.write_buffer.offset = 0,
-	.write_buffer.capacity = 0,
-	.is_volume_erased = SSDFS_FALSE,
-};
 
 /* Metadata items creation operations set */
 static struct ssdfs_mkfs_operations *mkfs_ops[SSDFS_METADATA_ITEMS_MAX];
@@ -1211,11 +1160,8 @@ static int erase_peb(struct ssdfs_volume_layout *layout,
 	return 0;
 }
 
-static int erase_device(struct ssdfs_volume_layout *layout)
+static int erase_allocated_segments_only(struct ssdfs_volume_layout *layout)
 {
-	int fd = layout->env.fd;
-	u64 seg_size = layout->seg_size;
-	u64 offset = 0;
 	char *buf;
 	size_t buf_size = SSDFS_128KB;
 	u32 i, j;
@@ -1227,9 +1173,6 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 		  layout->env.dev_name, layout->segs_count,
 		  layout->seg_size, layout->need_erase_device,
 		  layout->is_volume_erased);
-
-	if (layout->is_volume_erased)
-		return 0;
 
 	err = posix_memalign((void **)&buf, SSDFS_128KB, buf_size);
 	if (err) {
@@ -1244,41 +1187,229 @@ static int erase_device(struct ssdfs_volume_layout *layout)
 
 	memset(buf, 0xff, buf_size);
 
-	if (layout->need_erase_device) {
-		u32 fs_segs_count = (u32)(layout->env.fs_size / seg_size);
-
-		for (i = 0; i < fs_segs_count; i++) {
-			SSDFS_DBG(layout->env.show_debug,
-				  "erasing segment %u...\n",
-				  i);
-
-			err = layout->env.dev_ops->erase(fd, offset, seg_size,
-							buf, buf_size,
-							layout->env.show_debug);
+	for (i = 0; i < layout->segs_count; i++) {
+		for (j = 0; j < layout->segs[i].pebs_count; j++) {
+			err = erase_peb(layout, i, j, buf, buf_size);
 			if (err) {
-				SSDFS_ERR("unable to erase segment #%u\n", i);
+				SSDFS_ERR("fail to erase peb: "
+					  "seg_index %u, peb_index %u, "
+					  "err %d\n",
+					  i, j, err);
 				goto free_erase_buf;
-			}
-
-			offset += seg_size;
-		}
-	} else {
-		for (i = 0; i < layout->segs_count; i++) {
-			for (j = 0; j < layout->segs[i].pebs_count; j++) {
-				err = erase_peb(layout, i, j, buf, buf_size);
-				if (err) {
-					SSDFS_ERR("fail to erase peb: "
-						  "seg_index %u, peb_index %u, "
-						  "err %d\n",
-						  i, j, err);
-					goto free_erase_buf;
-				}
 			}
 		}
 	}
 
 free_erase_buf:
 	free(buf);
+	return err;
+}
+
+static int erase_all_segments(struct ssdfs_volume_layout *layout)
+{
+	int fd = layout->env.fd;
+	u64 seg_size = layout->seg_size;
+	u64 fs_segs_count = layout->env.fs_size / seg_size;
+	char *buf;
+	size_t buf_size = SSDFS_128KB;
+	u64 offset = 0;
+	u64 i;
+	int err = 0;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "device %s, segs_count %u, seg_size %llu, "
+		  "need_erase_device %d, is_volume_erased %d\n",
+		  layout->env.dev_name, layout->segs_count,
+		  layout->seg_size, layout->need_erase_device,
+		  layout->is_volume_erased);
+
+	err = posix_memalign((void **)&buf, SSDFS_128KB, buf_size);
+	if (err) {
+		SSDFS_ERR("fail to allocate memory\n");
+		return err;
+	} else if (!buf) {
+		SSDFS_ERR("fail to allocate memory: "
+			  "size %zu\n",
+			  buf_size);
+		return -ENOMEM;
+	}
+
+	memset(buf, 0xff, buf_size);
+
+	for (i = 0; i < fs_segs_count; i++) {
+		SSDFS_MKFS_INFO(layout->env.show_info,
+				"erasing segment %llu...\n",
+				i);
+
+		err = layout->env.dev_ops->erase(fd, offset, seg_size,
+						 buf, buf_size,
+						 layout->env.show_debug);
+		if (err) {
+			SSDFS_ERR("unable to erase segment %llu\n", i);
+			goto free_erase_buf;
+		}
+
+		offset += seg_size;
+	}
+
+free_erase_buf:
+	free(buf);
+	return err;
+}
+
+static int get_cpu_cores_number()
+{
+	cpu_set_t cpus;
+
+	CPU_ZERO(&cpus);
+	sched_getaffinity(0, sizeof(cpus), &cpus);
+	return CPU_COUNT(&cpus);
+}
+
+void *erase_device_peb_range(void *arg)
+{
+	struct ssdfs_thread_state *state = (struct ssdfs_thread_state *)arg;
+	int fd;
+	u64 start_peb_id;
+	char *buf;
+	size_t buf_size = SSDFS_128KB;
+	u64 offset;
+	u64 i;
+	int err = 0;
+
+	if (!state)
+		pthread_exit((void *)1);
+
+	SSDFS_DBG(state->base.show_debug,
+		  "thread %d, PEB %llu\n",
+		  state->id, state->peb.id);
+
+	state->err = 0;
+	fd = state->base.fd;
+	start_peb_id = state->peb.id;
+
+	err = posix_memalign((void **)&buf, SSDFS_128KB, buf_size);
+	if (err) {
+		SSDFS_ERR("fail to allocate memory\n");
+		pthread_exit((void *)1);
+	} else if (!buf) {
+		SSDFS_ERR("fail to allocate memory: "
+			  "size %zu\n",
+			  buf_size);
+		pthread_exit((void *)1);
+	}
+
+	memset(buf, 0xff, buf_size);
+
+	for (i = 0; i < state->peb.pebs_count; i++) {
+		state->peb.id = start_peb_id + i;
+		offset = state->peb.id * state->peb.peb_size;
+
+		SSDFS_MKFS_INFO(state->base.show_info,
+				"erasing PEB %llu...\n",
+				state->peb.id);
+
+		err = state->base.dev_ops->erase(fd, offset,
+						 state->peb.peb_size,
+						 buf, buf_size,
+						 state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("unable to erase PEB %llu\n", i);
+			goto free_erase_buf;
+		}
+	}
+
+free_erase_buf:
+	free(buf);
+
+	if (err)
+		pthread_exit((void *)1);
+
+	pthread_exit((void *)0);
+}
+
+static int erase_device(struct ssdfs_volume_layout *layout)
+{
+	u64 pebs_count;
+	u64 pebs_per_thread;
+	int cpu_cores;
+	u32 i;
+	int err = 0;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "device %s, segs_count %u, seg_size %llu, "
+		  "need_erase_device %d, is_volume_erased %d\n",
+		  layout->env.dev_name, layout->segs_count,
+		  layout->seg_size, layout->need_erase_device,
+		  layout->is_volume_erased);
+
+	if (layout->is_volume_erased)
+		return 0;
+
+	if (!layout->need_erase_device) {
+		return erase_allocated_segments_only(layout);
+	}
+
+	cpu_cores = get_cpu_cores_number();
+	if (cpu_cores <= 0)
+		cpu_cores = SSDFS_MKFS_DEFAULT_THREADS;
+
+	if (layout->threads.capacity == SSDFS_MKFS_UNKNOWN_THREADS)
+		layout->threads.capacity = cpu_cores;
+
+	if (layout->threads.capacity == SSDFS_MKFS_DEFAULT_THREADS) {
+		return erase_all_segments(layout);
+	}
+
+	pebs_count = layout->env.fs_size / layout->env.erase_size;
+	pebs_per_thread = (pebs_count + layout->threads.capacity - 1);
+	pebs_per_thread /= layout->threads.capacity;
+
+	layout->threads.jobs = calloc(layout->threads.capacity,
+				      sizeof(struct ssdfs_thread_state));
+	if (!layout->threads.jobs) {
+		return erase_all_segments(layout);
+	}
+
+	for (i = 0; i < layout->threads.capacity; i++) {
+		err = ssdfs_mkfs_init_thread_state(&layout->threads.jobs[i],
+						   i,
+						   &layout->env,
+						   pebs_per_thread,
+						   pebs_count,
+						   layout->env.erase_size);
+		if (err) {
+			SSDFS_ERR("fail to initialize thread state: "
+				  "index %d, err %d\n",
+				  i, err);
+			goto free_threads_pool;
+		}
+
+		err = pthread_create(&layout->threads.jobs[i].thread, NULL,
+				     erase_device_peb_range,
+				     (void *)&layout->threads.jobs[i]);
+		if (err) {
+			SSDFS_ERR("fail to create thread %d: %s\n",
+				  i, strerror(errno));
+			for (i--; i >= 0; i--) {
+				pthread_join(layout->threads.jobs[i].thread, NULL);
+				layout->threads.requested_jobs--;
+			}
+			goto free_threads_pool;
+		}
+
+		layout->threads.requested_jobs++;
+	}
+
+	ssdfs_wait_threads_activity_ending(layout);
+	layout->threads.requested_jobs = 0;
+
+free_threads_pool:
+	if (layout->threads.jobs) {
+		free(layout->threads.jobs);
+		layout->threads.jobs = NULL;
+	}
+
 	return err;
 }
 
@@ -1661,6 +1792,58 @@ static int write_device(struct ssdfs_volume_layout *layout)
 
 int main(int argc, char *argv[])
 {
+	static struct ssdfs_volume_layout volume_layout = {
+		.force_overwrite = SSDFS_FALSE,
+		.need_erase_device = SSDFS_TRUE,
+		.env.show_debug = SSDFS_FALSE,
+		.env.show_info = SSDFS_TRUE,
+		.seg_size = SSDFS_8MB,
+		.env.erase_size = SSDFS_8MB,
+		.env.open_zones = 0,
+		.page_size = SSDFS_4KB,
+		.nand_dies_count = SSDFS_NAND_DIES_DEFAULT,
+		.lebs_per_peb_index = SSDFS_LEBS_PER_PEB_INDEX_DEFAULT,
+		.migration_threshold = U16_MAX,
+		.compression = SSDFS_ZLIB_BLOB,
+		.inode_size = sizeof(struct ssdfs_inode),
+		.sb.log_pages = U16_MAX,
+		.blkbmap.has_backup_copy = SSDFS_FALSE,
+		.blkbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
+		.blk2off_tbl.has_backup_copy = SSDFS_FALSE,
+		.blk2off_tbl.compression = SSDFS_UNKNOWN_COMPRESSION,
+		.blk2off_tbl.pages_per_seg = U32_MAX,
+		.segbmap.has_backup_copy = SSDFS_FALSE,
+		.segbmap.segs_per_chain = SSDFS_SEGBMAP_SEGS_PER_CHAIN_DEFAULT,
+		.segbmap.fragments_per_peb = SSDFS_SEGBMAP_FRAG_PER_PEB_DEFAULT,
+		.segbmap.log_pages = U16_MAX,
+		.segbmap.migration_threshold = U16_MAX,
+		.segbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
+		.segbmap.fragments_count = 0,
+		.segbmap.fragment_size = PAGE_CACHE_SIZE,
+		.segbmap.fragments_array = NULL,
+		.maptbl.has_backup_copy = SSDFS_FALSE,
+		.maptbl.stripes_per_portion = SSDFS_MAPTBL_STRIPES_PER_FRAG_DEFAULT,
+		.maptbl.portions_per_fragment = SSDFS_MAPTBL_FRAG_PER_PEB_DEFAULT,
+		.maptbl.log_pages = U16_MAX,
+		.maptbl.migration_threshold = U16_MAX,
+		.maptbl.reserved_pebs_per_fragment = U16_MAX,
+		.maptbl.compression = SSDFS_UNKNOWN_COMPRESSION,
+		.btree.node_size = SSDFS_8KB,
+		.btree.min_index_area_size = 0,
+		.btree.lnode_log_pages = U16_MAX,
+		.btree.hnode_log_pages = U16_MAX,
+		.btree.inode_log_pages = U16_MAX,
+		.user_data_seg.log_pages = U16_MAX,
+		.user_data_seg.migration_threshold = U16_MAX,
+		.user_data_seg.compression = SSDFS_UNKNOWN_COMPRESSION,
+		.env.device_type = SSDFS_DEVICE_TYPE_MAX,
+		.calculated_open_zones = 0,
+		.write_buffer.ptr = NULL,
+		.write_buffer.offset = 0,
+		.write_buffer.capacity = 0,
+		.threads.capacity = SSDFS_MKFS_UNKNOWN_THREADS,
+		.is_volume_erased = SSDFS_FALSE,
+	};
 	struct ssdfs_volume_layout *layout_ptr;
 	int err = 0;
 

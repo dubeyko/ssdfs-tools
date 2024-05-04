@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.40 [May 04, 2024]
+    (*) [mkfs] Show the progress of erasing segments.
+
 v.4.39 [March 03, 2024]
     (*) [mkfs] Prevent creating volume with 32KB logical block size
                for 128KB erase block size.
