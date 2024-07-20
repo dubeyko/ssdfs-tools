@@ -61,7 +61,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		16
+#define SSDFS_MINOR_REVISION		17
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1422,6 +1422,10 @@ enum {
  * @desc_array: array of segment's metadata descriptors
  * @peb_migration_id: identification number of PEB in migration sequence
  * @peb_create_time: PEB creation timestamp
+ * @seg_id: segment ID that contains this PEB
+ * @leb_id: LEB ID that mapped with this PEB
+ * @peb_id: PEB ID
+ * @relation_peb_id: source PEB ID during migration
  * @payload: space for segment header's payload
  */
 struct ssdfs_segment_header {
@@ -1445,12 +1449,19 @@ struct ssdfs_segment_header {
 #define SSDFS_PEB_MIGRATION_ID_START		(1)
 #define SSDFS_PEB_MIGRATION_ID_MAX		(U8_MAX)
 	__le8 peb_migration_id[SSDFS_MIGRATING_PEBS_CHAIN];
+	__le8 reserved[0x6];
 
-/* 0x4AA */
+/* 0x4B0 */
 	__le64 peb_create_time;
 
-/* 0x4B2 */
-	__le8 payload[0x34E];
+/* 0x4B8 */
+	__le64 seg_id;
+	__le64 leb_id;
+	__le64 peb_id;
+	__le64 relation_peb_id;
+
+/* 0x4D8 */
+	__le8 payload[0x328];
 
 /* 0x0800 */
 } __attribute__((packed));
@@ -1576,6 +1587,10 @@ struct ssdfs_log_footer {
  * @open_zones: number of open/active zones
  * @peb_create_time: PEB creation timestamp
  * @invextree: invalidated extents btree root
+ * @seg_id: segment ID that contains this PEB
+ * @leb_id: LEB ID that mapped with this PEB
+ * @peb_id: PEB ID
+ * @relation_peb_id: source PEB ID during migration
  *
  * This header is used when the full log needs to be built from several
  * partial logs. The header represents the combination of the most
@@ -1646,7 +1661,13 @@ struct ssdfs_partial_log_header {
 	struct ssdfs_invalidated_extents_btree invextree;
 
 /* 0x0480 */
-	__le8 payload[0x380];
+	__le64 seg_id;
+	__le64 leb_id;
+	__le64 peb_id;
+	__le64 relation_peb_id;
+
+/* 0x04A0 */
+	__le8 payload[0x360];
 
 /* 0x0800 */
 } __attribute__((packed));

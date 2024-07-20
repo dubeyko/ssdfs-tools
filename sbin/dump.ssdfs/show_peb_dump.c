@@ -2333,6 +2333,10 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 					struct ssdfs_segment_header *hdr)
 {
 	struct ssdfs_volume_header *vh = &hdr->volume_hdr;
+	u64 seg_id;
+	u64 leb_id;
+	u64 peb_id;
+	u64 relation_peb_id;
 	u32 page_size;
 	u32 erase_size;
 	u16 megabytes_per_peb;
@@ -2351,6 +2355,11 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DBG(env->base.show_debug,
 		  "parse segment header\n");
 
+	seg_id = le64_to_cpu(hdr->seg_id);
+	leb_id = le64_to_cpu(hdr->leb_id);
+	peb_id = le64_to_cpu(hdr->peb_id);
+	relation_peb_id = le64_to_cpu(hdr->relation_peb_id);
+
 	page_size = 1 << vh->log_pagesize;
 	erase_size = 1 << vh->log_erasesize;
 	megabytes_per_peb = le16_to_cpu(vh->megabytes_per_peb);
@@ -2364,6 +2373,11 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	create_threads_per_seg = le16_to_cpu(vh->create_threads_per_seg);
 
 	ssdfs_dumpfs_parse_magic(env, &vh->magic);
+
+	SSDFS_DUMPFS_DUMP(env, "SEG_ID: %llu\n", seg_id);
+	SSDFS_DUMPFS_DUMP(env, "LEB_ID: %llu\n", leb_id);
+	SSDFS_DUMPFS_DUMP(env, "PEB_ID: %llu\n", peb_id);
+	SSDFS_DUMPFS_DUMP(env, "RELATION_PEB_ID: %llu\n", relation_peb_id);
 
 	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
 	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes, %u MB\n",
@@ -2745,6 +2759,10 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	size_t plh_size = sizeof(struct ssdfs_partial_log_header);
 	struct ssdfs_metadata_descriptor *desc;
 	u32 flags;
+	u64 seg_id;
+	u64 leb_id;
+	u64 peb_id;
+	u64 relation_peb_id;
 	u32 page_size;
 	u32 erase_size;
 	u32 seg_size;
@@ -2767,6 +2785,11 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	}
 
 	pl_hdr = (struct ssdfs_partial_log_header *)area_buf;
+
+	seg_id = le64_to_cpu(pl_hdr->seg_id);
+	leb_id = le64_to_cpu(pl_hdr->leb_id);
+	peb_id = le64_to_cpu(pl_hdr->peb_id);
+	relation_peb_id = le64_to_cpu(pl_hdr->relation_peb_id);
 
 	page_size = 1 << pl_hdr->log_pagesize;
 	erase_size = 1 << pl_hdr->log_erasesize;
@@ -2799,6 +2822,12 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 
 	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
 			  le32_to_cpu(pl_hdr->sequence_id));
+
+	SSDFS_DUMPFS_DUMP(env, "SEG_ID: %llu\n", seg_id);
+	SSDFS_DUMPFS_DUMP(env, "LEB_ID: %llu\n", leb_id);
+	SSDFS_DUMPFS_DUMP(env, "PEB_ID: %llu\n", peb_id);
+	SSDFS_DUMPFS_DUMP(env, "RELATION_PEB_ID: %llu\n", relation_peb_id);
+
 	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
 	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes\n", erase_size);
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
