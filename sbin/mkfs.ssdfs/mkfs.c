@@ -1271,6 +1271,7 @@ void *erase_device_peb_range(void *arg)
 	struct ssdfs_thread_state *state = (struct ssdfs_thread_state *)arg;
 	int fd;
 	u64 start_peb_id;
+	u64 pebs_per_volume;
 	char *buf;
 	size_t buf_size = SSDFS_128KB;
 	u64 offset;
@@ -1281,12 +1282,13 @@ void *erase_device_peb_range(void *arg)
 		pthread_exit((void *)1);
 
 	SSDFS_DBG(state->base.show_debug,
-		  "thread %d, PEB %llu\n",
-		  state->id, state->peb.id);
+		  "thread %d, PEB %llu, pebs_count %llu\n",
+		  state->id, state->peb.id, state->peb.pebs_count);
 
 	state->err = 0;
 	fd = state->base.fd;
 	start_peb_id = state->peb.id;
+	pebs_per_volume = state->base.fs_size / state->base.erase_size;
 
 	err = posix_memalign((void **)&buf, SSDFS_128KB, buf_size);
 	if (err) {
@@ -1304,6 +1306,14 @@ void *erase_device_peb_range(void *arg)
 	for (i = 0; i < state->peb.pebs_count; i++) {
 		state->peb.id = start_peb_id + i;
 		offset = state->peb.id * state->peb.peb_size;
+
+		if (state->peb.id >= pebs_per_volume) {
+			SSDFS_DBG(state->base.show_debug,
+				  "STOP ERASING: thread %d, PEB %llu, "
+				  "pebs_per_volume %llu\n",
+				  state->id, state->peb.id, pebs_per_volume);
+			goto free_erase_buf;
+		}
 
 		SSDFS_MKFS_INFO(state->base.show_info,
 				"erasing PEB %llu...\n",

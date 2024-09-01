@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.42 [September 01, 2024]
+    (*) [mkfs] Fix issue with trying to erase out of volume.
+
 v.4.41 [July 20, 2024]
     (*) Keep knowledge about segment ID, LEB ID and relation PEB ID
         in segment header.

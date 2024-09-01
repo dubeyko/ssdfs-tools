@@ -149,7 +149,10 @@ int ssdfs_pwrite(int fd, u64 offset, size_t size, void *buf)
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;
-			SSDFS_ERR("write failed: %s\n", strerror(errno));
+			SSDFS_ERR("write failed: offset %llu, "
+				  "size %zu, rest %zu: %s\n",
+				  offset, size, rest,
+				  strerror(errno));
 			return errno;
 		}
 
