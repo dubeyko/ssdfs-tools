@@ -1197,6 +1197,8 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
 	u32 portions_per_seg = pebs_per_seg * maptbl->portions_per_fragment;
 	u16 flags = 0;
+	u16 lebs_per_portion;
+	u16 pebs_per_portion;
 	u16 pebs_per_stripe;
 	u32 segs_per_copy;
 	size_t extent_size = sizeof(struct ssdfs_meta_area_extent);
@@ -1245,11 +1247,12 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 
 	hdr->pre_erase_pebs = 0;
 
-	hdr->lebs_per_fragment = cpu_to_le16(maptbl->lebs_per_portion);
-	hdr->pebs_per_fragment = cpu_to_le16(maptbl->pebs_per_portion);
+	lebs_per_portion = min_t(u16, maptbl->lebs_per_portion, pebs_count);
+	hdr->lebs_per_fragment = cpu_to_le16(lebs_per_portion);
+	pebs_per_portion = min_t(u16, maptbl->pebs_per_portion, pebs_count);
+	hdr->pebs_per_fragment = cpu_to_le16(pebs_per_portion);
 
-	pebs_per_stripe =
-		maptbl->pebs_per_portion / maptbl->stripes_per_portion;
+	pebs_per_stripe = pebs_per_portion / maptbl->stripes_per_portion;
 	hdr->pebs_per_stripe = cpu_to_le16(pebs_per_stripe);
 	hdr->stripes_per_fragment = cpu_to_le16(maptbl->stripes_per_portion);
 
