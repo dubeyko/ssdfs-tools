@@ -1253,6 +1253,9 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 	hdr->pebs_per_fragment = cpu_to_le16(pebs_per_portion);
 
 	pebs_per_stripe = pebs_per_portion / maptbl->stripes_per_portion;
+	if (pebs_per_portion % maptbl->stripes_per_portion)
+		pebs_per_stripe++;
+
 	hdr->pebs_per_stripe = cpu_to_le16(pebs_per_stripe);
 	hdr->stripes_per_fragment = cpu_to_le16(maptbl->stripes_per_portion);
 
