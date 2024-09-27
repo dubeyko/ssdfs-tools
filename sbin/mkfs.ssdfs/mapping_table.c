@@ -1645,7 +1645,8 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			}
 
 			err = pre_commit_block_descriptors(layout, seg_index,
-							j, valid_blks,
+							j, start_logical_blk,
+							valid_blks,
 							SSDFS_MAPTBL_INO,
 							payload_offset_in_bytes,
 							layout->page_size);

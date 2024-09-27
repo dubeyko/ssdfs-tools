@@ -1295,7 +1295,8 @@ static inline u32 define_block_descriptor_offset(u16 blk_id,
 	return offset;
 }
 
-static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
+static void prepare_offsets_table_fragment(struct ssdfs_volume_layout *layout,
+					   u8 *fragment, u32 pages_per_seg,
 					   int peb_index,
 					   u16 sequence_id, u8 area_type,
 					   u32 logical_start_page,
@@ -1338,9 +1339,14 @@ static void prepare_offsets_table_fragment(u8 *fragment, u32 pages_per_seg,
 							blk_desc_fragments);
 		u16 blk = logical_blk + i;
 
+		SSDFS_DBG(layout->env.show_debug,
+			  "ID %d, logical_offset %u, "
+			  "logical_blk %u, peb_page %u\n",
+			  i, logical_offset, blk, blk);
+
 		offsets[i].page_desc.logical_offset = cpu_to_le32(logical_offset);
 		offsets[i].page_desc.logical_blk = cpu_to_le16(blk);
-		offsets[i].page_desc.peb_page = cpu_to_le16(peb_page);
+		offsets[i].page_desc.peb_page = cpu_to_le16(blk);
 
 		offsets[i].blk_state.log_start_page = 0;
 		offsets[i].blk_state.log_area = cpu_to_le8(area_type);
@@ -1536,7 +1542,8 @@ static int __pre_commit_offset_table(struct ssdfs_volume_layout *layout,
 
 			fragment = (u8 *)extent->buf + offset;
 
-			prepare_offsets_table_fragment(fragment, pages_per_seg,
+			prepare_offsets_table_fragment(layout,
+							fragment, pages_per_seg,
 							peb_index,
 							cur_phys_off_tbl_frag,
 							SSDFS_LOG_BLK_DESC_AREA,
@@ -1840,10 +1847,12 @@ static inline u16 BLKS_PER_AREA(u16 area_index, u16 fragments_count,
 }
 
 static
-int prepare_block_descriptor_fragment(int fragment_index,
+int prepare_block_descriptor_fragment(struct ssdfs_volume_layout *layout,
+				      int fragment_index,
 				      struct ssdfs_fragment_desc *fdesc,
 				      struct ssdfs_block_descriptor *array,
 				      u32 fragment_offset,
+				      u32 start_logical_blk,
 				      u16 valid_blks,
 				      int peb_index,
 				      u64 inode_id,
@@ -1883,9 +1892,14 @@ int prepare_block_descriptor_fragment(int fragment_index,
 		logical_page /= page_size;
 		blk_desc->logical_offset = cpu_to_le32(logical_page);
 
-		peb_page = *cur_byte_offset / page_size;
+		peb_page = start_logical_blk + i;
 		BUG_ON(peb_page >= U16_MAX);
 		blk_desc->peb_page = cpu_to_le16((u16)peb_page);
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "ID %d, logical_offset %u, "
+			  "ino %llu, peb_page %u\n",
+			  i, logical_page, inode_id, peb_page);
 
 		blk_desc->state[0].log_start_page = 0;
 		blk_desc->state[0].log_area = cpu_to_le8(area_type);
@@ -1919,9 +1933,11 @@ int prepare_block_descriptor_fragment(int fragment_index,
 }
 
 static
-int prepare_area_block_table(u16 area_index, u32 area_offset,
+int prepare_area_block_table(struct ssdfs_volume_layout *layout,
+			     u16 area_index, u32 area_offset,
 			     struct ssdfs_area_block_table *ptr,
 			     u16 fragments_count, int has_next_area,
+			     u32 start_logical_blk,
 			     u16 valid_blks, int peb_index,
 			     u64 inode_id,
 			     u32 item_size,
@@ -1935,6 +1951,7 @@ int prepare_area_block_table(u16 area_index, u32 area_offset,
 	size_t blk_desc_size = sizeof(struct ssdfs_block_descriptor);
 	u32 blk_desc_per_fragment;
 	u16 sequence_id = area_index * SSDFS_BLK_TABLE_MAX;
+	u32 logical_blk;
 	int i;
 	int err;
 
@@ -1962,6 +1979,7 @@ int prepare_area_block_table(u16 area_index, u32 area_offset,
 	ptr->chain_hdr.uncompr_bytes = cpu_to_le32(bytes_count);
 
 	blk_desc_per_fragment = BLK_DESC_PER_FRAGMENT();
+	logical_blk = start_logical_blk;
 
 	for (i = 0; i < fragments_count; i++) {
 		struct ssdfs_block_descriptor *frag;
@@ -1979,8 +1997,10 @@ int prepare_area_block_table(u16 area_index, u32 area_offset,
 		else
 			blk_desc_count = valid_blks % blk_desc_per_fragment;
 
-		err = prepare_block_descriptor_fragment(i, fdesc, frag,
+		err = prepare_block_descriptor_fragment(layout,
+							i, fdesc, frag,
 							offset,
+							logical_blk,
 							blk_desc_count,
 							peb_index,
 							inode_id,
@@ -1993,6 +2013,8 @@ int prepare_area_block_table(u16 area_index, u32 area_offset,
 				  "index %d, err %d\n", i, err);
 			return err;
 		}
+
+		logical_blk += blk_desc_count;
 	}
 
 	if (has_next_area) {
@@ -2014,6 +2036,7 @@ int prepare_area_block_table(u16 area_index, u32 area_offset,
 
 int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 				 int seg_index, int peb_index,
+				 u32 start_logical_blk,
 				 u16 valid_blks, u64 inode_id,
 				 u32 payload_offset_in_bytes,
 				 u32 item_size)
@@ -2028,6 +2051,7 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 	u32 cur_byte_offset = 0;
 	size_t hdrs_count;
 	u32 area_offset;
+	u32 logical_blk;
 	u16 i;
 	int err;
 
@@ -2035,9 +2059,11 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d, "
+		  "start_logical_blk %u, "
 		  "valid_blks %u, inode_id %llu, "
 		  "payload_offset_in_bytes %u, item_size %u\n",
-		  seg_index, peb_index, valid_blks, inode_id,
+		  seg_index, peb_index, start_logical_blk,
+		  valid_blks, inode_id,
 		  payload_offset_in_bytes, item_size);
 
 	if (seg_index >= layout->segs_capacity) {
@@ -2083,6 +2109,8 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 	hdrs_count = fragments_count + SSDFS_FRAGMENTS_CHAIN_MAX - 1;
 	hdrs_count /= SSDFS_FRAGMENTS_CHAIN_MAX;
 
+	logical_blk = start_logical_blk;
+
 	for (i = 0; i < hdrs_count; i++) {
 		u16 fragments_per_area;
 		u16 blks_per_area;
@@ -2110,10 +2138,11 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 			return -ERANGE;
 		}
 
-		err = prepare_area_block_table(i, area_offset,
+		err = prepare_area_block_table(layout, i, area_offset,
 						blk_desc_tbl_hdr,
 						fragments_per_area,
 						has_next_area,
+						logical_blk,
 						blks_per_area,
 						peb_index,
 						inode_id,
@@ -2128,6 +2157,8 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 				  i, fragments_count, valid_blks, err);
 			return err;
 		}
+
+		logical_blk += blks_per_area;
 	}
 
 	extent->bytes_count = allocation_size;

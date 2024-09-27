@@ -2,6 +2,11 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.45 [September 27, 2024]
+    (*) [mkfs] Fix issue of defining erase block's page index in offset
+               translation table for the case of multiple erase blocks
+               in segment.
+
 v.4.44 [September 23, 2024]
     (*) [mkfs] Add logic of alignment the erase blocks per stripe
                for the case of latest fragment.

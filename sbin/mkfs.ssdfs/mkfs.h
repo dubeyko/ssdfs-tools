@@ -574,6 +574,7 @@ void commit_offset_table_backup(struct ssdfs_volume_layout *layout,
 				int seg_index, int peb_index);
 int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 				 int seg_index, int peb_index,
+				 u32 start_logical_blk,
 				 u16 valid_blks, u64 inode_id,
 				 u32 payload_offset_in_bytes,
 				 u32 item_size);
