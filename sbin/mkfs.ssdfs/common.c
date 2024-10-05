@@ -805,8 +805,8 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	bmap_bytes = BLK_BMAP_BYTES(pages_per_peb);
 
-	fragments_count = bmap_bytes + layout->page_size - 1;
-	fragments_count /= layout->page_size;
+	fragments_count = bmap_bytes + SSDFS_4KB - 1;
+	fragments_count /= SSDFS_4KB;
 	BUG_ON(fragments_count >= U16_MAX);
 	BUG_ON(fragments_count > SSDFS_BLK_BMAP_FRAGMENTS_CHAIN_MAX);
 
@@ -962,12 +962,12 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 		    (struct ssdfs_fragment_desc *)((u8 *)extent->compr_buf +
 								desc_offset);
 
-		fragment = bmap + (i * layout->page_size);
+		fragment = bmap + (i * SSDFS_4KB);
 		compr_fragment = compr_bmap + written_compr_bytes;
 
 		BUG_ON(bmap_bytes <= written_bmap_bytes);
 		fragment_size = min_t(u32, bmap_bytes - written_bmap_bytes,
-					(u32)layout->page_size);
+					(u32)SSDFS_4KB);
 		BUG_ON(fragment_size >= U16_MAX);
 
 		BUG_ON(i >= U8_MAX);

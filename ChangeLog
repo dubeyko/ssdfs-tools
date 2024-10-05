@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.46 [October 05, 2024]
+    (*) [mkfs] Fix issue of wrong distribution of segment bitmap's fragments
+               among segments and erase blocks.
+
 v.4.45 [September 27, 2024]
     (*) [mkfs] Fix issue of defining erase block's page index in offset
                translation table for the case of multiple erase blocks

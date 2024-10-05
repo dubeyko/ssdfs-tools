@@ -36,7 +36,9 @@
 #define SSDFS_128KB_STRING	"128KB"
 #define SSDFS_256KB_STRING	"256KB"
 #define SSDFS_512KB_STRING	"512KB"
+#define SSDFS_1MB_STRING	"1MB"
 #define SSDFS_2MB_STRING	"2MB"
+#define SSDFS_4MB_STRING	"4MB"
 #define SSDFS_8MB_STRING	"8MB"
 #define SSDFS_16MB_STRING	"16MB"
 #define SSDFS_32MB_STRING	"32MB"
@@ -46,6 +48,7 @@
 #define SSDFS_512MB_STRING	"512MB"
 #define SSDFS_1GB_STRING	"1GB"
 #define SSDFS_2GB_STRING	"2GB"
+#define SSDFS_4GB_STRING	"4GB"
 #define SSDFS_8GB_STRING	"8GB"
 #define SSDFS_16GB_STRING	"16GB"
 #define SSDFS_32GB_STRING	"32GB"
@@ -72,7 +75,7 @@ void print_usage(void)
 	SSDFS_INFO("\t [-D|--nand-dies count]\t  NAND dies count.\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-e|--erasesize size]\t  erase size of target device "
-		   "(128KB|256KB|512KB|2MB|8MB|...).\n");
+		   "(128KB|256KB|512KB|1MB|2MB|4MB|8MB|...).\n");
 	SSDFS_INFO("\t [-f|--force]\t\t  force overwrite of existing filesystem.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
 	SSDFS_INFO("\t [-i|--inode_size size]\t  inode size in bytes "
@@ -100,7 +103,7 @@ void print_usage(void)
 		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
 		   "segment bitmap options.\n");
 	SSDFS_INFO("\t [-s|--segsize size]\t  segment size of target device "
-		   "(128KB|256KB|512KB|2MB|8MB|16MB|32MB|64MB|...).\n");
+		   "(128KB|256KB|512KB|1MB|2MB|4MB|8MB|16MB|32MB|64MB|...).\n");
 	SSDFS_INFO("\t [-T|--btree node_size=value,min_index_area_size=value,"
 		   "leaf_node_log_pages=value,hybrid_node_log_pages=value,"
 		   "index_node_log_pages=value]\t  "
@@ -142,8 +145,12 @@ static u64 detect_granularity(const char *str)
 		return SSDFS_256KB;
 	else if (check_string(str, SSDFS_512KB_STRING) == 0)
 		return SSDFS_512KB;
+	else if (check_string(str, SSDFS_1MB_STRING) == 0)
+		return SSDFS_1MB;
 	else if (check_string(str, SSDFS_2MB_STRING) == 0)
 		return SSDFS_2MB;
+	else if (check_string(str, SSDFS_4MB_STRING) == 0)
+		return SSDFS_4MB;
 	else if (check_string(str, SSDFS_8MB_STRING) == 0)
 		return SSDFS_8MB;
 	else if (check_string(str, SSDFS_16MB_STRING) == 0)
@@ -199,7 +206,9 @@ static void check_segsize(u64 segsize)
 	case SSDFS_128KB:
 	case SSDFS_256KB:
 	case SSDFS_512KB:
+	case SSDFS_1MB:
 	case SSDFS_2MB:
+	case SSDFS_4MB:
 	case SSDFS_8MB:
 	case SSDFS_16MB:
 	case SSDFS_32MB:
@@ -209,6 +218,7 @@ static void check_segsize(u64 segsize)
 	case SSDFS_512MB:
 	case SSDFS_1GB:
 	case SSDFS_2GB:
+	case SSDFS_4GB:
 	case SSDFS_8GB:
 	case SSDFS_16GB:
 	case SSDFS_32GB:
@@ -230,7 +240,9 @@ static void check_erasesize(u64 erasesize)
 	case SSDFS_128KB:
 	case SSDFS_256KB:
 	case SSDFS_512KB:
+	case SSDFS_1MB:
 	case SSDFS_2MB:
+	case SSDFS_4MB:
 	case SSDFS_8MB:
 	case SSDFS_16MB:
 	case SSDFS_32MB:

@@ -34,7 +34,7 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u16 fragments_per_peb = layout->segbmap.fragments_per_peb;
 	u16 fragments_per_seg;
 	u8 segs_per_chain = layout->segbmap.segs_per_chain;
-	u32 fragment_size = PAGE_CACHE_SIZE;
+	u32 fragment_size = layout->page_size;
 	u16 pebs_per_seg;
 	u8 segbmap_segs;
 
@@ -51,8 +51,16 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 
 	if (layout->env.erase_size < ((u32)fragments_per_peb * fragment_size) ||
 	    segbmap_segs > SSDFS_SEGBMAP_SEGS) {
-		fragments_per_peb = (u16)(layout->env.erase_size / fragment_size);
-		fragments_per_peb = (fragments_per_peb * 70) / 100;
+		u32 metadata = layout->page_size * 2;
+		u32 payload_bytes;
+
+		payload_bytes = layout->env.erase_size - metadata;
+		payload_bytes /= 2;
+
+		fragments_per_peb = payload_bytes / fragment_size;
+		if (fragments_per_peb == 0)
+			fragments_per_peb = 1;
+
 		fragments_per_peb = min_t(u16, fragments_per_peb, fragments);
 		layout->segbmap.fragments_per_peb = fragments_per_peb;
 
@@ -73,16 +81,37 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	}
 
 	fragments_per_seg = fragments / segbmap_segs;
-	if (fragments_per_seg == 0)
+
+	if (fragments % segbmap_segs) {
+		fragments_per_seg++;
+	}
+
+	if (fragments_per_seg == 0) {
 		fragments_per_seg = 1;
+	}
 
 	fragments_per_peb = fragments_per_seg / pebs_per_seg;
-	if (fragments_per_peb == 0)
+
+	if (fragments_per_seg % pebs_per_seg) {
+		fragments_per_peb++;
+	}
+
+	if (fragments_per_peb == 0) {
 		fragments_per_peb = 1;
+	}
 
 	layout->segbmap.fragments_per_peb = fragments_per_peb;
 
 	pebs_per_seg = fragments_per_seg / fragments_per_peb;
+
+	if (fragments_per_seg % fragments_per_peb) {
+		pebs_per_seg++;
+	}
+
+	if (pebs_per_seg == 0) {
+		pebs_per_seg = 1;
+	}
+
 	layout->segbmap.pebs_per_seg = pebs_per_seg;
 
 	if (segs_per_chain != segbmap_segs) {
@@ -181,6 +210,7 @@ static int segbmap_prepare_fragment(struct ssdfs_volume_layout *layout,
 	struct ssdfs_segbmap_fragment_header *hdr;
 	size_t hdr_size = sizeof(struct ssdfs_segbmap_fragment_header);
 	u8 *ptr;
+	u64 seg_nums;
 	u16 fragments = layout->segbmap.fragments_count;
 	u16 fragments_per_peb = layout->segbmap.fragments_per_peb;
 	size_t fragment_size = layout->segbmap.fragment_size;
@@ -202,9 +232,10 @@ static int segbmap_prepare_fragment(struct ssdfs_volume_layout *layout,
 		return -EINVAL;
 	}
 
+	seg_nums = layout->env.fs_size / layout->seg_size;
 	fragments_per_seg = pebs_per_seg * fragments_per_peb;
 	seg_index = index / fragments_per_seg;
-	peb_index = (seg_index - index) / fragments_per_peb;
+	peb_index = ((seg_index * fragments_per_seg) - index) / fragments_per_peb;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "fragments_per_seg %u, fragments_per_peb %u, "
@@ -217,15 +248,23 @@ static int segbmap_prepare_fragment(struct ssdfs_volume_layout *layout,
 	hdr = (struct ssdfs_segbmap_fragment_header *)(ptr);
 
 	start_item = ssdfs_segbmap_define_first_fragment_item(index,
-							      fragment_size);
+							      PAGE_CACHE_SIZE);
 
-	payload_bytes = ssdfs_segbmap_payload_bytes_per_fragment(fragment_size);
+	if (start_item >= seg_nums) {
+		SSDFS_ERR("invalid start_item: start_item %llu, seg_nums %llu\n",
+			  start_item, seg_nums);
+		return -ERANGE;
+	}
+
+	payload_bytes = ssdfs_segbmap_payload_bytes_per_fragment(PAGE_CACHE_SIZE);
 	fragment_bytes = layout->segbmap.bmap_bytes + (fragments * hdr_size);
 	fragment_bytes -= ((u64)index * (payload_bytes + hdr_size));
-	fragment_bytes = min_t(u64, fragment_bytes, (u64)fragment_size);
+	fragment_bytes = min_t(u64, fragment_bytes, (u64)PAGE_CACHE_SIZE);
 	BUG_ON(fragment_bytes >= USHRT_MAX);
 
-	items_per_fragment = ssdfs_segbmap_items_per_fragment(fragment_bytes);
+	items_per_fragment = ssdfs_segbmap_items_per_fragment(PAGE_CACHE_SIZE);
+	items_per_fragment = min_t(u64, (u64)items_per_fragment,
+						seg_nums - start_item);
 	BUG_ON(items_per_fragment >= USHRT_MAX);
 
 	hdr->magic = cpu_to_le16(SSDFS_SEGBMAP_HDR_MAGIC);
@@ -346,7 +385,7 @@ try_fragment:
 	bmap = (u8 *)fragment + sizeof(struct ssdfs_segbmap_fragment_header);
 
 	err = SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(hdr, bmap, 0, nsegs,
-						fragment_size,
+						PAGE_CACHE_SIZE,
 						new_state, &found_seg);
 	if (err == -ENODATA || found_seg == U64_MAX) {
 		if ((fragment_index + 1) >= fragments_per_peb) {
@@ -480,7 +519,7 @@ static int init_segbmap_sb_header(struct ssdfs_volume_layout *layout)
 	hdr->fragments_per_peb = cpu_to_le16(fragments_per_peb);
 
 	BUG_ON(layout->segbmap.fragment_size >= USHRT_MAX);
-	hdr->fragment_size = cpu_to_le16(layout->segbmap.fragment_size);
+	hdr->fragment_size = cpu_to_le16(PAGE_CACHE_SIZE);
 
 	hdr->bytes_count = cpu_to_le32(layout->segbmap.bmap_bytes);
 

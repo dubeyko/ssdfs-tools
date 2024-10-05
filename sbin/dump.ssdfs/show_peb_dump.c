@@ -3701,6 +3701,10 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			goto stop_peb_dumping;
 		}
 
+		SSDFS_DUMPFS_INFO(env->base.show_info,
+				  "DUMPING PEB %llu\n",
+				  env->peb.id);
+
 		SSDFS_DBG(env->base.show_debug,
 			  "peb_id %llu, pebs_count %llu, "
 			  "log_index %u, logs_count %u\n",
