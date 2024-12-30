@@ -412,6 +412,11 @@ int pre_commit_segment_header(struct ssdfs_volume_layout *layout,
 
 	hdr->peb_create_time = cpu_to_le64(layout->create_timestamp);
 
+	hdr->seg_id = cpu_to_le64(seg_desc->seg_id);
+	hdr->leb_id = cpu_to_le64(peb_desc->leb_id);
+	hdr->peb_id = cpu_to_le64(peb_desc->peb_id);
+	hdr->relation_peb_id = cpu_to_le64(U64_MAX);
+
 	return 0;
 }
 
