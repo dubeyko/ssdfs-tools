@@ -595,6 +595,234 @@ enum {
 	SSDFS_UNRECOGNIZED_VALUE,
 };
 
+/*
+ * struct ssdfs_tunefs_option - option state
+ * @state: option state (ignore, enable, disable)
+ * @value: option value
+ */
+struct ssdfs_tunefs_option {
+	int state;
+	int value;
+};
+
+/*
+ * struct ssdfs_tunefs_volume_label_option - volume label option
+ * @state: option state (ignore, enable, disable)
+ * @volume_label: volume label
+ */
+struct ssdfs_tunefs_volume_label_option {
+	int state;
+	char volume_label[SSDFS_VOLUME_LABEL_MAX];
+};
+
+/*
+ * struct ssdfs_tunefs_blkbmap_options - block bitmap options
+ * @has_backup_copy: backup copy is present?
+ * @compression: compression type
+ */
+struct ssdfs_tunefs_blkbmap_options {
+	struct ssdfs_tunefs_option has_backup_copy;
+	struct ssdfs_tunefs_option compression;
+};
+
+/*
+ * struct ssdfs_tunefs_blk2off_table_options - offsets table options
+ * @has_backup_copy: backup copy is present?
+ * @compression: compression type
+ */
+struct ssdfs_tunefs_blk2off_table_options {
+	struct ssdfs_tunefs_option has_backup_copy;
+	struct ssdfs_tunefs_option compression;
+};
+
+/*
+ * struct ssdfs_tunefs_segbmap_options - segment bitmap options
+ * @has_backup_copy: backup copy is present?
+ * @log_pages: count of pages in the full log
+ * @migration_threshold: max amount of migrating PEBs for segment
+ * @compression: compression type
+ */
+struct ssdfs_tunefs_segbmap_options {
+	struct ssdfs_tunefs_option has_backup_copy;
+	struct ssdfs_tunefs_option log_pages;
+	struct ssdfs_tunefs_option migration_threshold;
+	struct ssdfs_tunefs_option compression;
+};
+
+/*
+ * struct ssdfs_tunefs_maptbl_options - PEB mapping table options
+ * @has_backup_copy: backup copy is present?
+ * @log_pages: count of pages in the full log
+ * @migration_threshold: max amount of migrating PEBs for segment
+ * @reserved_pebs_per_fragment: percentage of reserved PEBs for fragment
+ * @compression: compression type
+ */
+struct ssdfs_tunefs_maptbl_options {
+	struct ssdfs_tunefs_option has_backup_copy;
+	struct ssdfs_tunefs_option log_pages;
+	struct ssdfs_tunefs_option migration_threshold;
+	struct ssdfs_tunefs_option reserved_pebs_per_fragment;
+	struct ssdfs_tunefs_option compression;
+};
+
+/*
+ * struct ssdfs_tunefs_btree_options - btree options
+ * @min_index_area_size: minimal index area's size in bytes
+ * @lnode_log_pages: leaf node's log pages
+ * @hnode_log_pages: hybrid node's log pages
+ * @inode_log_pages: index node's log pages
+ */
+struct ssdfs_tunefs_btree_options {
+	struct ssdfs_tunefs_option min_index_area_size;
+	struct ssdfs_tunefs_option lnode_log_pages;
+	struct ssdfs_tunefs_option hnode_log_pages;
+	struct ssdfs_tunefs_option inode_log_pages;
+};
+
+/*
+ * struct ssdfs_tunefs_user_data_options - user data options
+ * @log_pages: count of pages in the full log
+ * @migration_threshold: max amount of migrating PEBs for segment
+ * @compression: compression type
+ */
+struct ssdfs_tunefs_user_data_options {
+	struct ssdfs_tunefs_option log_pages;
+	struct ssdfs_tunefs_option migration_threshold;
+	struct ssdfs_tunefs_option compression;
+};
+
+/*
+ * struct ssdfs_metadata_options - metadata options
+ * @blk_bmap.flags: block bitmap's flags
+ * @blk_bmap.compression: compression type
+ *
+ * @blk2off_tbl.flags: offset translation table's flags
+ * @blk2off_tbl.compression: compression type
+ *
+ * @user_data.flags: user data's flags
+ * @user_data.compression: compression type
+ * @user_data.migration_threshold: default value of destination PEBs in migration
+ */
+struct ssdfs_metadata_options {
+	struct {
+		u16 flags;
+		u8 compression;
+	} blk_bmap;
+
+	struct {
+		u16 flags;
+		u8 compression;
+	} blk2off_tbl;
+
+	struct {
+		u16 flags;
+		u8 compression;
+		u16 migration_threshold;
+	} user_data;
+};
+
+/*
+ * struct ssdfs_current_volume_config - current volume config
+ * @fs_uuid: 128-bit volume's uuid
+ * @fs_label: volume name
+ * @nsegs: number of segments on the volume
+ * @pagesize: page size in bytes
+ * @erasesize: physical erase block size in bytes
+ * @segsize: segment size in bytes
+ * @pebs_per_seg: physical erase blocks per segment
+ * @pages_per_peb: pages per physical erase block
+ * @pages_per_seg: pages per segment
+ * @leb_pages_capacity: maximal number of logical blocks per LEB
+ * @peb_pages_capacity: maximal number of NAND pages can be written per PEB
+ * @fs_ctime: volume create timestamp (mkfs phase)
+ * @raw_inode_size: raw inode size in bytes
+ * @create_threads_per_seg: number of creation threads per segment
+ * @metadata_options: metadata options
+ * @sb_seg_log_pages: full log size in sb segment (pages count)
+ * @segbmap_log_pages: full log size in segbmap segment (pages count)
+ * @segbmap_flags: segment bitmap flags
+ * @maptbl_log_pages: full log size in maptbl segment (pages count)
+ * @maptbl_flags: mapping table flags
+ * @lnodes_seg_log_pages: full log size in leaf nodes segment (pages count)
+ * @hnodes_seg_log_pages: full log size in hybrid nodes segment (pages count)
+ * @inodes_seg_log_pages: full log size in index nodes segment (pages count)
+ * @user_data_log_pages: full log size in user data segment (pages count)
+ * @migration_threshold: default value of destination PEBs in migration
+ * @is_zns_device: file system volume is on ZNS device
+ * @zone_size: zone size in bytes
+ * @zone_capacity: zone capacity in bytes available for write operations
+ * @max_open_zones: open zones limitation (upper bound)
+ */
+struct ssdfs_current_volume_config {
+	unsigned char fs_uuid[SSDFS_UUID_SIZE];
+	char fs_label[SSDFS_VOLUME_LABEL_MAX];
+
+	u64 nsegs;
+	u32 pagesize;
+	u32 erasesize;
+	u32 segsize;
+	u32 pebs_per_seg;
+	u32 pages_per_peb;
+	u32 pages_per_seg;
+	u32 leb_pages_capacity;
+	u32 peb_pages_capacity;
+	u64 fs_ctime;
+	u16 raw_inode_size;
+	u16 create_threads_per_seg;
+
+	struct ssdfs_metadata_options metadata_options;
+
+	u16 sb_seg_log_pages;
+
+	u16 segbmap_log_pages;
+	u16 segbmap_flags;
+
+	u16 maptbl_log_pages;
+	u16 maptbl_flags;
+
+	u16 lnodes_seg_log_pages;
+	u16 hnodes_seg_log_pages;
+	u16 inodes_seg_log_pages;
+	u16 user_data_log_pages;
+
+	u16 migration_threshold;
+
+	int is_zns_device;
+	u64 zone_size;
+	u64 zone_capacity;
+	u32 max_open_zones;
+};
+
+/*
+ * struct ssdfs_tunefs_config_request - tunefs config request
+ * @label: volume label option
+ * @blkbmap: block bitmap options
+ * @blk2off_tbl: offset translation table options
+ * @segbmap: segment bitmap options
+ * @maptbl: PEB mapping table options
+ * @btree: btree options
+ * @user_data_seg: user data segment's options
+ */
+struct ssdfs_tunefs_config_request {
+	struct ssdfs_tunefs_volume_label_option label;
+	struct ssdfs_tunefs_blkbmap_options blkbmap;
+	struct ssdfs_tunefs_blk2off_table_options blk2off_tbl;
+	struct ssdfs_tunefs_segbmap_options segbmap;
+	struct ssdfs_tunefs_maptbl_options maptbl;
+	struct ssdfs_tunefs_btree_options btree;
+	struct ssdfs_tunefs_user_data_options user_data_seg;
+};
+
+/*
+ * struct ssdfs_tunefs_options - tunefs options
+ * @old_config: current volume configuration
+ * @new_config: tunefs configuration request
+ */
+struct ssdfs_tunefs_options {
+	struct ssdfs_current_volume_config old_config;
+	struct ssdfs_tunefs_config_request new_config;
+};
+
 #define SSDFS_IOCTL_MAGIC 0xdf
 
 #define SSDFS_IOC_DO_TESTING		_IOW(SSDFS_IOCTL_MAGIC, 1, \
@@ -611,6 +839,12 @@ enum {
 					     struct ssdfs_snapshot_info)
 #define SSDFS_IOC_SHOW_DETAILS		_IOWR(SSDFS_IOCTL_MAGIC, 7, \
 					     struct ssdfs_snapshot_info)
+#define SSDFS_IOC_LIST_SNAPSHOT_RULES	_IOWR(SSDFS_IOCTL_MAGIC, 8, \
+					     struct ssdfs_snapshot_info)
+#define SSDFS_IOC_TUNEFS_GET_CONFIG	_IOR(SSDFS_IOCTL_MAGIC, 9, \
+					     struct ssdfs_tunefs_options)
+#define SSDFS_IOC_TUNEFS_SET_CONFIG	_IOWR(SSDFS_IOCTL_MAGIC, 10, \
+					     struct ssdfs_tunefs_options)
 
 #define SSDFS_SEG_HDR(ptr) \
 	((struct ssdfs_segment_header *)(ptr))
