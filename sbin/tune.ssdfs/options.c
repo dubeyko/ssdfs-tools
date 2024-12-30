@@ -17,9 +17,6 @@
 
 #include "tunefs.h"
 
-#define SSDFS_ENABLE_OPTION_STRING	"enable"
-#define SSDFS_DISABLE_OPTION_STRING	"disable"
-
 /************************************************************************
  *                    Options parsing functionality                     *
  ************************************************************************/
@@ -135,11 +132,11 @@ static int get_compression_id(char *value)
 {
 	int id = SSDFS_UNCOMPRESSED_BLOB;
 
-	if (strcmp(value, "none") == 0)
+	if (strcmp(value, SSDFS_NONE_COMPRESSION_STRING) == 0)
 		id = SSDFS_UNCOMPRESSED_BLOB;
-	else if (strcmp(value, "zlib") == 0)
+	else if (strcmp(value, SSDFS_ZLIB_COMPRESSION_STRING) == 0)
 		id = SSDFS_ZLIB_BLOB;
-	else if (strcmp(value, "lzo") == 0)
+	else if (strcmp(value, SSDFS_LZO_COMPRESSION_STRING) == 0)
 		id = SSDFS_LZO_BLOB;
 	else {
 		SSDFS_ERR("Unsupported compression type %s.\n",
@@ -282,7 +279,7 @@ void parse_options(int argc, char *argv[],
 				switch (getsubopt(&p, blkbmap_tokens, &value)) {
 				case BLKBMAP_HAS_COPY_OPT:
 					blkbmap->has_backup_copy.state =
-						detect_option_status(optarg);
+						detect_option_status(value);
 					blkbmap->has_backup_copy.value =
 						blkbmap->has_backup_copy.state;
 					break;
@@ -328,7 +325,7 @@ void parse_options(int argc, char *argv[],
 				switch (getsubopt(&p, maptbl_tokens, &value)) {
 				case MAPTBL_HAS_COPY_OPT:
 					maptbl->has_backup_copy.state =
-						detect_option_status(optarg);
+						detect_option_status(value);
 					maptbl->has_backup_copy.value =
 						maptbl->has_backup_copy.state;
 					break;
@@ -378,7 +375,7 @@ void parse_options(int argc, char *argv[],
 						  &value)) {
 				case BLK2OFF_TABLE_HAS_COPY_OPT:
 					blk2off_tbl->has_backup_copy.state =
-						detect_option_status(optarg);
+						detect_option_status(value);
 					blk2off_tbl->has_backup_copy.value =
 						blk2off_tbl->has_backup_copy.state;
 					break;
@@ -405,7 +402,7 @@ void parse_options(int argc, char *argv[],
 				switch (getsubopt(&p, segbmap_tokens, &value)) {
 				case SEGBMAP_HAS_COPY_OPT:
 					segbmap->has_backup_copy.state =
-						detect_option_status(optarg);
+						detect_option_status(value);
 					segbmap->has_backup_copy.value =
 						segbmap->has_backup_copy.state;
 					break;

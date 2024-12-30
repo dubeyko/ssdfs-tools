@@ -37,6 +37,13 @@
 		fprintf(stdout, fmt, ##__VA_ARGS__); \
 	} while (0)
 
+#define SSDFS_ENABLE_OPTION_STRING	"enable"
+#define SSDFS_DISABLE_OPTION_STRING	"disable"
+
+#define SSDFS_NONE_COMPRESSION_STRING	"none"
+#define SSDFS_ZLIB_COMPRESSION_STRING	"zlib"
+#define SSDFS_LZO_COMPRESSION_STRING	"lzo"
+
 /*
  * struct ssdfs_volume_environment - volume environment
  * @need_get_config: does it need to get current config?
