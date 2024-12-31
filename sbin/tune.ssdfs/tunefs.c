@@ -327,16 +327,6 @@ void ssdfs_tunefs_show_min_index_area_size(struct ssdfs_tunefs_option *option,
 	}
 }
 
-#define SSDFS_TUNEFS_BLOCK_BITMAP_STRING	"BLOCK BITMAP"
-#define SSDFS_TUNEFS_BLK2OFF_TABLE_STRING	"OFFSETS TRANSLATION TABLE"
-#define SSDFS_TUNEFS_SEGMENT_BITMAP_STRING	"SEGMENT BITMAP"
-#define SSDFS_TUNEFS_MAPPING_TABLE_STRING	"PEB MAPPING TABLE"
-#define SSDFS_TUNEFS_BTREE_STRING		"B-TREE"
-#define SSDFS_TUNEFS_BTREE_LNODE_STRING		"B-TREE: LEAF NODE"
-#define SSDFS_TUNEFS_BTREE_HNODE_STRING		"B-TREE: HYBRID NODE"
-#define SSDFS_TUNEFS_BTREE_INODE_STRING		"B-TREE: INDEX NODE"
-#define SSDFS_TUNEFS_USER_DATA_STRING		"USER DATA"
-
 static
 void ssdfs_tunefs_show_requested_configuration(struct ssdfs_tunefs_options *options)
 {
@@ -420,10 +410,299 @@ void ssdfs_tunefs_show_requested_configuration(struct ssdfs_tunefs_options *opti
 				      SSDFS_TUNEFS_USER_DATA_STRING);
 }
 
+static inline
+void ssdfs_tunefs_explain_option(struct ssdfs_tunefs_option *option,
+				 const char *subsystem,
+				 const char *option_name)
+{
+	switch (option->state) {
+	case SSDFS_DONT_SUPPORT_OPTION:
+		SSDFS_TUNEFS_SHOW("%s don't support %d for %s\n",
+				  subsystem,
+				  option->value,
+				  option_name);
+		break;
+
+	case SSDFS_USE_RECOMMENDED_VALUE:
+		SSDFS_TUNEFS_SHOW("%s: value %d is out of range for %s. "
+				  "Please, use recommended value %d.\n",
+				  subsystem,
+				  option->value,
+				  option_name,
+				  option->recommended_value);
+		break;
+
+	case SSDFS_UNRECOGNIZED_VALUE:
+		SSDFS_TUNEFS_SHOW("%s: value %d is not recognized for %s. "
+				  "Please, use recommended value %d.\n",
+				  subsystem,
+				  option->value,
+				  option_name,
+				  option->recommended_value);
+		break;
+
+	case SSDFS_NOT_IMPLEMENTED_OPTION:
+		SSDFS_TUNEFS_SHOW("%s: support of %s is not implemented yet.\n",
+				  subsystem,
+				  option_name);
+		break;
+
+	case SSDFS_OPTION_HAS_BEEN_APPLIED:
+		/* do nothing */
+		break;
+
+	default:
+		SSDFS_ERR("unrecognized responce: "
+			  "%s: %s: code %#x\n",
+			  subsystem, option_name,
+			  option->state);
+		break;
+	}
+}
+
 static
 void ssdfs_tunefs_explain_configuration_failure(struct ssdfs_tunefs_options *options)
 {
-	SSDFS_ERR("TODO: Function is not implemented yet!!!\n");
+	struct ssdfs_tunefs_config_request *config;
+	struct ssdfs_tunefs_volume_label_option *label;
+	struct ssdfs_tunefs_blkbmap_options *blkbmap;
+	struct ssdfs_tunefs_blk2off_table_options *blk2off_tbl;
+	struct ssdfs_tunefs_segbmap_options *segbmap;
+	struct ssdfs_tunefs_maptbl_options *maptbl;
+	struct ssdfs_tunefs_btree_options *btree;
+	struct ssdfs_tunefs_user_data_options *user_data_seg;
+
+	config = &options->new_config;
+
+	/* volume label option */
+	label = &config->label;
+	switch (label->state) {
+	case SSDFS_DONT_SUPPORT_OPTION:
+		SSDFS_TUNEFS_SHOW("%s don't support %s\n",
+				  SSDFS_TUNEFS_LABEL_STRING,
+				  SSDFS_TUNEFS_VOLUME_LABEL_OPTION_STRING);
+		break;
+
+	case SSDFS_NOT_IMPLEMENTED_OPTION:
+		SSDFS_TUNEFS_SHOW("%s: support of %s is not implemented yet.\n",
+				  SSDFS_TUNEFS_LABEL_STRING,
+				  SSDFS_TUNEFS_VOLUME_LABEL_OPTION_STRING);
+		break;
+
+	case SSDFS_OPTION_HAS_BEEN_APPLIED:
+		/* do nothing */
+		break;
+
+	default:
+		SSDFS_ERR("unrecognized responce: "
+			  "%s: %s: code %#x\n",
+			  SSDFS_TUNEFS_LABEL_STRING,
+			  SSDFS_TUNEFS_VOLUME_LABEL_OPTION_STRING,
+			  label->state);
+		break;
+	}
+
+	/* block bitmap options */
+	blkbmap = &config->blkbmap;
+	ssdfs_tunefs_explain_option(&blkbmap->has_backup_copy,
+				    SSDFS_TUNEFS_BLOCK_BITMAP_STRING,
+				    SSDFS_TUNEFS_HAS_BACKUP_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&blkbmap->compression,
+				    SSDFS_TUNEFS_BLOCK_BITMAP_STRING,
+				    SSDFS_TUNEFS_COMPRESSION_OPTION_STRING);
+
+	/* offsets table options */
+	blk2off_tbl = &config->blk2off_tbl;
+	ssdfs_tunefs_explain_option(&blk2off_tbl->has_backup_copy,
+				    SSDFS_TUNEFS_BLK2OFF_TABLE_STRING,
+				    SSDFS_TUNEFS_HAS_BACKUP_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&blk2off_tbl->compression,
+				    SSDFS_TUNEFS_BLK2OFF_TABLE_STRING,
+				    SSDFS_TUNEFS_COMPRESSION_OPTION_STRING);
+
+	/* segment bitmap options */
+	segbmap = &config->segbmap;
+	ssdfs_tunefs_explain_option(&segbmap->has_backup_copy,
+				    SSDFS_TUNEFS_SEGMENT_BITMAP_STRING,
+				    SSDFS_TUNEFS_HAS_BACKUP_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&segbmap->log_pages,
+				    SSDFS_TUNEFS_SEGMENT_BITMAP_STRING,
+				    SSDFS_TUNEFS_LOG_PAGES_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&segbmap->migration_threshold,
+				    SSDFS_TUNEFS_SEGMENT_BITMAP_STRING,
+				    SSDFS_TUNEFS_MIGRATION_THRESHOLD_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&segbmap->compression,
+				    SSDFS_TUNEFS_SEGMENT_BITMAP_STRING,
+				    SSDFS_TUNEFS_COMPRESSION_OPTION_STRING);
+
+	/* PEB mapping table options */
+	maptbl = &config->maptbl;
+	ssdfs_tunefs_explain_option(&maptbl->has_backup_copy,
+				    SSDFS_TUNEFS_MAPPING_TABLE_STRING,
+				    SSDFS_TUNEFS_HAS_BACKUP_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&maptbl->log_pages,
+				    SSDFS_TUNEFS_MAPPING_TABLE_STRING,
+				    SSDFS_TUNEFS_LOG_PAGES_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&maptbl->migration_threshold,
+				    SSDFS_TUNEFS_MAPPING_TABLE_STRING,
+				    SSDFS_TUNEFS_MIGRATION_THRESHOLD_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&maptbl->reserved_pebs_per_fragment,
+				    SSDFS_TUNEFS_MAPPING_TABLE_STRING,
+				    SSDFS_TUNEFS_RESERVED_PEBS4FRAG_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&maptbl->compression,
+				    SSDFS_TUNEFS_MAPPING_TABLE_STRING,
+				    SSDFS_TUNEFS_COMPRESSION_OPTION_STRING);
+
+	/* btree options */
+	btree = &config->btree;
+	ssdfs_tunefs_explain_option(&btree->min_index_area_size,
+				    SSDFS_TUNEFS_BTREE_STRING,
+				    SSDFS_TUNEFS_MIN_INDEX_AREA_SZ_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&btree->lnode_log_pages,
+				    SSDFS_TUNEFS_BTREE_LNODE_STRING,
+				    SSDFS_TUNEFS_LOG_PAGES_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&btree->hnode_log_pages,
+				    SSDFS_TUNEFS_BTREE_HNODE_STRING,
+				    SSDFS_TUNEFS_LOG_PAGES_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&btree->inode_log_pages,
+				    SSDFS_TUNEFS_BTREE_INODE_STRING,
+				    SSDFS_TUNEFS_LOG_PAGES_OPTION_STRING);
+
+	/* user data options */
+	user_data_seg = &config->user_data_seg;
+	ssdfs_tunefs_explain_option(&user_data_seg->log_pages,
+				    SSDFS_TUNEFS_USER_DATA_STRING,
+				    SSDFS_TUNEFS_LOG_PAGES_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&user_data_seg->migration_threshold,
+				    SSDFS_TUNEFS_USER_DATA_STRING,
+				    SSDFS_TUNEFS_MIGRATION_THRESHOLD_OPTION_STRING);
+	ssdfs_tunefs_explain_option(&user_data_seg->compression,
+				    SSDFS_TUNEFS_USER_DATA_STRING,
+				    SSDFS_TUNEFS_COMPRESSION_OPTION_STRING);
+}
+
+static inline
+void ssdfs_tunefs_init_option(struct ssdfs_tunefs_option *option,
+			      int state, int value, int recommended_value)
+{
+	option->state = state;
+	option->value = value;
+	option->recommended_value = recommended_value;
+}
+
+static inline
+void ssdfs_tunefs_init_all_options(struct ssdfs_tunefs_config_request *request)
+{
+	struct ssdfs_tunefs_volume_label_option *label;
+	struct ssdfs_tunefs_blkbmap_options *blkbmap;
+	struct ssdfs_tunefs_blk2off_table_options *blk2off_tbl;
+	struct ssdfs_tunefs_segbmap_options *segbmap;
+	struct ssdfs_tunefs_maptbl_options *maptbl;
+	struct ssdfs_tunefs_btree_options *btree;
+	struct ssdfs_tunefs_user_data_options *user_data_seg;
+
+	/* volume label option */
+	label = &request->label;
+	label->state = SSDFS_IGNORE_OPTION;
+	memset(label->volume_label, 0, sizeof(label->volume_label));
+
+	/* block bitmap options */
+	blkbmap = &request->blkbmap;
+	ssdfs_tunefs_init_option(&blkbmap->has_backup_copy,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&blkbmap->compression,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_UNKNOWN_COMPRESSION,
+				 SSDFS_ZLIB_BLOB);
+
+	/* offsets table options */
+	blk2off_tbl = &request->blk2off_tbl;
+	ssdfs_tunefs_init_option(&blk2off_tbl->has_backup_copy,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&blk2off_tbl->compression,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_UNKNOWN_COMPRESSION,
+				 SSDFS_ZLIB_BLOB);
+
+	/* segment bitmap options */
+	segbmap = &request->segbmap;
+	ssdfs_tunefs_init_option(&segbmap->has_backup_copy,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&segbmap->log_pages,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&segbmap->migration_threshold,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&segbmap->compression,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_UNKNOWN_COMPRESSION,
+				 SSDFS_ZLIB_BLOB);
+
+	/* PEB mapping table options */
+	maptbl = &request->maptbl;
+	ssdfs_tunefs_init_option(&maptbl->has_backup_copy,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&maptbl->log_pages,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&maptbl->migration_threshold,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&maptbl->reserved_pebs_per_fragment,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&maptbl->compression,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_UNKNOWN_COMPRESSION,
+				 SSDFS_ZLIB_BLOB);
+
+	/* btree options */
+	btree = &request->btree;
+	ssdfs_tunefs_init_option(&btree->min_index_area_size,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&btree->lnode_log_pages,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&btree->hnode_log_pages,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&btree->inode_log_pages,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+
+	/* user data options */
+	user_data_seg = &request->user_data_seg;
+	ssdfs_tunefs_init_option(&user_data_seg->log_pages,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&user_data_seg->migration_threshold,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_TUNEFS_UNKNOWN_OPTION_VALUE,
+				 SSDFS_TUNEFS_UNKNOWN_RECOMMENDED_VALUE);
+	ssdfs_tunefs_init_option(&user_data_seg->compression,
+				 SSDFS_IGNORE_OPTION,
+				 SSDFS_UNKNOWN_COMPRESSION,
+				 SSDFS_ZLIB_BLOB);
 }
 
 int main(int argc, char *argv[])
@@ -433,60 +712,24 @@ int main(int argc, char *argv[])
 		.generic.show_debug = SSDFS_FALSE,
 		.generic.show_info = SSDFS_TRUE,
 		.generic.device_type = SSDFS_DEVICE_TYPE_MAX,
-		.options.new_config.label.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.blkbmap.has_backup_copy.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.blkbmap.has_backup_copy.value = SSDFS_IGNORE_OPTION,
-		.options.new_config.blkbmap.compression.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.blkbmap.compression.value = SSDFS_UNKNOWN_COMPRESSION,
-		.options.new_config.blk2off_tbl.has_backup_copy.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.blk2off_tbl.has_backup_copy.value = SSDFS_IGNORE_OPTION,
-		.options.new_config.blk2off_tbl.compression.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.blk2off_tbl.compression.value = SSDFS_UNKNOWN_COMPRESSION,
-		.options.new_config.segbmap.has_backup_copy.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.segbmap.has_backup_copy.value = SSDFS_IGNORE_OPTION,
-		.options.new_config.segbmap.log_pages.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.segbmap.log_pages.value = -1,
-		.options.new_config.segbmap.migration_threshold.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.segbmap.migration_threshold.value = -1,
-		.options.new_config.segbmap.compression.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.segbmap.compression.value = SSDFS_UNKNOWN_COMPRESSION,
-		.options.new_config.maptbl.has_backup_copy.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.maptbl.has_backup_copy.value = SSDFS_IGNORE_OPTION,
-		.options.new_config.maptbl.log_pages.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.maptbl.log_pages.value = -1,
-		.options.new_config.maptbl.migration_threshold.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.maptbl.migration_threshold.value = -1,
-		.options.new_config.maptbl.reserved_pebs_per_fragment.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.maptbl.reserved_pebs_per_fragment.value = -1,
-		.options.new_config.maptbl.compression.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.maptbl.compression.value = SSDFS_UNKNOWN_COMPRESSION,
-		.options.new_config.btree.min_index_area_size.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.btree.min_index_area_size.value = -1,
-		.options.new_config.btree.lnode_log_pages.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.btree.lnode_log_pages.value = -1,
-		.options.new_config.btree.hnode_log_pages.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.btree.hnode_log_pages.value = -1,
-		.options.new_config.btree.inode_log_pages.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.btree.inode_log_pages.value = -1,
-		.options.new_config.user_data_seg.log_pages.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.user_data_seg.log_pages.value = -1,
-		.options.new_config.user_data_seg.migration_threshold.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.user_data_seg.migration_threshold.value = -1,
-		.options.new_config.user_data_seg.compression.state = SSDFS_IGNORE_OPTION,
-		.options.new_config.user_data_seg.compression.value = SSDFS_UNKNOWN_COMPRESSION,
 	};
 	int fd;
 	int err = 0;
+
+	ssdfs_tunefs_init_all_options(&env.options.new_config);
 
 	parse_options(argc, argv, &env);
 
 	SSDFS_DBG(env.generic.show_debug, "try open: %s\n", argv[optind]);
 
-	fd = open(argv[optind], O_RDWR | O_LARGEFILE);
+	fd = open(argv[optind], O_DIRECTORY);
 	if (fd == -1) {
-		SSDFS_ERR("unable to open %s: %s\n",
-			  argv[optind], strerror(errno));
-		exit(EXIT_FAILURE);
+		fd = open(argv[optind], O_RDWR | O_LARGEFILE);
+		if (fd == -1) {
+			SSDFS_ERR("unable to open %s: %s\n",
+				  argv[optind], strerror(errno));
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	if (env.need_get_config) {

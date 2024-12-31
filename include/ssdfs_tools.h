@@ -567,6 +567,8 @@ struct ssdfs_testing_environment {
  * @frequency: taking snapshot frequency (FSYNC|HOUR|DAY|WEEK)
  * @snapshots_threshold: max number of simultaneously available snapshots
  * @time_range: time range to select/modify/delete snapshots
+ * @buf: buffer to share the snapshot details
+ * @buf_size: size of buffer in bytes
  */
 struct ssdfs_snapshot_info {
 	char name[SSDFS_MAX_NAME_LEN];
@@ -578,6 +580,9 @@ struct ssdfs_snapshot_info {
 	int frequency;
 	u32 snapshots_threshold;
 	struct ssdfs_time_range time_range;
+
+	char *buf;
+	u64 buf_size;
 };
 
 /*
@@ -593,16 +598,20 @@ enum {
 	SSDFS_DONT_SUPPORT_OPTION,
 	SSDFS_USE_RECOMMENDED_VALUE,
 	SSDFS_UNRECOGNIZED_VALUE,
+	SSDFS_NOT_IMPLEMENTED_OPTION,
+	SSDFS_OPTION_HAS_BEEN_APPLIED,
 };
 
 /*
  * struct ssdfs_tunefs_option - option state
  * @state: option state (ignore, enable, disable)
  * @value: option value
+ * @recommended_value: value returned by driver as better option
  */
 struct ssdfs_tunefs_option {
 	int state;
 	int value;
+	int recommended_value;
 };
 
 /*

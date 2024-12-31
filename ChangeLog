@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.49 [December 30, 2024]
+    (*) [tunefs] Implement function of explaining configuration failure.
+
 v.4.48 [December 29, 2024]
     (*) [tunefs] Implement initial set of supported options.
 
