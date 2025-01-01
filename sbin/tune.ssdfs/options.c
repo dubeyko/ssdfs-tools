@@ -29,7 +29,7 @@ void print_version(void)
 void print_usage(void)
 {
 	SSDFS_TUNEFS_INFO(SSDFS_TRUE, "tune volume of SSDFS file system\n\n");
-	SSDFS_INFO("Usage: tune.ssdfs <options> [<device> | <image-file>]\n");
+	SSDFS_INFO("Usage: tune.ssdfs <options> [<folder> | <file>]\n");
 	SSDFS_INFO("Options:\n");
 	SSDFS_INFO("\t [-B|--blkbmap has_copy=(enable|disable),"
 		   "compression=(none|zlib|lzo)]\t  "
