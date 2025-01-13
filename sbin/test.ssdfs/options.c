@@ -5,7 +5,7 @@
  *
  * sbin/test.ssdfs/options.c - parsing command line options functionality.
  *
- * Copyright (c) 2021-2024 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2021-2025 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

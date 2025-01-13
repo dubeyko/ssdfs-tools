@@ -5,7 +5,7 @@
  *
  * sbin/test.ssdfs/testing.h - declarations of testing utility.
  *
- * Copyright (c) 2021-2024 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2021-2025 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

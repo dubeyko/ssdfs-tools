@@ -5,7 +5,7 @@
  *
  * sbin/tune.ssdfs/tunefs.h - declarations of tunefs utility.
  *
- * Copyright (c) 2023-2024 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2023-2025 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

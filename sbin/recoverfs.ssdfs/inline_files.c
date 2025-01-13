@@ -6,7 +6,7 @@
  * sbin/recoverfs.ssdfs/inline_files.c - implementation of inline files
  *                                         extraction logic.
  *
- * Copyright (c) 2023-2024 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2023-2025 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

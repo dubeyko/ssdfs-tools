@@ -5,7 +5,7 @@
  *
  * lib/zns_readwrite.c - ZNS read/write operations.
  *
- * Copyright (c) 2022-2024 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2022-2025 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *
