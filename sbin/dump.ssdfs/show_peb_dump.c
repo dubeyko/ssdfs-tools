@@ -2141,6 +2141,253 @@ finish_parse_fragment:
 }
 
 static
+int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
+				    void *area_buf, u32 area_size)
+{
+	struct ssdfs_maptbl_cache_header *cache_hdr = NULL;
+	struct ssdfs_maptbl_cache_peb_state *peb_state = NULL;
+	size_t hdr_size = sizeof(struct ssdfs_maptbl_cache_header);
+	u16 flags;
+	u16 items_count;
+	u16 bytes_count;
+	u64 start_leb;
+	u64 end_leb;
+	u8 *data = NULL;
+	u8 *uncompr_data = NULL;
+	u32 compr_size, uncompr_size;
+	__le64 *cur_id = NULL;
+	u8 *magic = NULL;
+	int i;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse mapping table cache\n");
+
+	if (area_size < hdr_size) {
+		SSDFS_ERR("area_size %u < hdr_size %zu\n",
+			  area_size, hdr_size);
+		return -EINVAL;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE CACHE:\n");
+
+	cache_hdr = (struct ssdfs_maptbl_cache_header *)((u8 *)area_buf);
+
+	ssdfs_dumpfs_parse_magic(env, &cache_hdr->magic);
+
+	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n",
+			  le16_to_cpu(cache_hdr->sequence_id));
+
+	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE CACHE FLAGS: ");
+
+	flags = le16_to_cpu(cache_hdr->flags);
+
+	if (flags & SSDFS_MAPTBL_CACHE_ZLIB_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_CACHE_ZLIB_COMPR ");
+
+	if (flags & SSDFS_MAPTBL_CACHE_LZO_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_CACHE_LZO_COMPR ");
+
+	if (flags == 0)
+		SSDFS_DUMPFS_DUMP(env, "NONE");
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	items_count = le16_to_cpu(cache_hdr->items_count);
+	SSDFS_DUMPFS_DUMP(env, "ITEMS_COUNT: %u\n", items_count);
+
+	bytes_count = le16_to_cpu(cache_hdr->bytes_count);
+	SSDFS_DUMPFS_DUMP(env, "BYTES_COUNT: %u\n", bytes_count);
+
+	start_leb = le16_to_cpu(cache_hdr->start_leb);
+	SSDFS_DUMPFS_DUMP(env, "START_LEB: %llu\n", start_leb);
+	end_leb = le16_to_cpu(cache_hdr->end_leb);
+	SSDFS_DUMPFS_DUMP(env, "END_LEB: %llu\n", end_leb);
+
+	compr_size = area_size;
+	uncompr_size = bytes_count;
+
+	if (flags & SSDFS_MAPTBL_CACHE_ZLIB_COMPR) {
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory\n");
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = (u8 *)area_buf + hdr_size;
+
+		err = ssdfs_zlib_decompress(data, uncompr_data,
+					    compr_size, uncompr_size,
+					    env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = uncompr_data;
+	} else if (flags & SSDFS_MAPTBL_CACHE_LZO_COMPR) {
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSED STATE IS NOT SUPPORTED YET\n");
+		goto finish_parse_maptbl_cache;
+	} else {
+		data = (u8 *)area_buf + hdr_size;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "LEB to PEB PAIRS:\n");
+
+	cur_id = (__le64 *)data;
+	for (i = 0; i < items_count; i++) {
+		u64 leb_id;
+		u64 peb_id;
+
+		leb_id = le64_to_cpu(*cur_id);
+		cur_id++;
+		peb_id = le64_to_cpu(*cur_id);
+		cur_id++;
+
+		SSDFS_DUMPFS_DUMP(env, "[%d] LEB %llu, PEB %llu\n",
+				  i, leb_id, peb_id);
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "PEB STATEs:\n");
+
+	magic = data + (items_count * (sizeof(__le64) * 2));
+
+	SSDFS_DUMPFS_DUMP(env, "MAGIC: %c%c%c%c\n",
+			  *magic, *(magic + 1),
+			  *(magic + 2), *(magic + 3));
+
+	peb_state = (struct ssdfs_maptbl_cache_peb_state *)(magic +
+							sizeof(__le32));
+	for (i = 0; i < items_count; i++) {
+		u8 consistency;
+		u8 state;
+		u8 flags;
+		u8 shared_peb_index;
+
+		SSDFS_DUMPFS_DUMP(env, "[%d]: ", i);
+
+		consistency = le8_to_cpu(peb_state[i].consistency);
+		switch (consistency) {
+		case SSDFS_PEB_STATE_CONSISTENT:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_STATE_CONSISTENT, ");
+			break;
+
+		case SSDFS_PEB_STATE_INCONSISTENT:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_STATE_INCONSISTENT, ");
+			break;
+
+		case SSDFS_PEB_STATE_PRE_DELETED:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_STATE_PRE_DELETED, ");
+			break;
+
+		default:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_STATE_UNKNOWN, ");
+			break;
+		}
+
+		state = le8_to_cpu(peb_state[i].state);
+		switch (state) {
+		case SSDFS_MAPTBL_BAD_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_BAD_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_CLEAN_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_CLEAN_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_USING_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_USING_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_USED_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_USED_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_PRE_DIRTY_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_PRE_DIRTY_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_DIRTY_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_DIRTY_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_SRC_USED_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_SRC_USED_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_SRC_PRE_DIRTY_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_SRC_PRE_DIRTY_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_SRC_DIRTY_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_SRC_DIRTY_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_CLEAN_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_DST_CLEAN_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_USING_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_DST_USING_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_USED_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_DST_USED_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_PRE_DIRTY_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_DST_PRE_DIRTY_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_DIRTY_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MIGRATION_DST_DIRTY_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_PRE_ERASE_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_PRE_ERASE_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_UNDER_ERASE_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_UNDER_ERASE_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_SNAPSHOT_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_SNAPSHOT_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_RECOVERING_STATE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_RECOVERING_STATE, ");
+			break;
+
+		default:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_UNKNOWN_PEB_STATE, ");
+			break;
+		}
+
+		flags = le8_to_cpu(peb_state[i].flags);
+		SSDFS_DUMPFS_DUMP(env, "flags %#x, ", flags);
+
+		shared_peb_index = le8_to_cpu(peb_state[i].shared_peb_index);
+		SSDFS_DUMPFS_DUMP(env, "shared_peb_index %u", shared_peb_index);
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
+finish_parse_maptbl_cache:
+	if (uncompr_data)
+		free(uncompr_data);
+
+	return err;
+}
+
+static
 void ssdfs_dumpfs_parse_maptbl_sb_header(struct ssdfs_dumpfs_environment *env,
 					 struct ssdfs_segment_header *hdr)
 {
@@ -3241,7 +3488,7 @@ parse_blk2off_table:
 
 parse_block_state_area:
 	if (!(env->peb.parse_flags & SSDFS_PARSE_BLOCK_STATE_AREA))
-		goto parse_log_footer;
+		goto parse_maptbl_cache_area;
 
 	desc = &buf->seg_hdr.desc_array[SSDFS_BLK_DESC_AREA_INDEX];
 	area_offset = le32_to_cpu(desc->offset);
@@ -3304,6 +3551,81 @@ finish_parse_blk_desc_array:
 			err = ssdfs_dumpfs_show_raw_dump(env);
 			if (err) {
 				SSDFS_ERR("fail to make blk desc array "
+					  "raw dump: "
+					  "peb_id %llu, err %d\n",
+					  env->peb.id, err);
+				goto close_opened_file;
+			}
+
+			SSDFS_DUMPFS_DUMP(env, "\n");
+		}
+	}
+
+parse_maptbl_cache_area:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_MAPTBL_CACHE_AREA))
+		goto parse_log_footer;
+
+	desc = &buf->seg_hdr.desc_array[SSDFS_MAPTBL_CACHE_INDEX];
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+
+	if (is_ssdfs_dumpfs_area_valid(desc)) {
+		area_buf = malloc(area_size);
+		if (!area_buf) {
+			err = -ENOMEM;
+			SSDFS_ERR("fail to allocate memory: "
+				  "size %u\n", area_size);
+			goto close_opened_file;
+		}
+
+		memset(area_buf, 0, area_size);
+
+		err = ssdfs_dumpfs_read_maptbl_cache(env,
+						     env->peb.id,
+						     env->peb.peb_size,
+						     env->peb.log_offset,
+						     env->peb.log_size,
+						     area_offset,
+						     area_size,
+						     area_buf);
+		if (err) {
+			SSDFS_ERR("fail to read mapping table cache: "
+				  "peb_id %llu, peb_size %u, "
+				  "log_index %u, log_offset %u, err %d\n",
+				  env->peb.id, env->peb.peb_size,
+				  env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_maptbl_cache;
+		}
+
+		err = ssdfs_dumpfs_parse_maptbl_cache(env, area_buf,
+							area_size);
+		if (err) {
+			err = 0;
+			SSDFS_ERR("fail to parse mapping table cache: "
+				  "peb_id %llu, log_index %u, "
+				  "log_offset %u, err %d\n",
+				  env->peb.id, env->peb.log_index,
+				  env->peb.log_offset, err);
+			goto finish_parse_maptbl_cache;
+		}
+
+finish_parse_maptbl_cache:
+		free(area_buf);
+		area_buf = NULL;
+
+		if (err)
+			goto close_opened_file;
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+
+		if (env->is_raw_dump_requested) {
+			env->raw_dump.offset = offset + area_offset;
+			env->raw_dump.size = area_size;
+
+			err = ssdfs_dumpfs_show_raw_dump(env);
+			if (err) {
+				SSDFS_ERR("fail to make mapping table cache "
 					  "raw dump: "
 					  "peb_id %llu, err %d\n",
 					  env->peb.id, err);

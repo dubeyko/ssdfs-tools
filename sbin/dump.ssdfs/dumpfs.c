@@ -38,33 +38,6 @@
 #include "dumpfs.h"
 #include <mtd/mtd-abi.h>
 
-/* Environment description */
-static struct ssdfs_dumpfs_environment environment = {
-	.base.show_debug = SSDFS_FALSE,
-	.base.show_info = SSDFS_TRUE,
-	.base.erase_size = SSDFS_128KB,
-	.base.fs_size = 0,
-	.peb.id = U64_MAX,
-	.peb.pebs_count = U64_MAX,
-	.peb.peb_size = U32_MAX,
-	.peb.show_all_logs = SSDFS_TRUE,
-	.peb.log_offset = 0,
-	.peb.log_size = U32_MAX,
-	.peb.log_index = 0,
-	.peb.logs_count = U32_MAX,
-	.peb.parse_flags = 0,
-	.raw_dump.offset = U64_MAX,
-	.raw_dump.size = 0,
-	.raw_dump.buf = NULL,
-	.raw_dump.buf_size = U32_MAX,
-	.command = SSDFS_DUMP_COMMAND_MAX,
-	.is_raw_dump_requested = SSDFS_FALSE,
-	.fd = -1,
-	.stream = NULL,
-	.output_folder = NULL,
-	.dump_into_files = SSDFS_FALSE,
-};
-
 /************************************************************************
  *                     Base dumpfs algorithm                            *
  ************************************************************************/
@@ -97,6 +70,31 @@ void ssdfs_dumpfs_destroy_buffers(struct ssdfs_dumpfs_environment *env)
 
 int main(int argc, char *argv[])
 {
+	struct ssdfs_dumpfs_environment environment = {
+		.base.show_debug = SSDFS_FALSE,
+		.base.show_info = SSDFS_TRUE,
+		.base.erase_size = SSDFS_128KB,
+		.base.fs_size = 0,
+		.peb.id = U64_MAX,
+		.peb.pebs_count = U64_MAX,
+		.peb.peb_size = U32_MAX,
+		.peb.show_all_logs = SSDFS_TRUE,
+		.peb.log_offset = 0,
+		.peb.log_size = U32_MAX,
+		.peb.log_index = 0,
+		.peb.logs_count = U32_MAX,
+		.peb.parse_flags = 0,
+		.raw_dump.offset = U64_MAX,
+		.raw_dump.size = 0,
+		.raw_dump.buf = NULL,
+		.raw_dump.buf_size = U32_MAX,
+		.command = SSDFS_DUMP_COMMAND_MAX,
+		.is_raw_dump_requested = SSDFS_FALSE,
+		.fd = -1,
+		.stream = NULL,
+		.output_folder = NULL,
+		.dump_into_files = SSDFS_FALSE,
+	};
 	struct ssdfs_dumpfs_environment *env_ptr;
 	int err = 0;
 
