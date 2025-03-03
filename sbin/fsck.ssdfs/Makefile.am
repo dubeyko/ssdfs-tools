@@ -4,6 +4,8 @@
 AM_CFLAGS = -Wall
 AM_CPPFLAGS = -I$(top_srcdir)/include
 
+LDADD = $(top_builddir)/lib/libssdfs.la
+
 sbin_PROGRAMS = fsck.ssdfs
 
-fsck_ssdfs_SOURCES = fsck.c fsck.h
+fsck_ssdfs_SOURCES = fsck.h options.c fsck.c

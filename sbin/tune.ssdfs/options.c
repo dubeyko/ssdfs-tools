@@ -58,11 +58,6 @@ void print_usage(void)
 	SSDFS_INFO("\t [-V|--version]\t\t  print version and exit.\n");
 }
 
-static int check_string(const char *str1, const char *str2)
-{
-	return strncasecmp(str1, str2, strlen(str2));
-}
-
 static int detect_option_status(const char *str)
 {
 	if (check_string(str, SSDFS_ENABLE_OPTION_STRING) == 0)

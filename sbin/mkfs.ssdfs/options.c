@@ -24,36 +24,6 @@
 
 #include "mkfs.h"
 
-#define SSDFS_256B_STRING	"265B"
-#define SSDFS_512B_STRING	"512B"
-#define SSDFS_1KB_STRING	"1KB"
-#define SSDFS_2KB_STRING	"2KB"
-#define SSDFS_4KB_STRING	"4KB"
-#define SSDFS_8KB_STRING	"8KB"
-#define SSDFS_16KB_STRING	"16KB"
-#define SSDFS_32KB_STRING	"32KB"
-#define SSDFS_64KB_STRING	"64KB"
-#define SSDFS_128KB_STRING	"128KB"
-#define SSDFS_256KB_STRING	"256KB"
-#define SSDFS_512KB_STRING	"512KB"
-#define SSDFS_1MB_STRING	"1MB"
-#define SSDFS_2MB_STRING	"2MB"
-#define SSDFS_4MB_STRING	"4MB"
-#define SSDFS_8MB_STRING	"8MB"
-#define SSDFS_16MB_STRING	"16MB"
-#define SSDFS_32MB_STRING	"32MB"
-#define SSDFS_64MB_STRING	"64MB"
-#define SSDFS_128MB_STRING	"128MB"
-#define SSDFS_256MB_STRING	"256MB"
-#define SSDFS_512MB_STRING	"512MB"
-#define SSDFS_1GB_STRING	"1GB"
-#define SSDFS_2GB_STRING	"2GB"
-#define SSDFS_4GB_STRING	"4GB"
-#define SSDFS_8GB_STRING	"8GB"
-#define SSDFS_16GB_STRING	"16GB"
-#define SSDFS_32GB_STRING	"32GB"
-#define SSDFS_64GB_STRING	"64GB"
-
 /************************************************************************
  *                    Options parsing functionality                     *
  ************************************************************************/
@@ -114,87 +84,13 @@ void print_usage(void)
 	SSDFS_INFO("\t [-V|--version]\t\t  print version and exit.\n");
 }
 
-static int check_string(const char *str1, const char *str2)
-{
-	return strncasecmp(str1, str2, strlen(str2));
-}
-
-static u64 detect_granularity(const char *str)
-{
-	if (check_string(str, SSDFS_256B_STRING) == 0)
-		return SSDFS_256B;
-	else if (check_string(str, SSDFS_512B_STRING) == 0)
-		return SSDFS_512B;
-	else if (check_string(str, SSDFS_1KB_STRING) == 0)
-		return SSDFS_1KB;
-	else if (check_string(str, SSDFS_2KB_STRING) == 0)
-		return SSDFS_2KB;
-	else if (check_string(str, SSDFS_4KB_STRING) == 0)
-		return SSDFS_4KB;
-	else if (check_string(str, SSDFS_8KB_STRING) == 0)
-		return SSDFS_8KB;
-	else if (check_string(str, SSDFS_16KB_STRING) == 0)
-		return SSDFS_16KB;
-	else if (check_string(str, SSDFS_32KB_STRING) == 0)
-		return SSDFS_32KB;
-	else if (check_string(str, SSDFS_64KB_STRING) == 0)
-		return SSDFS_64KB;
-	else if (check_string(str, SSDFS_128KB_STRING) == 0)
-		return SSDFS_128KB;
-	else if (check_string(str, SSDFS_256KB_STRING) == 0)
-		return SSDFS_256KB;
-	else if (check_string(str, SSDFS_512KB_STRING) == 0)
-		return SSDFS_512KB;
-	else if (check_string(str, SSDFS_1MB_STRING) == 0)
-		return SSDFS_1MB;
-	else if (check_string(str, SSDFS_2MB_STRING) == 0)
-		return SSDFS_2MB;
-	else if (check_string(str, SSDFS_4MB_STRING) == 0)
-		return SSDFS_4MB;
-	else if (check_string(str, SSDFS_8MB_STRING) == 0)
-		return SSDFS_8MB;
-	else if (check_string(str, SSDFS_16MB_STRING) == 0)
-		return SSDFS_16MB;
-	else if (check_string(str, SSDFS_32MB_STRING) == 0)
-		return SSDFS_32MB;
-	else if (check_string(str, SSDFS_64MB_STRING) == 0)
-		return SSDFS_64MB;
-	else if (check_string(str, SSDFS_128MB_STRING) == 0)
-		return SSDFS_128MB;
-	else if (check_string(str, SSDFS_256MB_STRING) == 0)
-		return SSDFS_256MB;
-	else if (check_string(str, SSDFS_512MB_STRING) == 0)
-		return SSDFS_512MB;
-	else if (check_string(str, SSDFS_1GB_STRING) == 0)
-		return SSDFS_1GB;
-	else if (check_string(str, SSDFS_2GB_STRING) == 0)
-		return SSDFS_2GB;
-	else if (check_string(str, SSDFS_8GB_STRING) == 0)
-		return SSDFS_8GB;
-	else if (check_string(str, SSDFS_16GB_STRING) == 0)
-		return SSDFS_16GB;
-	else if (check_string(str, SSDFS_32GB_STRING) == 0)
-		return SSDFS_32GB;
-	else if (check_string(str, SSDFS_64GB_STRING) == 0)
-		return SSDFS_64GB;
-
-	return U64_MAX;
-}
-
 static void check_pagesize(int pagesize)
 {
-	switch (pagesize) {
-	case SSDFS_4KB:
-	case SSDFS_8KB:
-	case SSDFS_16KB:
-	case SSDFS_32KB:
-		/* do nothing: proper value */
-		break;
+	int err;
 
-	default:
-		SSDFS_ERR("Unsupported page size %d. "
-			  "Please, use 4KB, 8KB, 16KB, 32KB.\n",
-			  pagesize);
+	err = __check_pagesize(pagesize);
+
+	if (err) {
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -202,33 +98,11 @@ static void check_pagesize(int pagesize)
 
 static void check_segsize(u64 segsize)
 {
-	switch (segsize) {
-	case SSDFS_128KB:
-	case SSDFS_256KB:
-	case SSDFS_512KB:
-	case SSDFS_1MB:
-	case SSDFS_2MB:
-	case SSDFS_4MB:
-	case SSDFS_8MB:
-	case SSDFS_16MB:
-	case SSDFS_32MB:
-	case SSDFS_64MB:
-	case SSDFS_128MB:
-	case SSDFS_256MB:
-	case SSDFS_512MB:
-	case SSDFS_1GB:
-	case SSDFS_2GB:
-	case SSDFS_4GB:
-	case SSDFS_8GB:
-	case SSDFS_16GB:
-	case SSDFS_32GB:
-	case SSDFS_64GB:
-		/* do nothing: proper value */
-		break;
+	int err;
 
-	default:
-		SSDFS_ERR("Unsupported segment size %llu.\n",
-			  segsize);
+	err = __check_segsize(segsize);
+
+	if (err) {
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
@@ -236,28 +110,11 @@ static void check_segsize(u64 segsize)
 
 static void check_erasesize(u64 erasesize)
 {
-	switch (erasesize) {
-	case SSDFS_128KB:
-	case SSDFS_256KB:
-	case SSDFS_512KB:
-	case SSDFS_1MB:
-	case SSDFS_2MB:
-	case SSDFS_4MB:
-	case SSDFS_8MB:
-	case SSDFS_16MB:
-	case SSDFS_32MB:
-	case SSDFS_64MB:
-	case SSDFS_128MB:
-	case SSDFS_256MB:
-	case SSDFS_512MB:
-	case SSDFS_1GB:
-	case SSDFS_2GB:
-		/* do nothing: proper value */
-		break;
+	int err;
 
-	default:
-		SSDFS_ERR("Unsupported erase size %llu.\n",
-			  erasesize);
+	err = __check_erasesize(erasesize);
+
+	if (err) {
 		print_usage();
 		exit(EXIT_FAILURE);
 	}

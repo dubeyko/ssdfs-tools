@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.51 [March 02, 2025]
+    (*) [fsck] Implement initial "skeleton" logic of FSCK tool.
+
 v.4.50 [February 22, 2025]
     (*) [dumpfs] Implement dumping logic of mapping table cache.
 
