@@ -8,4 +8,5 @@ LDADD = $(top_builddir)/lib/libssdfs.la
 
 sbin_PROGRAMS = fsck.ssdfs
 
-fsck_ssdfs_SOURCES = fsck.h options.c fsck.c
+fsck_ssdfs_SOURCES = fsck.h options.c detect_file_system.c \
+			check_file_system.c fsck.c

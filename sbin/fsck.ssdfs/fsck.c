@@ -42,24 +42,6 @@
 #include "fsck.h"
 
 static
-int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
-{
-/* TODO: implement */
-	env->detection_result.state = SSDFS_FSCK_UNKNOWN_DETECTION_RESULT;
-
-	return SSDFS_FSCK_UNKNOWN_DETECTION_RESULT;
-}
-
-static
-int is_ssdfs_volume_corrupted(struct ssdfs_fsck_environment *env)
-{
-/* TODO: implement */
-	env->check_result.state = SSDFS_FSCK_VOLUME_UNKNOWN_CHECK_RESULT;
-
-	return SSDFS_FSCK_VOLUME_UNKNOWN_CHECK_RESULT;
-}
-
-static
 int recover_corrupted_ssdfs_volume(struct ssdfs_fsck_environment *env)
 {
 /* TODO: implement */
@@ -158,6 +140,7 @@ int main(int argc, char *argv[])
 		.threads.requested_jobs = 0,
 		.detection_result.state = SSDFS_FSCK_UNKNOWN_DETECTION_RESULT,
 		.check_result.state = SSDFS_FSCK_VOLUME_UNKNOWN_CHECK_RESULT,
+		.check_result.corruption.mask = 0,
 		.recovery_result.state = SSDFS_FSCK_UNKNOWN_RECOVERY_RESULT,
 		.force_checking = SSDFS_FALSE,
 		.no_change = SSDFS_FALSE,

@@ -64,8 +64,41 @@ enum {
 	SSDFS_FSCK_UNKNOWN_DETECTION_RESULT,
 };
 
+#define SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND		(1 << 0)
+#define SSDFS_FSCK_SB_SEGS_FOUND			(1 << 1)
+#define SSDFS_FSCK_MAPPING_TBL_FOUND			(1 << 2)
+#define SSDFS_FSCK_SEGMENT_BITMAP_FOUND			(1 << 3)
+#define SSDFS_FSCK_NOTHING_FOUND_MASK			0x0
+#define SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK	0xF
+
+struct ssdfs_fsck_volume_creation_point {
+	struct ssdfs_segment_header seg_hdr;
+	union {
+		struct ssdfs_signature magic;
+		struct ssdfs_log_footer footer;
+		struct ssdfs_partial_log_header pl_hdr;
+	} log;
+	void *maptbl_cache;
+	u64 found_metadata;
+};
+
+enum {
+	SSDFS_FSCK_CREATION_ARRAY_NOT_INITIALIZED,
+	SSDFS_FSCK_CREATION_ARRAY_USE_BUFFER,
+	SSDFS_FSCK_CREATION_ARRAY_ALLOCATED,
+	SSDFS_FSCK_CREATION_ARRAY_STATE_MAX
+};
+
+struct ssdfs_fsck_volume_creation_array {
+	int state;
+	int count;
+	struct ssdfs_fsck_volume_creation_point *creation_points;
+	struct ssdfs_fsck_volume_creation_point buf;
+};
+
 struct ssdfs_fsck_detection_result {
 	int state;
+	struct ssdfs_fsck_volume_creation_array array;
 };
 
 enum {
@@ -78,8 +111,70 @@ enum {
 	SSDFS_FSCK_VOLUME_UNKNOWN_CHECK_RESULT,
 };
 
+/*
+ * Corruption mask flags
+ */
+#define SSDFS_FSCK_BASE_SNAPSHOT_SEGMENT_CORRUPTED		(1 << 0)
+#define SSDFS_FSCK_SUPERBLOCK_SEGMENT_CORRUPTED			(1 << 1)
+#define SSDFS_FSCK_MAPPING_TABLE_CORRUPTED			(1 << 2)
+#define SSDFS_FSCK_SEGMENT_BITMAP_CORRUPTED			(1 << 3)
+#define SSDFS_FSCK_INODES_BTREE_CORRUPTED			(1 << 4)
+#define SSDFS_FSCK_SNAPSHOTS_BTREE_CORRUPTED			(1 << 5)
+#define SSDFS_FSCK_DENTRIES_BTREE_CORRUPTED			(1 << 6)
+#define SSDFS_FSCK_EXTENTS_BTREE_CORRUPTED			(1 << 7)
+#define SSDFS_FSCK_SHARED_EXTENTS_BTREE_CORRUPTED		(1 << 8)
+#define SSDFS_FSCK_INVALID_EXTENTS_BTREE_CORRUPTED		(1 << 9)
+#define SSDFS_FSCK_SHARED_DICT_BTREE_CORRUPTED			(1 << 10)
+#define SSDFS_FSCK_XATTR_BTREE_CORRUPTED			(1 << 11)
+#define SSDFS_FSCK_SHARED_XATTR_BTREE_CORRUPTED			(1 << 12)
+
+struct ssdfs_fsck_base_snapshot_segment_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_superblock_segment_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_mapping_table_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_segment_bitmap_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_inodes_btree_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_snapshots_btree_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_invalid_extents_btree_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_shared_dictionary_btree_corruption {
+	int state;
+};
+
+struct ssdfs_fsck_corruption_details {
+	u64 mask;
+	struct ssdfs_fsck_base_snapshot_segment_corruption base_snapshot_seg;
+	struct ssdfs_fsck_superblock_segment_corruption superblock_seg;
+	struct ssdfs_fsck_mapping_table_corruption mapping_table;
+	struct ssdfs_fsck_segment_bitmap_corruption segment_bitmap;
+	struct ssdfs_fsck_inodes_btree_corruption inodes_btree;
+	struct ssdfs_fsck_snapshots_btree_corruption snapshots_btree;
+	struct ssdfs_fsck_invalid_extents_btree_corruption invalid_extents;
+	struct ssdfs_fsck_shared_dictionary_btree_corruption shared_dictionary;
+};
+
 struct ssdfs_fsck_check_result {
 	int state;
+	struct ssdfs_fsck_corruption_details corruption;
 };
 
 enum {
@@ -133,6 +228,12 @@ struct ssdfs_fsck_environment {
 /* Inline functions */
 
 /* Application APIs */
+
+/* detect_file_system.c */
+int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env);
+
+/* check_file_system.c */
+int is_ssdfs_volume_corrupted(struct ssdfs_fsck_environment *env);
 
 /* options.c */
 void print_usage(void);
