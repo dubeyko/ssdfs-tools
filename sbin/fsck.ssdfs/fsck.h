@@ -191,8 +191,52 @@ enum {
 	SSDFS_FSCK_UNKNOWN_RECOVERY_RESULT,
 };
 
+struct ssdfs_fsck_mapping_table_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_segment_bitmap_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_inodes_btree_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_shared_dictionary_btree_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_snapshots_btree_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_invalid_extents_btree_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_superblock_segment_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_base_snapshot_segment_recovery {
+	int state;
+};
+
+struct ssdfs_fsck_recovery_details {
+	struct ssdfs_fsck_mapping_table_recovery mapping_table;
+	struct ssdfs_fsck_segment_bitmap_recovery segment_bitmap;
+	struct ssdfs_fsck_inodes_btree_recovery inodes_btree;
+	struct ssdfs_fsck_shared_dictionary_btree_recovery shared_dictionary;
+	struct ssdfs_fsck_snapshots_btree_recovery snapshots_btree;
+	struct ssdfs_fsck_invalid_extents_btree_recovery invalid_extents;
+	struct ssdfs_fsck_superblock_segment_recovery superblock_seg;
+	struct ssdfs_fsck_base_snapshot_segment_recovery base_snapshot_seg;
+};
+
 struct ssdfs_fsck_recovery_result {
 	int state;
+	struct ssdfs_fsck_recovery_details details;
 };
 
 /*
@@ -234,6 +278,9 @@ int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env);
 
 /* check_file_system.c */
 int is_ssdfs_volume_corrupted(struct ssdfs_fsck_environment *env);
+
+/* recover_file_system.c */
+int recover_corrupted_ssdfs_volume(struct ssdfs_fsck_environment *env);
 
 /* options.c */
 void print_usage(void);

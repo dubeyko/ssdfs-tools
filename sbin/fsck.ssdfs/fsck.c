@@ -42,15 +42,6 @@
 #include "fsck.h"
 
 static
-int recover_corrupted_ssdfs_volume(struct ssdfs_fsck_environment *env)
-{
-/* TODO: implement */
-	env->recovery_result.state = SSDFS_FSCK_UNKNOWN_RECOVERY_RESULT;
-
-	return SSDFS_FSCK_UNKNOWN_RECOVERY_RESULT;
-}
-
-static
 int __get_user_answer(void)
 {
 	char buf[SSDFS_MAX_NAME_LEN + 1];
