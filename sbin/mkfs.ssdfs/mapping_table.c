@@ -880,6 +880,41 @@ void define_peb_as_used(u8 *pebtbl, u16 peb_index, int meta_index)
 	__set_bit(peb_index, bmap);
 }
 
+static
+void define_peb_as_pre_erased(u8 *pebtbl, u16 peb_index)
+{
+	struct ssdfs_peb_table_fragment_header *hdr;
+	size_t hdr_size = sizeof(struct ssdfs_peb_table_fragment_header);
+	struct ssdfs_peb_descriptor *desc_array, *desc;
+	size_t desc_size = sizeof(struct ssdfs_peb_descriptor);
+	unsigned long *bmap;
+	u16 pebs_count;
+	u16 last_selected_peb;
+	u32 bytes_count;
+
+	hdr = (struct ssdfs_peb_table_fragment_header *)pebtbl;
+	BUG_ON(hdr->magic != cpu_to_le16(SSDFS_PEB_TABLE_MAGIC));
+	pebs_count = le16_to_cpu(hdr->pebs_count);
+	last_selected_peb = le16_to_cpu(hdr->last_selected_peb);
+	BUG_ON(last_selected_peb >= pebs_count);
+	BUG_ON(peb_index >= pebs_count);
+	bytes_count = le32_to_cpu(hdr->bytes_count);
+
+	BUG_ON(bytes_count != (hdr_size + (pebs_count * desc_size)));
+
+	desc_array = (struct ssdfs_peb_descriptor *)(pebtbl + hdr_size);
+	desc = &desc_array[peb_index];
+
+	BUG_ON(le8_to_cpu(desc->state) != SSDFS_MAPTBL_UNKNOWN_PEB_STATE);
+	BUG_ON(le8_to_cpu(desc->type) != SSDFS_MAPTBL_UNKNOWN_PEB_TYPE);
+
+	desc->type = cpu_to_le8(SSDFS_MAPTBL_UNKNOWN_PEB_TYPE);
+	desc->state = cpu_to_le8(SSDFS_MAPTBL_PRE_ERASE_STATE);
+
+	bmap = (unsigned long *)&hdr->bmaps[SSDFS_PEBTBL_DIRTY_BMAP][0];
+	__set_bit(peb_index, bmap);
+}
+
 static inline
 u16 DEFINE_PEB_INDEX_IN_PORTION(u16 stripe_index,
 				u16 item_index)
@@ -929,6 +964,43 @@ void define_leb_as_mapped(u8 *lebtbl, u16 leb_desc_index, u16 physical_index)
 	hdr->mapped_lebs = cpu_to_le16(mapped_lebs);
 }
 
+static inline
+u16 get_stripe_index(struct ssdfs_volume_layout *layout,
+		     struct ssdfs_leb_table_fragment_header *lebtbl_hdr,
+		     u64 leb_id)
+{
+	u16 stripes_per_portion = layout->maptbl.stripes_per_portion;
+	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
+	u64 leb_index = leb_id % pebs_per_seg;
+	u16 peb_desc_per_stripe;
+	u64 start_leb;
+	u16 stripe_index;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "layout %p, leb_id %llu\n",
+		  layout, leb_id);
+
+	start_leb = le64_to_cpu(lebtbl_hdr->start_leb);
+	peb_desc_per_stripe = SSDFS_PEB_DESC_PER_FRAGMENT(PAGE_CACHE_SIZE);
+
+	if (stripes_per_portion == 1)
+		stripe_index = (leb_id - start_leb) / peb_desc_per_stripe;
+	else if (pebs_per_seg > stripes_per_portion) {
+		u32 leb_index_per_stripe;
+
+		leb_index_per_stripe = pebs_per_seg + stripes_per_portion - 1;
+		leb_index_per_stripe /= stripes_per_portion;
+
+		BUG_ON((leb_index / leb_index_per_stripe) >= U16_MAX);
+		stripe_index = (u16)(leb_index / leb_index_per_stripe);
+	} else {
+		BUG_ON(pebs_per_seg >= U16_MAX);
+		stripe_index = (u16)(leb_index / pebs_per_seg);
+	}
+
+	return stripe_index;
+}
+
 static
 u64 map_leb2peb(struct ssdfs_volume_layout *layout,
 		u64 leb_id, int meta_index)
@@ -941,10 +1013,6 @@ u64 map_leb2peb(struct ssdfs_volume_layout *layout,
 	u32 portion_index;
 	u64 start_leb, start_peb;
 	u16 lebs_count;
-	u32 pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
-	u64 leb_index = leb_id % pebs_per_seg;
-	u16 stripes_per_portion = layout->maptbl.stripes_per_portion;
-	u16 peb_desc_per_stripe;
 	u16 stripe_index;
 	u16 peb_index;
 	u16 leb_desc_index;
@@ -964,25 +1032,11 @@ u64 map_leb2peb(struct ssdfs_volume_layout *layout,
 
 	start_leb = le64_to_cpu(lebtbl_hdr->start_leb);
 	lebs_count = le16_to_cpu(lebtbl_hdr->lebs_count);
-	peb_desc_per_stripe = SSDFS_PEB_DESC_PER_FRAGMENT(PAGE_CACHE_SIZE);
 
 	BUG_ON(leb_id < start_leb);
 	BUG_ON(leb_id >= (start_leb + lebs_count));
 
-	if (stripes_per_portion == 1)
-		stripe_index = (leb_id - start_leb) / peb_desc_per_stripe;
-	else if (pebs_per_seg > stripes_per_portion) {
-		u32 leb_index_per_stripe;
-
-		leb_index_per_stripe = pebs_per_seg + stripes_per_portion - 1;
-		leb_index_per_stripe /= stripes_per_portion;
-
-		BUG_ON((leb_index / leb_index_per_stripe) >= U16_MAX);
-		stripe_index = (u16)(leb_index / leb_index_per_stripe);
-	} else {
-		BUG_ON(pebs_per_seg >= U16_MAX);
-		stripe_index = (u16)(leb_index / pebs_per_seg);
-	}
+	stripe_index = get_stripe_index(layout, lebtbl_hdr, leb_id);
 
 	pebtbl = get_pebtbl_fragment(layout, fragment_index,
 				     portion_index, stripe_index);
@@ -1085,6 +1139,10 @@ int map_allocated_lebs2pebs(struct ssdfs_volume_layout *layout)
 		for (j = 0; j < segs_count; j++, seg_index++) {
 			segment = &layout->segs[seg_index];
 
+			SSDFS_DBG(layout->env.show_debug,
+				  "cur_index %d, segs_count %d\n",
+				  j, segs_count);
+
 			err = map_segment_lebs2pebs(layout, segment);
 			if (err) {
 				SSDFS_ERR("fail to map segment's LEBs: "
@@ -1094,6 +1152,113 @@ int map_allocated_lebs2pebs(struct ssdfs_volume_layout *layout)
 			}
 		}
 	}
+
+	SSDFS_DBG(layout->env.show_debug, "finished\n");
+
+	return 0;
+}
+
+static
+int mark_unallocated_pebs_as_pre_erased(struct ssdfs_volume_layout *layout)
+{
+	struct ssdfs_segment_desc *segment;
+	struct ssdfs_leb_table_fragment_header *lebtbl_hdr;
+	u8 *lebtbl;
+	struct ssdfs_peb_table_fragment_header *pebtbl_hdr;
+	u8 *pebtbl;
+	u16 stripes_per_portion = layout->maptbl.stripes_per_portion;
+	u32 fragment_index;
+	u32 portion_index;
+	u16 leb_desc_index;
+	u64 leb_id;
+	u64 peb_id;
+	u64 total_pebs_count;
+	u64 start_leb, start_peb;
+	u16 lebs_count, pebs_count;
+	u64 unallocated_pebs;
+	u16 stripe_index;
+	int i, j;
+
+	if (layout->need_erase_device) {
+		SSDFS_DBG(layout->env.show_debug,
+			  "do nothing: volume will be erased by mkfs\n");
+		return 0;
+	}
+
+	total_pebs_count = layout->env.fs_size / layout->env.erase_size;
+
+	segment = &layout->segs[layout->segs_capacity - 1];
+
+	leb_id = segment->pebs[segment->pebs_capacity - 1].leb_id;
+	BUG_ON(leb_id >= total_pebs_count);
+	leb_id++;
+
+	peb_id = segment->pebs[segment->pebs_capacity - 1].peb_id;
+	BUG_ON(peb_id >= total_pebs_count);
+	peb_id++;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "leb_id %llu, peb_id %llu, total_pebs_count %llu\n",
+		  leb_id, peb_id, total_pebs_count);
+
+	unallocated_pebs = total_pebs_count - leb_id;
+
+	while (leb_id < total_pebs_count) {
+		lebtbl = get_lebtbl_fragment(layout, leb_id,
+					     &fragment_index,
+					     &portion_index,
+					     &leb_desc_index);
+		lebtbl_hdr = (struct ssdfs_leb_table_fragment_header *)lebtbl;
+
+		BUG_ON(lebtbl_hdr->magic != cpu_to_le16(SSDFS_LEB_TABLE_MAGIC));
+
+		start_leb = le64_to_cpu(lebtbl_hdr->start_leb);
+		lebs_count = le16_to_cpu(lebtbl_hdr->lebs_count);
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "start_leb %llu, lebs_count %u\n",
+			  start_leb, lebs_count);
+
+		BUG_ON(leb_id < start_leb);
+		BUG_ON(leb_id >= (start_leb + lebs_count));
+
+		stripe_index = get_stripe_index(layout, lebtbl_hdr, leb_id);
+
+		for (i = stripe_index; i < stripes_per_portion; i++) {
+			u64 peb_index;
+
+			pebtbl = get_pebtbl_fragment(layout, fragment_index,
+						     portion_index, i);
+			pebtbl_hdr =
+			    (struct ssdfs_peb_table_fragment_header *)pebtbl;
+
+			BUG_ON(pebtbl_hdr->magic !=
+					cpu_to_le16(SSDFS_PEB_TABLE_MAGIC));
+
+			start_peb = le64_to_cpu(pebtbl_hdr->start_peb);
+			pebs_count = le64_to_cpu(pebtbl_hdr->pebs_count);
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "start_peb %llu, pebs_count %u, peb_id %llu\n",
+				  start_peb, pebs_count, peb_id);
+
+			BUG_ON(peb_id < start_peb);
+			BUG_ON(peb_id >= (start_peb + pebs_count));
+
+			peb_index = peb_id - start_peb;
+			BUG_ON(peb_index >= U16_MAX || peb_index >= pebs_count);
+
+			for (j = peb_index; j < pebs_count; j++) {
+				define_peb_as_pre_erased(pebtbl, j);
+			}
+
+			peb_id = start_peb + pebs_count;
+		}
+
+		leb_id = start_leb + lebs_count;
+	}
+
+	layout->maptbl.pre_erased_pebs = unallocated_pebs;
 
 	return 0;
 }
@@ -1245,7 +1410,12 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 
 	hdr->flags = cpu_to_le16(flags);
 
-	hdr->pre_erase_pebs = 0;
+	if (layout->maptbl.pre_erased_pebs >= U16_MAX) {
+		hdr->pre_erase_pebs = cpu_to_le16(U16_MAX);
+	} else {
+		hdr->pre_erase_pebs =
+			cpu_to_le16((u16)layout->maptbl.pre_erased_pebs);
+	}
 
 	lebs_per_portion = min_t(u16, maptbl->lebs_per_portion, pebs_count);
 	hdr->lebs_per_fragment = cpu_to_le16(lebs_per_portion);
@@ -1358,6 +1528,13 @@ int maptbl_mkfs_validate(struct ssdfs_volume_layout *layout)
 	err = map_allocated_lebs2pebs(layout);
 	if (err) {
 		SSDFS_ERR("fail to map LEBs to PEBs: err %d\n",
+			  err);
+		return err;
+	}
+
+	err = mark_unallocated_pebs_as_pre_erased(layout);
+	if (err) {
+		SSDFS_ERR("fail to mark unallocated PEBs as pre-erased: err %d\n",
 			  err);
 		return err;
 	}

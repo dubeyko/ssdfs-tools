@@ -234,6 +234,7 @@ struct ssdfs_maptbl_layout {
 	u32 pebtbl_portion_mempages;
 	u16 lebs_per_portion;
 	u16 pebs_per_portion;
+	u64 pre_erased_pebs;
 	u32 portions_count;
 	size_t portion_size;
 	void **fragments_array;
@@ -321,6 +322,7 @@ struct ssdfs_write_buffer {
  * @volume_label: volume label string
  * @create_timestamp: timestamp of file system creation
  * @create_cno: checkpoint of file system creation
+ * @uuid: 128-bit uuid for volume
  * @migration_threshold: max amount of migrating PEBs for segment
  * @compression: compression type
  * @inode_size: inode size in bytes
@@ -353,6 +355,7 @@ struct ssdfs_volume_layout {
 	char volume_label[SSDFS_VOLUME_LABEL_MAX];
 	u64 create_timestamp;
 	u64 create_cno;
+	__le8 uuid[SSDFS_UUID_SIZE];
 	u16 migration_threshold;
 	int compression;
 	u16 inode_size;

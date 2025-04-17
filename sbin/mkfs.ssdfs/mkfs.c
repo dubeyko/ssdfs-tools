@@ -1114,57 +1114,14 @@ free_bmap:
 	return err;
 }
 
-static int erase_peb(struct ssdfs_volume_layout *layout,
-		     int seg_index, int peb_index,
-		     char *buf, size_t buf_size)
-{
-	struct ssdfs_segment_desc *seg_desc;
-	struct ssdfs_peb_content *peb_desc;
-	int fd = layout->env.fd;
-	u32 peb_size = layout->env.erase_size;
-	u64 offset = 0;
-	int err;
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "seg_index %d, peb_index %d, buf %p, buf_size %zu\n",
-		  seg_index, peb_index, buf, buf_size);
-
-	if (seg_index >= layout->segs_capacity) {
-		SSDFS_ERR("invalid seg_index %d, "
-			  "segs_capacity %u\n",
-			  seg_index,
-			  layout->segs_capacity);
-		return -EINVAL;
-	}
-
-	seg_desc = &layout->segs[seg_index];
-
-	if (peb_index >= seg_desc->pebs_count) {
-		SSDFS_ERR("peb_index %d >= seg_desc->pebs_count %u\n",
-			  peb_index, seg_desc->pebs_count);
-		return -EINVAL;
-	}
-
-	peb_desc = &seg_desc->pebs[peb_index];
-	offset = peb_desc->peb_id * peb_size;
-
-	err = layout->env.dev_ops->erase(fd, offset, peb_size,
-					 buf, buf_size,
-					 layout->env.show_debug);
-	if (err) {
-		SSDFS_ERR("unable to erase peb #%llu\n",
-			  peb_desc->peb_id);
-		return err;
-	}
-
-	return 0;
-}
-
 static int erase_allocated_segments_only(struct ssdfs_volume_layout *layout)
 {
 	char *buf;
+	int fd = layout->env.fd;
+	u64 seg_size = layout->seg_size;
 	size_t buf_size = SSDFS_128KB;
-	u32 i, j;
+	u64 offset;
+	int i;
 	int err = 0;
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -1188,15 +1145,18 @@ static int erase_allocated_segments_only(struct ssdfs_volume_layout *layout)
 	memset(buf, 0xff, buf_size);
 
 	for (i = 0; i < layout->segs_count; i++) {
-		for (j = 0; j < layout->segs[i].pebs_count; j++) {
-			err = erase_peb(layout, i, j, buf, buf_size);
-			if (err) {
-				SSDFS_ERR("fail to erase peb: "
-					  "seg_index %u, peb_index %u, "
-					  "err %d\n",
-					  i, j, err);
-				goto free_erase_buf;
-			}
+		SSDFS_MKFS_INFO(layout->env.show_info,
+				"erasing segment %d...\n",
+				i);
+
+		offset = layout->segs[i].seg_id * seg_size;
+
+		err = layout->env.dev_ops->erase(fd, offset, seg_size,
+						 buf, buf_size,
+						 layout->env.show_debug);
+		if (err) {
+			SSDFS_ERR("unable to erase segment %d\n", i);
+			goto free_erase_buf;
 		}
 	}
 
@@ -1804,7 +1764,7 @@ int main(int argc, char *argv[])
 {
 	static struct ssdfs_volume_layout volume_layout = {
 		.force_overwrite = SSDFS_FALSE,
-		.need_erase_device = SSDFS_TRUE,
+		.need_erase_device = SSDFS_FALSE,
 		.env.show_debug = SSDFS_FALSE,
 		.env.show_info = SSDFS_TRUE,
 		.seg_size = SSDFS_8MB,
@@ -1838,6 +1798,7 @@ int main(int argc, char *argv[])
 		.maptbl.migration_threshold = U16_MAX,
 		.maptbl.reserved_pebs_per_fragment = U16_MAX,
 		.maptbl.compression = SSDFS_UNKNOWN_COMPRESSION,
+		.maptbl.pre_erased_pebs = 0,
 		.btree.node_size = SSDFS_8KB,
 		.btree.min_index_area_size = 0,
 		.btree.lnode_log_pages = U16_MAX,

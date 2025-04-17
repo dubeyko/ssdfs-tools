@@ -2491,6 +2491,14 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	pl_footer->create_threads_per_seg = layout->sb.vh.create_threads_per_seg;
 	pl_footer->open_zones = cpu_to_le32(layout->calculated_open_zones);
 
+	pl_footer->seg_id = cpu_to_le64(seg_desc->seg_id);
+	pl_footer->leb_id = cpu_to_le64(peb_desc->leb_id);
+	pl_footer->peb_id = cpu_to_le64(peb_desc->peb_id);
+	pl_footer->relation_peb_id = cpu_to_le64(U64_MAX);
+
+	pl_footer->volume_create_time = cpu_to_le64(layout->create_timestamp);
+	memcpy(pl_footer->uuid, layout->uuid, sizeof(layout->uuid));
+
 	pl_footer->pl_flags = cpu_to_le32(log_flags);
 
 	pl_footer->check.bytes = cpu_to_le16(footer_len);

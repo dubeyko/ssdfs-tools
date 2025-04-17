@@ -1287,6 +1287,9 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	layout->create_timestamp = ctime;
 	layout->create_cno = cno;
 
+	/* generate uuid using libuuid */
+	uuid_generate(layout->uuid);
+
 	/* volume header initialization */
 	vh->magic.common = cpu_to_le32(SSDFS_SUPER_MAGIC);
 	vh->magic.version.major = cpu_to_le8(SSDFS_MAJOR_REVISION);
@@ -1372,11 +1375,13 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 
 	vh->create_time = cpu_to_le64(ctime);
 	vh->create_cno = cpu_to_le64(cno);
+	memcpy(vh->uuid, layout->uuid, sizeof(layout->uuid));
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "create_time %llu, create_cno %llu\n",
+		  "create_time %llu, create_cno %llu, UUID: %s\n",
 		  le64_to_cpu(vh->create_time),
-		  le64_to_cpu(vh->create_cno));
+		  le64_to_cpu(vh->create_cno),
+		  uuid_string(vs->uuid));
 
 	sb_set_lnodes_log_pages(layout);
 	sb_set_hnodes_log_pages(layout);
@@ -1424,8 +1429,8 @@ int sb_mkfs_prepare(struct ssdfs_volume_layout *layout)
 	vs->state = cpu_to_le16(SSDFS_VALID_FS);
 	vs->errors = cpu_to_le16(SSDFS_ERRORS_DEFAULT);
 
-	/* set uuid using libuuid */
-	uuid_generate(vs->uuid);
+	/* set uuid */
+	memcpy(vs->uuid, layout->uuid, sizeof(layout->uuid));
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "UUID: %s\n", uuid_string(vs->uuid));

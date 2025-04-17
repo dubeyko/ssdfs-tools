@@ -2640,6 +2640,7 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 			   ssdfs_nanoseconds_to_time(create_time));
 	SSDFS_DUMPFS_DUMP(env, "CREATION_CHECKPOINT: %llu\n",
 			  create_cno);
+	SSDFS_DUMPFS_DUMP(env, "UUID: %s\n", uuid_string(vh->uuid));
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
@@ -3010,6 +3011,7 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	u64 leb_id;
 	u64 peb_id;
 	u64 relation_peb_id;
+	u64 create_time;
 	u32 page_size;
 	u32 erase_size;
 	u32 seg_size;
@@ -3044,6 +3046,7 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	seg_type = le16_to_cpu(pl_hdr->seg_type);
 	lebs_per_peb_index = le32_to_cpu(pl_hdr->lebs_per_peb_index);
 	create_threads_per_seg = le16_to_cpu(pl_hdr->create_threads_per_seg);
+	create_time = le64_to_cpu(pl_hdr->volume_create_time);
 
 	SSDFS_DUMPFS_DUMP(env, "PARTIAL LOG HEADER:\n");
 
@@ -3074,6 +3077,10 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "LEB_ID: %llu\n", leb_id);
 	SSDFS_DUMPFS_DUMP(env, "PEB_ID: %llu\n", peb_id);
 	SSDFS_DUMPFS_DUMP(env, "RELATION_PEB_ID: %llu\n", relation_peb_id);
+
+	SSDFS_DUMPFS_DUMP(env, "CREATION_TIME: %s\n",
+			   ssdfs_nanoseconds_to_time(create_time));
+	SSDFS_DUMPFS_DUMP(env, "UUID: %s\n", uuid_string(pl_hdr->uuid));
 
 	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
 	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes\n", erase_size);
@@ -4056,7 +4063,7 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 					  "log_offset %u, err %d\n",
 					  env->peb.id, env->peb.peb_size,
 					  env->peb.log_offset, err);
-				goto finish_peb_dump;
+				goto try_next_peb;
 			}
 
 			if (i < log_index) {

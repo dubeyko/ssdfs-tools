@@ -1016,8 +1016,8 @@ int ssdfs_recoverfs_parse_block_fragment(struct ssdfs_thread_state *state,
 	err = ssdfs_recoverfs_prepare_raw_buffer(uncompr_content, SSDFS_4KB);
 	if (err) {
 		SSDFS_ERR("fail to prepare raw buffer: "
-			  "size %u, err %d\n",
-			  SSDFS_4KB, err);
+			  "size %d, err %d\n",
+			  (int)SSDFS_4KB, err);
 		return err;
 	}
 
@@ -1520,8 +1520,8 @@ int ssdfs_recoverfs_parse_full_log(struct ssdfs_thread_state *state)
 		err = ssdfs_recoverfs_prepare_raw_buffer(raw_buf, SSDFS_4KB);
 		if (err) {
 			SSDFS_ERR("fail to prepare raw buffer: "
-				  "size %u, err %d\n",
-				  SSDFS_4KB, err);
+				  "size %d, err %d\n",
+				  (int)SSDFS_4KB, err);
 			goto close_checkpoint_folder;
 		}
 

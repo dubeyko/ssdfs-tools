@@ -372,6 +372,9 @@ int add_leb2peb_pair(struct ssdfs_volume_layout *layout,
 	int i;
 	int err;
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "layout %p\n", layout);
+
 	hdr = (struct ssdfs_maptbl_cache_header *)fragment;
 
 	items_per_fragment = SSDFS_LEB2PEB_PAIR_PER_FRAGMENT(layout->page_size);
@@ -472,6 +475,9 @@ int add_leb2peb_pair(struct ssdfs_volume_layout *layout,
 
 	layout->maptbl_cache.bytes_count += pair_size + peb_state_size;
 
+	SSDFS_DBG(layout->env.show_debug,
+		  "finished\n");
+
 	return need_moving ? -EAGAIN : 0;
 }
 
@@ -523,9 +529,15 @@ int cache_leb2peb_pair(struct ssdfs_volume_layout *layout,
 				  "fragment_index %u, err %d\n",
 				  index, res);
 			return res;
-		} else
+		} else {
+			SSDFS_DBG(layout->env.show_debug,
+				  "finished\n");
 			return 0;
+		}
 	} while (res == -EAGAIN);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "finished\n");
 
 	return 0;
 }

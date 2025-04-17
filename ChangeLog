@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.54 [April 16, 2025]
+    (*) Implement functionality of supporting not erasing the whole volume
+        during mkfs phase.
+
 v.4.53 [April 06, 2025]
     (*) [fsck] Implement initial "skeleton" recovery logic of SSDFS metadata
                on the unmounted volume.

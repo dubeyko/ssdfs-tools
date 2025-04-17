@@ -61,7 +61,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		17
+#define SSDFS_MINOR_REVISION		18
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1184,7 +1184,8 @@ struct ssdfs_inode {
  * @dentries_btree: descriptor of all dentries btrees
  * @extents_btree: descriptor of all extents btrees
  * @xattr_btree: descriptor of all extended attributes btrees
- * @invalidated_extents_btree: b-tree of invalidated extents (ZNS SSD)
+ * @invextree: b-tree of invalidated extents (ZNS SSD)
+ * @uuid: 128-bit uuid for volume
  */
 struct ssdfs_volume_header {
 /* 0x0000 */
@@ -1244,7 +1245,10 @@ struct ssdfs_volume_header {
 	struct ssdfs_invalidated_extents_btree invextree;
 
 /* 0x02C0 */
-	__le8 reserved4[0x140];
+	__le8 uuid[SSDFS_UUID_SIZE];
+
+/* 0x02D0 */
+	__le8 reserved4[0x130];
 
 /* 0x0400 */
 } __attribute__((packed));
@@ -1591,6 +1595,8 @@ struct ssdfs_log_footer {
  * @leb_id: LEB ID that mapped with this PEB
  * @peb_id: PEB ID
  * @relation_peb_id: source PEB ID during migration
+ * @uuid: 128-bit uuid for volume
+ * @volume_create_time: volume create timestamp (mkfs phase)
  *
  * This header is used when the full log needs to be built from several
  * partial logs. The header represents the combination of the most
@@ -1667,7 +1673,13 @@ struct ssdfs_partial_log_header {
 	__le64 relation_peb_id;
 
 /* 0x04A0 */
-	__le8 payload[0x360];
+	__le8 uuid[SSDFS_UUID_SIZE];
+
+/* 0x04B0 */
+	__le64 volume_create_time;
+
+/* 0x04B8 */
+	__le8 payload[0x348];
 
 /* 0x0800 */
 } __attribute__((packed));
@@ -2330,6 +2342,7 @@ enum {
 	SSDFS_MAPTBL_USED_PEB_STATE,
 	SSDFS_MAPTBL_PRE_DIRTY_PEB_STATE,
 	SSDFS_MAPTBL_DIRTY_PEB_STATE,
+	SSDFS_MAPTBL_MIGRATION_SRC_USING_STATE,
 	SSDFS_MAPTBL_MIGRATION_SRC_USED_STATE,
 	SSDFS_MAPTBL_MIGRATION_SRC_PRE_DIRTY_STATE,
 	SSDFS_MAPTBL_MIGRATION_SRC_DIRTY_STATE,
@@ -2671,9 +2684,14 @@ enum {
 };
 
 #define SSDFS_DENTRIES_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_DENTRIES_INDEX_BMAP_SIZE \
+	((((SSDFS_DENTRIES_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_DENTRIES_BMAP_SIZE \
+	((((SSDFS_DENTRIES_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_dir_entry)) + BITS_PER_LONG) / BITS_PER_BYTE)
 #define SSDFS_DENTRIES_BMAP_SIZE \
-	(((SSDFS_DENTRIES_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_dir_entry)) / BITS_PER_BYTE)
+	(SSDFS_DENTRIES_INDEX_BMAP_SIZE + SSDFS_RAW_DENTRIES_BMAP_SIZE)
 
 /*
  * struct ssdfs_dentries_btree_node_header - directory entries node's header
@@ -2709,9 +2727,14 @@ struct ssdfs_dentries_btree_node_header {
 } __attribute__((packed));
 
 #define SSDFS_SHARED_DICT_PAGES_PER_NODE_MAX		(32)
-#define SSDFS_SHARED_DICT_BMAP_SIZE \
-	(((SSDFS_SHARED_DICT_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
+#define SSDFS_SHARED_DICT_INDEX_BMAP_SIZE \
+	((((SSDFS_SHARED_DICT_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_SHARED_DICT_BMAP_SIZE \
+	(((SSDFS_SHARED_DICT_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
 	  SSDFS_DENTRY_INLINE_NAME_MAX_LEN) / BITS_PER_BYTE)
+#define SSDFS_SHARED_DICT_BMAP_SIZE \
+	(SSDFS_SHARED_DICT_INDEX_BMAP_SIZE + SSDFS_RAW_SHARED_DICT_BMAP_SIZE)
 
 /*
  * struct ssdfs_shdict_search_key - generalized search key
@@ -2874,16 +2897,21 @@ struct ssdfs_shared_dictionary_node_header {
 } __attribute__((packed));
 
 #define SSDFS_EXTENT_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_EXTENT_INDEX_BMAP_SIZE \
+	((((SSDFS_EXTENT_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_EXTENT_BMAP_SIZE \
+	((((SSDFS_EXTENT_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_raw_fork)) + BITS_PER_LONG) / BITS_PER_BYTE)
 #define SSDFS_EXTENT_MAX_BMAP_SIZE \
-	(((SSDFS_EXTENT_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_raw_fork)) / BITS_PER_BYTE)
+	(SSDFS_EXTENT_INDEX_BMAP_SIZE + SSDFS_RAW_EXTENT_BMAP_SIZE)
 
 /*
  * ssdfs_extents_btree_node_header - extents btree node's header
  * @node: generic btree node's header
  * @parent_ino: parent inode number
  * @blks_count: count of blocks in all valid extents
- * @forks_count: count of forks in the node
+ * @forks_count: count of forks in the leaf node or sub-tree (hybrid/index node)
  * @allocated_extents: count of allocated extents in all forks
  * @valid_extents: count of valid extents
  * @max_extent_blks: maximal number of blocks in one extent
@@ -2914,9 +2942,14 @@ struct ssdfs_extents_btree_node_header {
 } __attribute__((packed));
 
 #define SSDFS_XATTRS_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_XATTRS_INDEX_BMAP_SIZE \
+	((((SSDFS_XATTRS_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_XATTRS_BMAP_SIZE \
+	((((SSDFS_XATTRS_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_xattr_entry)) + BITS_PER_LONG) / BITS_PER_BYTE)
 #define SSDFS_XATTRS_BMAP_SIZE \
-	(((SSDFS_XATTRS_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_xattr_entry)) / BITS_PER_BYTE)
+	(SSDFS_XATTRS_INDEX_BMAP_SIZE + SSDFS_RAW_XATTRS_BMAP_SIZE)
 
 /*
  * struct ssdfs_xattrs_btree_node_header - xattrs node's header
@@ -2963,10 +2996,7 @@ struct ssdfs_index_area {
 /* 0x0010 */
 } __attribute__((packed));
 
-#define SSDFS_INODE_PAGES_PER_NODE_MAX		(32)
-#define SSDFS_INODE_BMAP_SIZE \
-	(((SSDFS_INODE_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_inode)) / BITS_PER_BYTE)
+#define SSDFS_INODE_BMAP_SIZE		(0xA0)
 
 /*
  * struct ssdfs_inodes_btree_node_header -inodes btree node's header
@@ -2989,9 +3019,6 @@ struct ssdfs_inodes_btree_node_header {
 	struct ssdfs_index_area index_area;
 
 /* 0x0060 */
-	__le8 reserved2[0x60];
-
-/* 0x00C0 */
 	__le8 bmap[SSDFS_INODE_BMAP_SIZE];
 
 /* 0x0100 */
@@ -3210,9 +3237,14 @@ union ssdfs_snapshot_item {
 } __attribute__((packed));
 
 #define SSDFS_SNAPSHOTS_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_SNAPSHOTS_INDEX_BMAP_SIZE \
+	((((SSDFS_SNAPSHOTS_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_SNAPSHOTS_BMAP_SIZE \
+	((((SSDFS_SNAPSHOTS_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_snapshot_info)) + BITS_PER_LONG) / BITS_PER_BYTE)
 #define SSDFS_SNAPSHOTS_BMAP_SIZE \
-	(((SSDFS_SNAPSHOTS_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_snapshot_info)) / BITS_PER_BYTE)
+	(SSDFS_SNAPSHOTS_INDEX_BMAP_SIZE + SSDFS_RAW_SNAPSHOTS_BMAP_SIZE)
 
 /*
  * struct ssdfs_snapshots_btree_node_header - snapshots node's header
@@ -3268,9 +3300,14 @@ struct ssdfs_shared_extent {
 } __attribute__((packed));
 
 #define SSDFS_SHEXTREE_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_SHEXTREE_INDEX_BMAP_SIZE \
+	((((SSDFS_SHEXTREE_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_SHEXTREE_BMAP_SIZE \
+	((((SSDFS_SHEXTREE_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_shared_extent)) + BITS_PER_LONG) / BITS_PER_BYTE)
 #define SSDFS_SHEXTREE_BMAP_SIZE \
-	(((SSDFS_SHEXTREE_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_shared_extent)) / BITS_PER_BYTE)
+	(SSDFS_SHEXTREE_INDEX_BMAP_SIZE + SSDFS_RAW_SHEXTREE_BMAP_SIZE)
 
 /*
  * struct ssdfs_shextree_node_header - shared extents btree node's header
@@ -3297,9 +3334,14 @@ struct ssdfs_shextree_node_header {
 } __attribute__((packed));
 
 #define SSDFS_INVEXTREE_PAGES_PER_NODE_MAX		(32)
+#define SSDFS_INVEXTREE_INDEX_BMAP_SIZE \
+	((((SSDFS_INVEXTREE_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_btree_index_key)) + BITS_PER_LONG) / BITS_PER_BYTE)
+#define SSDFS_RAW_INVEXTREE_BMAP_SIZE \
+	((((SSDFS_INVEXTREE_PAGES_PER_NODE_MAX * PAGE_SIZE) / \
+	  sizeof(struct ssdfs_raw_extent)) + BITS_PER_LONG) / BITS_PER_BYTE)
 #define SSDFS_INVEXTREE_BMAP_SIZE \
-	(((SSDFS_INVEXTREE_PAGES_PER_NODE_MAX * PAGE_CACHE_SIZE) / \
-	  sizeof(struct ssdfs_raw_extent)) / BITS_PER_BYTE)
+	(SSDFS_INVEXTREE_INDEX_BMAP_SIZE + SSDFS_RAW_INVEXTREE_BMAP_SIZE)
 
 /*
  * struct ssdfs_invextree_node_header - invalidated extents btree node's header

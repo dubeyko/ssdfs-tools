@@ -51,7 +51,6 @@ void print_usage(void)
 	SSDFS_INFO("\t [-i|--inode_size size]\t  inode size in bytes "
 		   "(265B|512B|1KB|2KB|4KB).\n");
 	SSDFS_INFO("\t [-j|--threads]\t\t  define erase threads number.\n");
-	SSDFS_INFO("\t [-K|--not-erase-device]  do not erase device by mkfs.\n");
 	SSDFS_INFO("\t [-L|--label]\t\t  set a volume label.\n");
 	SSDFS_INFO("\t [-M|--maptbl has_copy,stripes_per_fragment=value,"
 		   "fragments_per_peb=value,log_pages=value,"
@@ -68,6 +67,7 @@ void print_usage(void)
 		   "(4KB|8KB|16KB|32KB).\n");
 	SSDFS_INFO("\t [-q|--quiet]\t\t  quiet execution "
 		   "(useful for scripts).\n");
+	SSDFS_INFO("\t [-R|--erase-device]  erase whole device or partition by mkfs.\n");
 	SSDFS_INFO("\t [-S|--segbmap has_copy,segs_per_chain=value,"
 		   "fragments_per_peb=value,log_pages=value,"
 		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
@@ -327,7 +327,7 @@ void parse_options(int argc, char *argv[],
 	int oi = 1;
 	char *p;
 	u64 granularity;
-	char sopts[] = "B:C:D:de:fhi:j:KL:M:m:O:p:qS:s:T:U:V";
+	char sopts[] = "B:C:D:de:fhi:j:L:M:m:O:p:qRS:s:T:U:V";
 	static const struct option lopts[] = {
 		{"blkbmap", 1, NULL, 'B'},
 		{"compression", 1, NULL, 'C'},
@@ -338,13 +338,13 @@ void parse_options(int argc, char *argv[],
 		{"help", 0, NULL, 'h'},
 		{"inode_size", 1, NULL, 'i'},
 		{"threads", 1, NULL, 'j'},
-		{"not-erase-device", 0, NULL, 'K'},
 		{"label", 1, NULL, 'L'},
 		{"maptbl", 1, NULL, 'M'},
 		{"migration-threshold", 1, NULL, 'm'},
 		{"offsets_table", 1, NULL, 'O'},
 		{"pagesize", 1, NULL, 'p'},
 		{"quiet", 0, NULL, 'q'},
+		{"erase-device", 0, NULL, 'R'},
 		{"segbmap", 1, NULL, 'S'},
 		{"segsize", 1, NULL, 's'},
 		{"btree", 1, NULL, 'T'},
@@ -496,9 +496,6 @@ void parse_options(int argc, char *argv[],
 		case 'j':
 			layout->threads.capacity = atoi(optarg);
 			break;
-		case 'K':
-			layout->need_erase_device = SSDFS_FALSE;
-			break;
 		case 'L':
 			strncpy(layout->volume_label, optarg,
 				sizeof(layout->volume_label) - 1);
@@ -592,6 +589,9 @@ void parse_options(int argc, char *argv[],
 			break;
 		case 'q':
 			layout->env.show_info = SSDFS_FALSE;
+			break;
+		case 'R':
+			layout->need_erase_device = SSDFS_TRUE;
 			break;
 		case 'S':
 			p = optarg;
