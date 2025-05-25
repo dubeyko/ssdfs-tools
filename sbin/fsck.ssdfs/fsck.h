@@ -27,6 +27,7 @@
 #include <dirent.h>
 
 #include "ssdfs_tools.h"
+#include "detect_file_system.h"
 
 #define SSDFS_FSCK_INFO(show, fmt, ...) \
 	do { \
@@ -64,41 +65,10 @@ enum {
 	SSDFS_FSCK_UNKNOWN_DETECTION_RESULT,
 };
 
-#define SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND		(1 << 0)
-#define SSDFS_FSCK_SB_SEGS_FOUND			(1 << 1)
-#define SSDFS_FSCK_MAPPING_TBL_FOUND			(1 << 2)
-#define SSDFS_FSCK_SEGMENT_BITMAP_FOUND			(1 << 3)
-#define SSDFS_FSCK_NOTHING_FOUND_MASK			0x0
-#define SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK	0xF
-
-struct ssdfs_fsck_volume_creation_point {
-	struct ssdfs_segment_header seg_hdr;
-	union {
-		struct ssdfs_signature magic;
-		struct ssdfs_log_footer footer;
-		struct ssdfs_partial_log_header pl_hdr;
-	} log;
-	void *maptbl_cache;
-	u64 found_metadata;
-};
-
-enum {
-	SSDFS_FSCK_CREATION_ARRAY_NOT_INITIALIZED,
-	SSDFS_FSCK_CREATION_ARRAY_USE_BUFFER,
-	SSDFS_FSCK_CREATION_ARRAY_ALLOCATED,
-	SSDFS_FSCK_CREATION_ARRAY_STATE_MAX
-};
-
-struct ssdfs_fsck_volume_creation_array {
-	int state;
-	int count;
-	struct ssdfs_fsck_volume_creation_point *creation_points;
-	struct ssdfs_fsck_volume_creation_point buf;
-};
-
 struct ssdfs_fsck_detection_result {
 	int state;
 	struct ssdfs_fsck_volume_creation_array array;
+	union ssdfs_metadata_header found_valid_peb;
 };
 
 enum {
@@ -271,16 +241,37 @@ struct ssdfs_fsck_environment {
 
 /* Inline functions */
 
+static inline
+int is_ssdfs_fsck_area_valid(struct ssdfs_metadata_descriptor *desc)
+{
+	u32 area_offset = le32_to_cpu(desc->offset);
+	u32 area_size = le32_to_cpu(desc->size);
+
+	if (area_size == 0 || area_size >= U32_MAX)
+		return SSDFS_FALSE;
+
+	if (area_offset == 0 || area_offset >= U32_MAX)
+		return SSDFS_FALSE;
+
+	return SSDFS_TRUE;
+}
+
 /* Application APIs */
 
 /* detect_file_system.c */
 int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env);
+void ssdfs_fsck_init_detection_result(struct ssdfs_fsck_environment *env);
+void ssdfs_fsck_destroy_detection_result(struct ssdfs_fsck_environment *env);
 
 /* check_file_system.c */
 int is_ssdfs_volume_corrupted(struct ssdfs_fsck_environment *env);
+void ssdfs_fsck_init_check_result(struct ssdfs_fsck_environment *env);
+void ssdfs_fsck_destroy_check_result(struct ssdfs_fsck_environment *env);
 
 /* recover_file_system.c */
 int recover_corrupted_ssdfs_volume(struct ssdfs_fsck_environment *env);
+void ssdfs_fsck_init_recovery_result(struct ssdfs_fsck_environment *env);
+void ssdfs_fsck_destroy_recovery_result(struct ssdfs_fsck_environment *env);
 
 /* options.c */
 void print_usage(void);

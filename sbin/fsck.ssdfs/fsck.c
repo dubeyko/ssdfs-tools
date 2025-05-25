@@ -143,6 +143,10 @@ int main(int argc, char *argv[])
 	int res;
 	int err = 0;
 
+	ssdfs_fsck_init_detection_result(&env);
+	ssdfs_fsck_init_check_result(&env);
+	ssdfs_fsck_init_recovery_result(&env);
+
 	parse_options(argc, argv, &env);
 
 	SSDFS_DBG(env.base.show_debug,
@@ -153,7 +157,7 @@ int main(int argc, char *argv[])
 	SSDFS_FSCK_INFO(env.base.show_info,
 			"[001]\tOPEN DEVICE...\n");
 
-	err = open_device(&env.base, O_DIRECT);
+	err = open_device(&env.base, 0);
 	if (err)
 		exit(EXIT_FAILURE);
 
@@ -378,6 +382,9 @@ try_recover_volume:
 			"[004]\t[SUCCESS]\n");
 
 fsck_finish:
+	ssdfs_fsck_destroy_detection_result(&env);
+	ssdfs_fsck_destroy_check_result(&env);
+	ssdfs_fsck_destroy_recovery_result(&env);
 	close(env.base.fd);
 	exit(err ? EXIT_FAILURE : EXIT_SUCCESS);
 }

@@ -22,6 +22,20 @@ enum {
 	SSDFS_FSCK_CHECK_RESULT_STATE_MAX
 };
 
+void ssdfs_fsck_init_check_result(struct ssdfs_fsck_environment *env)
+{
+/* TODO: implement */
+	SSDFS_DBG(env->base.show_debug,
+		  "init check result\n");
+}
+
+void ssdfs_fsck_destroy_check_result(struct ssdfs_fsck_environment *env)
+{
+/* TODO: implement */
+	SSDFS_DBG(env->base.show_debug,
+		  "destroy check result\n");
+}
+
 typedef int (*check_fn)(struct ssdfs_fsck_environment *env);
 
 static

@@ -2860,7 +2860,7 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 
 static
 int ssdfs_dumpfs_read_footer_log_bytes(struct ssdfs_dumpfs_environment *env,
-					union ssdfs_log_header *buf)
+					union ssdfs_metadata_header *buf)
 {
 	struct ssdfs_partial_log_header *pl_hdr;
 	struct ssdfs_log_footer *footer;
@@ -2946,7 +2946,7 @@ finish_read_log_size:
 
 static
 int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
-				union ssdfs_log_header *buf)
+				union ssdfs_metadata_header *buf)
 {
 	u16 key;
 	int err = 0;
@@ -3302,7 +3302,7 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 
 static
 int ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
-				  union ssdfs_log_header *buf)
+				  union ssdfs_metadata_header *buf)
 {
 	struct ssdfs_metadata_descriptor *desc;
 	void *area_buf = NULL;
@@ -3412,7 +3412,7 @@ fail_parse_log_footer:
 
 static
 int ssdfs_dumpfs_parse_full_log(struct ssdfs_dumpfs_environment *env,
-				union ssdfs_log_header *buf)
+				union ssdfs_metadata_header *buf)
 {
 	struct ssdfs_metadata_descriptor *desc;
 	void *area_buf = NULL;
@@ -3685,7 +3685,7 @@ finish_parse_full_log:
 
 static
 int ssdfs_dumpfs_parse_partial_log(struct ssdfs_dumpfs_environment *env,
-				   union ssdfs_log_header *buf)
+				   union ssdfs_metadata_header *buf)
 {
 	struct ssdfs_metadata_descriptor *desc;
 	size_t hdr_size = sizeof(struct ssdfs_partial_log_header);
@@ -3927,7 +3927,7 @@ finish_parse_partial_log:
 
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 {
-	union ssdfs_log_header buf;
+	union ssdfs_metadata_header buf;
 	u64 peb_id;
 	u64 pebs_count;
 	int log_index;

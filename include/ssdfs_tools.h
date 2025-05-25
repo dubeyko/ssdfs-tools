@@ -283,8 +283,14 @@ struct ssdfs_raw_dump_environment {
 #define SSDFS_DUMP_DATA(dump_env) \
 	((struct ssdfs_raw_buffer *)(&dump_env->content))
 
-union ssdfs_log_header {
+union ssdfs_metadata_header {
 	struct ssdfs_segment_header seg_hdr;
+	struct ssdfs_partial_log_header pl_hdr;
+	struct ssdfs_signature magic;
+};
+
+union ssdfs_metadata_footer {
+	struct ssdfs_log_footer footer;
 	struct ssdfs_partial_log_header pl_hdr;
 	struct ssdfs_signature magic;
 };
@@ -1198,6 +1204,10 @@ int ssdfs_read_block_bitmap(struct ssdfs_environment *env,
 			    u64 peb_id, u32 peb_size,
 			    u32 area_offset, u32 size,
 			    void *buf);
+int ssdfs_read_mapping_table_cache(struct ssdfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   u32 area_offset, u32 size,
+				   void *buf);
 int ssdfs_read_log_footer(struct ssdfs_environment *env,
 			  u64 peb_id, u32 peb_size,
 			  u32 area_offset, u32 size,

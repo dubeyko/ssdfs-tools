@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.55 [May 25, 2025]
+    (*) [fsck] Implement logic of SSDFS volume detection.
+
 v.4.54 [April 16, 2025]
     (*) Implement functionality of supporting not erasing the whole volume
         during mkfs phase.

@@ -339,7 +339,7 @@ int main(int argc, char *argv[])
 		.timestamp.month = SSDFS_ANY_MONTH,
 		.timestamp.year = SSDFS_ANY_YEAR,
 	};
-	union ssdfs_log_header buf;
+	union ssdfs_metadata_header buf;
 	u64 pebs_count;
 	u64 pebs_per_thread;
 	u32 logs_count;

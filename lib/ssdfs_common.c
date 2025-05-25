@@ -613,6 +613,17 @@ int ssdfs_read_block_bitmap(struct ssdfs_environment *env,
 					buf);
 }
 
+int ssdfs_read_mapping_table_cache(struct ssdfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	return ssdfs_read_area_content(env,
+					peb_id, peb_size,
+					area_offset, size,
+					buf);
+}
+
 int ssdfs_read_log_footer(struct ssdfs_environment *env,
 			  u64 peb_id, u32 peb_size,
 			  u32 area_offset, u32 size,
@@ -683,10 +694,15 @@ int ssdfs_read_segment_header(struct ssdfs_environment *env,
 		  "log_offset %u, size %u\n",
 		  peb_id, peb_size, log_offset, size);
 
-	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
+	if (peb_id == SSDFS_INITIAL_SNAPSHOT_SEG) {
+		if (log_offset == 0)
+			offset = SSDFS_RESERVED_VBR_SIZE;
+		else
+			offset = log_offset;
+	} else {
 		offset = peb_id * peb_size;
-
-	offset += log_offset;
+		offset += log_offset;
+	}
 
 	SSDFS_DBG(env->show_debug,
 		  "offset %llu, size %zu\n",

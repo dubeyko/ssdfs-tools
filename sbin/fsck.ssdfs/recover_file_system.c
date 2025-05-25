@@ -23,6 +23,20 @@ enum {
 	SSDFS_FSCK_RECOVER_RESULT_STATE_MAX
 };
 
+void ssdfs_fsck_init_recovery_result(struct ssdfs_fsck_environment *env)
+{
+/* TODO: implement */
+	SSDFS_DBG(env->base.show_debug,
+		  "init recovery result\n");
+}
+
+void ssdfs_fsck_destroy_recovery_result(struct ssdfs_fsck_environment *env)
+{
+/* TODO: implement */
+	SSDFS_DBG(env->base.show_debug,
+		  "destroy recovery result\n");
+}
+
 typedef int (*recover_fn)(struct ssdfs_fsck_environment *env);
 typedef int (*explain_recovery_fn)(struct ssdfs_fsck_environment *env);
 typedef int (*write_fn)(struct ssdfs_fsck_environment *env);
