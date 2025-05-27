@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.56 [May 26, 2025]
+    (*) [fsck] Implement logic of detection a heavily corrupted
+               SSDFS volume.
+
 v.4.55 [May 25, 2025]
     (*) [fsck] Implement logic of SSDFS volume detection.
 

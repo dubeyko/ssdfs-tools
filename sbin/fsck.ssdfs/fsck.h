@@ -256,6 +256,75 @@ int is_ssdfs_fsck_area_valid(struct ssdfs_metadata_descriptor *desc)
 	return SSDFS_TRUE;
 }
 
+static inline
+void ssdfs_init_thread_descriptor(struct ssdfs_thread_state *state,
+				  int thread_id)
+{
+	state->id = thread_id;
+	state->err = 0;
+}
+
+static inline
+void ssdfs_init_base_environment(struct ssdfs_thread_state *state,
+				 struct ssdfs_environment *base)
+{
+	memcpy(&state->base, base, sizeof(struct ssdfs_environment));
+}
+
+static inline
+void ssdfs_init_peb_environment(struct ssdfs_thread_state *state,
+				int thread_id, u64 pebs_per_thread,
+				u64 pebs_count, u32 erase_size)
+{
+	state->peb.id = (u64)thread_id * pebs_per_thread;
+	state->peb.pebs_count = min_t(u64,
+					pebs_count - state->peb.id,
+					pebs_per_thread);
+	state->peb.peb_size = erase_size;
+}
+
+static inline
+void ssdfs_init_metadata_map(struct ssdfs_thread_state *state)
+{
+	state->metadata_map.array = NULL;
+	state->metadata_map.capacity = 0;
+	state->metadata_map.count = 0;
+}
+
+static inline
+void ssdfs_init_thread_state(struct ssdfs_thread_state *state,
+			     int thread_id,
+			     struct ssdfs_environment *base,
+			     u64 pebs_per_thread,
+			     u64 pebs_count,
+			     u32 erase_size)
+{
+	ssdfs_init_thread_descriptor(state, thread_id);
+	ssdfs_init_base_environment(state, base);
+	ssdfs_init_peb_environment(state, thread_id, pebs_per_thread,
+				   pebs_count, erase_size);
+	ssdfs_init_metadata_map(state);
+}
+
+static inline
+void ssdfs_wait_threads_activity_ending(struct ssdfs_fsck_environment *env)
+{
+	int i;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "requested_jobs %u, tasks_capacity %u\n",
+		  env->threads.requested_jobs, env->threads.capacity);
+
+	for (i = 0; i < env->threads.requested_jobs; i++) {
+		pthread_join(env->threads.jobs[i].thread, NULL);
+
+		if (env->threads.jobs[i].err != 0) {
+			SSDFS_ERR("thread %d has failed: err %d\n",
+				  i, env->threads.jobs[i].err);
+		}
+	}
+}
+
 /* Application APIs */
 
 /* detect_file_system.c */

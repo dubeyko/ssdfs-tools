@@ -330,6 +330,37 @@ struct ssdfs_file_environment {
 };
 
 /*
+ * struct ssdfs_metadata_peb_item - metadata PEB descriptor
+ * @seg_id: segment ID
+ * @leb_id: LEB ID
+ * @peb_id: PEB ID
+ * @type: PEB type
+ * @index: PEB index in segment
+ * @peb_creation_timestamp: PEB creation timestamp
+ * @volume_creation_timestamp: volume creation timestamp
+ */
+struct ssdfs_metadata_peb_item {
+	u64 seg_id;
+	u64 leb_id;
+	u64 peb_id;
+	int type;
+	u64 peb_creation_timestamp;
+	u64 volume_creation_timestamp;
+};
+
+/*
+ * struct ssdfs_metadata_map - metadata map
+ * @array: metadata PEB descriptors array
+ * @capacity: capacity of the array
+ * @count: current number of items in the array
+ */
+struct ssdfs_metadata_map {
+	struct ssdfs_metadata_peb_item *array;
+	int capacity;
+	int count;
+};
+
+/*
  * struct ssdfs_thread_state - thread state
  * @id: thread ID
  * @thread: thread descriptor
@@ -342,6 +373,7 @@ struct ssdfs_file_environment {
  * @checkpoint_folder: checkpoint folder environment
  * @data_file: data file environment
  * @timestamp: timestamp defining the state of files
+ * @metadata_map: metadata map
  *
  * @name_buf: name buffer
  */
@@ -357,6 +389,7 @@ struct ssdfs_thread_state {
 	struct ssdfs_folder_environment checkpoint_folder;
 	struct ssdfs_file_environment data_file;
 	struct ssdfs_time_range timestamp;
+	struct ssdfs_metadata_map metadata_map;
 
 	char name_buf[SSDFS_MAX_NAME_LEN + 1];
 };

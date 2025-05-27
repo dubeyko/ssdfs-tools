@@ -12,6 +12,7 @@
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
  */
 
+#include "ssdfs_tools.h"
 #include "fsck.h"
 
 enum {
@@ -54,6 +55,19 @@ ssdfs_fsck_get_creation_point(struct ssdfs_fsck_environment *env, int index)
 	return creation_point;
 }
 
+static
+void ssdfs_fsck_init_creation_point(struct ssdfs_fsck_volume_creation_point *ptr)
+{
+	ptr->found_metadata = SSDFS_FSCK_NOTHING_FOUND_MASK;
+	ptr->volume_creation_timestamp = U64_MAX;
+	ssdfs_fsck_init_base_snapshot_seg(ptr);
+	ssdfs_fsck_init_superblock_seg(ptr);
+	ssdfs_fsck_init_segbmap(ptr);
+	ssdfs_fsck_init_maptbl(ptr);
+	ssdfs_fsck_init_maptbl_cache(ptr);
+	ssdfs_fsck_init_metadata_map(ptr);
+}
+
 void ssdfs_fsck_init_detection_result(struct ssdfs_fsck_environment *env)
 {
 	struct ssdfs_fsck_volume_creation_array *array;
@@ -72,12 +86,7 @@ void ssdfs_fsck_init_detection_result(struct ssdfs_fsck_environment *env)
 	array->state = SSDFS_FSCK_CREATION_ARRAY_USE_BUFFER;
 
 	creation_point = ssdfs_fsck_get_creation_point(env, 0);
-	creation_point->found_metadata = SSDFS_FSCK_NOTHING_FOUND_MASK;
-	ssdfs_fsck_init_base_snapshot_seg(creation_point);
-	ssdfs_fsck_init_superblock_seg(creation_point);
-	ssdfs_fsck_init_segbmap(creation_point);
-	ssdfs_fsck_init_maptbl(creation_point);
-	ssdfs_fsck_init_maptbl_cache(creation_point);
+	ssdfs_fsck_init_creation_point(creation_point);
 }
 
 void ssdfs_fsck_destroy_detection_result(struct ssdfs_fsck_environment *env)
@@ -99,6 +108,7 @@ void ssdfs_fsck_destroy_detection_result(struct ssdfs_fsck_environment *env)
 		ssdfs_fsck_destroy_segbmap(creation_point);
 		ssdfs_fsck_destroy_maptbl(creation_point);
 		ssdfs_fsck_destroy_maptbl_cache(creation_point);
+		ssdfs_fsck_destroy_metadata_map(creation_point);
 	}
 
 	switch (array->state) {
@@ -520,6 +530,9 @@ int is_base_snapshot_segment_found(struct ssdfs_fsck_environment *env)
 		SSDFS_ERR("fail to find base snapshot segment\n");
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
+
+	creation_point->volume_creation_timestamp =
+				le64_to_cpu(hdr->volume_hdr.create_time);
 
 	log->peb_id = peb_id;
 	log->start_page = 0;
@@ -2151,18 +2164,596 @@ static detect_fn detect_actions[SSDFS_FSCK_SEARCH_FUNCTION_MAX] = {
 /* 03 */	is_mapping_table_found,
 };
 
-static
-int execute_whole_volume_search(struct ssdfs_fsck_environment *env)
+static inline
+int is_ssdfs_metadata_map_exhausted(struct ssdfs_metadata_map *metadata_map)
 {
-	SSDFS_DBG(env->base.show_debug,
-		  "Execute whole volume search\n");
+	if (metadata_map->capacity == 0)
+		return SSDFS_TRUE;
+	else if (metadata_map->count >= metadata_map->capacity)
+		return SSDFS_TRUE;
 
-/* TODO: implement */
+	return SSDFS_FALSE;
+}
+
+static
+int ssdfs_fsck_resize_metadata_map(struct ssdfs_metadata_map *metadata_map)
+{
+	size_t item_size = sizeof(struct ssdfs_metadata_peb_item);
+	int capacity;
+
+	if (!is_ssdfs_metadata_map_exhausted(metadata_map)) {
+		return 0;
+	}
+
+	if (metadata_map->capacity == 0) {
+		capacity = SSDFS_FSCK_METADATA_MAP_CAPACITY_MIN;
+
+		metadata_map->array = calloc(capacity, item_size);
+		if (!metadata_map->array) {
+			SSDFS_ERR("cannot allocate memory: "
+				  "count %d, item size %zu, err: %s\n",
+				  capacity, item_size,
+				  strerror(errno));
+			return errno;
+		}
+
+		metadata_map->capacity = capacity;
+	} else {
+		size_t bytes_count;
+
+		capacity = metadata_map->capacity * 2;
+		bytes_count = (size_t)capacity * item_size;
+
+		metadata_map->array = realloc(metadata_map->array, bytes_count);
+		if (!metadata_map->array) {
+			SSDFS_ERR("fail to re-allocate buffer: "
+				  "size %zu, err: %s\n",
+				  bytes_count,
+				  strerror(errno));
+			return errno;
+		}
+
+		metadata_map->capacity = capacity;
+	}
+
+	return 0;
+}
+
+static
+int ssdfs_fsck_metadata_map_add_peb_descriptor(struct ssdfs_thread_state *state,
+						struct ssdfs_segment_header *hdr)
+{
+	struct ssdfs_metadata_map *metadata_map;
+	struct ssdfs_metadata_peb_item *item;
+	int err;
+
+	SSDFS_DBG(state->base.show_debug,
+		  "thread %d, PEB %llu\n",
+		  state->id, state->peb.id);
+
+	metadata_map = &state->metadata_map;
+
+	if (is_ssdfs_metadata_map_exhausted(metadata_map)) {
+		err = ssdfs_fsck_resize_metadata_map(metadata_map);
+		if (err) {
+			SSDFS_ERR("fail to resize metadata map: "
+				  "err %d\n", err);
+			return err;
+		}
+	}
+
+	item = &metadata_map->array[metadata_map->count];
+
+	item->seg_id = le64_to_cpu(hdr->seg_id);
+	item->leb_id = le64_to_cpu(hdr->leb_id);
+	item->peb_id = state->peb.id;
+
+	switch (le16_to_cpu(hdr->seg_type)) {
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_INIT_SNAP_PEB_TYPE;
+		break;
+
+	case SSDFS_SB_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_SBSEG_PEB_TYPE;
+		break;
+
+	case SSDFS_SEGBMAP_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_SEGBMAP_PEB_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_MAPTBL_PEB_TYPE;
+		break;
+
+	case SSDFS_LEAF_NODE_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_LNODE_PEB_TYPE;
+		break;
+
+	case SSDFS_HYBRID_NODE_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_HNODE_PEB_TYPE;
+		break;
+
+	case SSDFS_INDEX_NODE_SEG_TYPE:
+		item->type = SSDFS_MAPTBL_IDXNODE_PEB_TYPE;
+		break;
+
+	default:
+		SSDFS_ERR("unexpected segment type %#x\n",
+			  le16_to_cpu(hdr->seg_type));
+		return -EINVAL;
+	}
+
+	item->peb_creation_timestamp = le64_to_cpu(hdr->peb_create_time);
+	item->volume_creation_timestamp = le64_to_cpu(hdr->volume_hdr.create_time);
+
+	metadata_map->count++;
+
+	SSDFS_DBG(state->base.show_debug,
+		  "finished\n");
+
+	return 0;
+}
+
+static
+int ssdfs_fsck_process_peb(struct ssdfs_thread_state *state)
+{
+	struct ssdfs_segment_header hdr;
+	struct ssdfs_signature *magic;
+	size_t sg_size = sizeof(struct ssdfs_segment_header);
+	int err;
+
+	SSDFS_DBG(state->base.show_debug,
+		  "thread %d, PEB %llu\n",
+		  state->id, state->peb.id);
+
+	err = ssdfs_read_segment_header(&state->base,
+					state->peb.id,
+					state->peb.peb_size,
+					0,
+					sg_size,
+					&hdr);
+	if (err) {
+		SSDFS_ERR("fail to read segment header: "
+			  "peb_id %llu, err %d\n",
+			  state->peb.id, err);
+		return err;
+	}
+
+	magic = &hdr.volume_hdr.magic;
+
+	if (!is_ssdfs_segment_header(magic)) {
+		/* ignore empty erase block */
+		return 0;
+	}
+
+	switch (le16_to_cpu(hdr.seg_type)) {
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
+	case SSDFS_SB_SEG_TYPE:
+	case SSDFS_SEGBMAP_SEG_TYPE:
+	case SSDFS_MAPTBL_SEG_TYPE:
+	case SSDFS_LEAF_NODE_SEG_TYPE:
+	case SSDFS_HYBRID_NODE_SEG_TYPE:
+	case SSDFS_INDEX_NODE_SEG_TYPE:
+		err = ssdfs_fsck_metadata_map_add_peb_descriptor(state, &hdr);
+		if (err) {
+			SSDFS_ERR("fail to process erase block: "
+				  "thread %d, PEB %llu, err %d\n",
+				  state->id, state->peb.id, err);
+			return err;
+		}
+		break;
+
+	default:
+		/* ignore not metadata erase block */
+		return 0;
+	}
+
+	SSDFS_DBG(state->base.show_debug,
+		  "finished\n");
+
+	return 0;
+}
+
+void *ssdfs_fsck_process_peb_range(void *arg)
+{
+	struct ssdfs_thread_state *state = (struct ssdfs_thread_state *)arg;
+	u64 per_1_percent = 0;
+	u64 message_threshold = 0;
+	u64 start_peb_id;
+	u64 i;
+	int err;
+
+	if (!state)
+		pthread_exit((void *)1);
+
+	SSDFS_DBG(state->base.show_debug,
+		  "thread %d, PEB %llu\n",
+		  state->id, state->peb.id);
+
+	state->err = 0;
+	start_peb_id = state->peb.id;
+
+	per_1_percent = state->peb.pebs_count / 100;
+	if (per_1_percent == 0)
+		per_1_percent = 1;
+
+	message_threshold = per_1_percent;
+
+	SSDFS_FSCK_INFO(state->base.show_info,
+			"thread %d, PEB %llu, percentage %u\n",
+			state->id, state->peb.id, 0);
+
+	for (i = 0; i < state->peb.pebs_count; i++) {
+		state->peb.id = start_peb_id + i;
+
+		if (i >= message_threshold) {
+			SSDFS_FSCK_INFO(state->base.show_info,
+					"thread %d, PEB %llu, percentage %llu\n",
+					state->id, state->peb.id,
+					(i / per_1_percent));
+
+			message_threshold += per_1_percent;
+		}
+
+		err = ssdfs_fsck_process_peb(state);
+		if (err) {
+			SSDFS_ERR("fail to process PEB: "
+				  "peb_id %llu, err %d\n",
+				  state->peb.id, err);
+		}
+	}
+
+	SSDFS_FSCK_INFO(state->base.show_info,
+			"FINISHED: thread %d\n",
+			state->id);
+
+	pthread_exit((void *)0);
+}
+
+static
+struct ssdfs_fsck_volume_creation_point *
+ssdfs_fsck_find_creation_point(struct ssdfs_fsck_environment *env,
+				u64 create_time)
+{
+	struct ssdfs_fsck_volume_creation_array *array = NULL;
+	struct ssdfs_fsck_volume_creation_point *creation_point = NULL;
+	int i;
+
+	array = &env->detection_result.array;
+
+	switch (array->state) {
+	case SSDFS_FSCK_CREATION_ARRAY_USE_BUFFER:
+	case SSDFS_FSCK_CREATION_ARRAY_ALLOCATED:
+		/* continue logic */
+		break;
+
+	default:
+		SSDFS_ERR("unexpected state of creation array: "
+			  "state %#x\n", array->state);
+		return NULL;
+	}
+
+	for (i = 0; i < array->count; i++) {
+		creation_point = &array->creation_points[i];
+
+		if (creation_point->volume_creation_timestamp == create_time)
+			return creation_point;
+	}
+
+	return NULL;
+}
+
+static
+int ssdfs_fsck_add_creation_point(struct ssdfs_fsck_environment *env,
+				  u64 create_time)
+{
+	struct ssdfs_fsck_volume_creation_array *array = NULL;
+	struct ssdfs_fsck_volume_creation_point *creation_point = NULL;
+	size_t item_size = sizeof(struct ssdfs_fsck_volume_creation_point);
+	int new_count;
+	size_t bytes_count;
+	int i;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "Add creation point: create_time %llu\n",
+		  create_time);
+
+	array = &env->detection_result.array;
+
+	if (array->count <= 0) {
+		SSDFS_ERR("unexpected state of creation array: "
+			  "array->count %d\n",
+			  array->count);
+		return -EINVAL;
+	}
+
+	new_count = array->count + 1;
+	bytes_count = (size_t)new_count * item_size;
+
+	switch (array->state) {
+	case SSDFS_FSCK_CREATION_ARRAY_USE_BUFFER:
+		creation_point = &array->creation_points[array->count - 1];
+
+		if (creation_point->volume_creation_timestamp >= U64_MAX) {
+			ssdfs_fsck_init_creation_point(creation_point);
+			creation_point->volume_creation_timestamp = create_time;
+			goto finish_add_creation_point;
+		}
+
+		array->creation_points = calloc(new_count, item_size);
+		if (!array->creation_points) {
+			SSDFS_ERR("cannot allocate memory: "
+				  "new_count %d, item size %zu, err: %s\n",
+				  new_count, item_size,
+				  strerror(errno));
+			return errno;
+		}
+
+		creation_point = &array->creation_points[array->count - 1];
+		memcpy(creation_point, &array->buf, item_size);
+
+		creation_point = &array->creation_points[array->count];
+		ssdfs_fsck_init_creation_point(creation_point);
+
+		array->state = SSDFS_FSCK_CREATION_ARRAY_ALLOCATED;
+		break;
+
+	case SSDFS_FSCK_CREATION_ARRAY_ALLOCATED:
+		array->creation_points = realloc(array->creation_points,
+						 bytes_count);
+		if (!array->creation_points) {
+			SSDFS_ERR("cannot re-allocate memory: "
+				  "new_count %d, item size %zu, err: %s\n",
+				  new_count, item_size,
+				  strerror(errno));
+			return errno;
+		}
+
+		creation_point = &array->creation_points[array->count];
+		ssdfs_fsck_init_creation_point(creation_point);
+		break;
+
+	default:
+		SSDFS_ERR("unexpected state of creation array: "
+			  "state %#x\n", array->state);
+		return -ERANGE;
+	}
+
+	for (i = 0; i < array->count; i++) {
+		creation_point = &array->creation_points[i];
+
+		if (create_time < creation_point->volume_creation_timestamp)
+			break;
+	}
+
+	if (i < array->count) {
+		memmove(&array->creation_points[i + 1],
+			&array->creation_points[i],
+			(array->count - i) * item_size);
+	}
+
+	creation_point = &array->creation_points[i];
+	ssdfs_fsck_init_creation_point(creation_point);
+	creation_point->volume_creation_timestamp = create_time;
+	array->count++;
+
+finish_add_creation_point:
+	SSDFS_DBG(env->base.show_debug,
+		  "finished\n");
+
+	return 0;
+}
+
+static
+int ssdfs_fsck_process_metadata_map_item(struct ssdfs_fsck_environment *env,
+					 struct ssdfs_metadata_peb_item *item)
+{
+	struct ssdfs_fsck_volume_creation_point *creation_point = NULL;
+	struct ssdfs_metadata_map *metadata_map;
+	size_t item_size = sizeof(struct ssdfs_metadata_peb_item);
+	u64 create_time;
+	int index;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "Process metadata map item: "
+		  "seg_id %llu, leb_id %llu, peb_id %llu, "
+		  "volume_creation_timestamp %llu\n",
+		  item->seg_id, item->leb_id,
+		  item->peb_id, item->volume_creation_timestamp);
+
+	create_time = item->volume_creation_timestamp;
+	creation_point = ssdfs_fsck_find_creation_point(env, create_time);
+	if (!creation_point) {
+		err = ssdfs_fsck_add_creation_point(env, create_time);
+		if (err) {
+			SSDFS_ERR("fail to add creation point: "
+				  "create_time %llu, err %d\n",
+				  create_time, err);
+			return err;
+		}
+
+		creation_point = ssdfs_fsck_find_creation_point(env, create_time);
+		if (!creation_point) {
+			SSDFS_ERR("fail to find creation point: "
+				  "create_time %llu\n",
+				  create_time);
+			return -ENOENT;
+		}
+	}
+
+	switch (item->type) {
+	case SSDFS_MAPTBL_INIT_SNAP_PEB_TYPE:
+		index = SSDFS_INITIAL_SNAPSHOT_SEG_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_SBSEG_PEB_TYPE:
+		index = SSDFS_SB_SEG_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_SEGBMAP_PEB_TYPE:
+		index = SSDFS_SEGBMAP_SEG_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_MAPTBL_PEB_TYPE:
+		index = SSDFS_MAPTBL_SEG_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_LNODE_PEB_TYPE:
+		index = SSDFS_LEAF_NODE_SEG_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_HNODE_PEB_TYPE:
+		index = SSDFS_HYBRID_NODE_SEG_TYPE;
+		break;
+
+	case SSDFS_MAPTBL_IDXNODE_PEB_TYPE:
+		index = SSDFS_INDEX_NODE_SEG_TYPE;
+		break;
+
+	default:
+		SSDFS_ERR("unexpected PEB type %#x\n",
+			  item->type);
+		return -EINVAL;
+	}
+
+	metadata_map = &creation_point->metadata_map[index];
+
+	if (is_ssdfs_metadata_map_exhausted(metadata_map)) {
+		err = ssdfs_fsck_resize_metadata_map(metadata_map);
+		if (err) {
+			SSDFS_ERR("fail to resize metadata map: "
+				  "err %d\n", err);
+			return err;
+		}
+	}
+
+	memcpy(&metadata_map->array[metadata_map->count], item, item_size);
+	metadata_map->count++;
+
+	creation_point->found_metadata |= SSDFS_FSCK_METADATA_PEB_MAP_PREPARED;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "finished\n");
 
-	return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+	return 0;
+}
+
+static
+int ssdfs_fsck_process_thread_metadata_map(struct ssdfs_fsck_environment *env,
+					   int thread_index)
+{
+	struct ssdfs_thread_state *state;
+	struct ssdfs_metadata_map *metadata_map;
+	struct ssdfs_metadata_peb_item *item;
+	int i;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "Process metadata map: thread_index %d\n",
+		  thread_index);
+
+	state = &env->threads.jobs[thread_index];
+	metadata_map = &state->metadata_map;
+
+	for (i = 0; i < metadata_map->count; i++) {
+		item = &metadata_map->array[i];
+
+		err = ssdfs_fsck_process_metadata_map_item(env, item);
+		if (err) {
+			SSDFS_ERR("fail to process metadata map's item: "
+				  "thread_index %d, item_index %d, err %d\n",
+				  thread_index, i, err);
+			return err;
+		}
+	}
+
+	SSDFS_DBG(env->base.show_debug,
+		  "finished\n");
+
+	return 0;
+}
+
+static
+int execute_whole_volume_search(struct ssdfs_fsck_environment *env)
+{
+	u64 pebs_count;
+	u64 pebs_per_thread;
+	int i;
+	int err;
+	int res = SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "Execute whole volume search\n");
+
+	pebs_count = env->base.fs_size / env->base.erase_size;
+	pebs_per_thread = (pebs_count + env->threads.capacity - 1);
+	pebs_per_thread /= env->threads.capacity;
+
+	env->threads.jobs = calloc(env->threads.capacity,
+				   sizeof(struct ssdfs_thread_state));
+	if (!env->threads.jobs) {
+		SSDFS_ERR("fail to allocate threads pool: %s\n",
+			  strerror(errno));
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+	}
+
+	for (i = 0; i < env->threads.capacity; i++) {
+		ssdfs_init_thread_state(&env->threads.jobs[i],
+					i,
+					&env->base,
+					pebs_per_thread,
+					pebs_count,
+					env->base.erase_size);
+
+		err = pthread_create(&env->threads.jobs[i].thread, NULL,
+				     ssdfs_fsck_process_peb_range,
+				     (void *)&env->threads.jobs[i]);
+		if (err) {
+			res = SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			SSDFS_ERR("fail to create thread %d: %s\n",
+				  i, strerror(errno));
+			for (i--; i >= 0; i--) {
+				pthread_join(env->threads.jobs[i].thread, NULL);
+				env->threads.requested_jobs--;
+			}
+			goto free_threads_pool;
+		}
+
+		env->threads.requested_jobs++;
+	}
+
+	ssdfs_wait_threads_activity_ending(env);
+
+	for (i = 0; i < env->threads.capacity; i++) {
+		err = ssdfs_fsck_process_thread_metadata_map(env, i);
+		if (err) {
+			res = SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			SSDFS_ERR("fail to process metadata map: "
+				  "thread %d, err %d\n",
+				  i, err);
+			goto free_metadata_maps;
+		}
+	}
+
+free_metadata_maps:
+	for (i = 0; i < env->threads.capacity; i++) {
+		struct ssdfs_thread_state *state;
+		struct ssdfs_metadata_map *metadata_map;
+
+		state = &env->threads.jobs[i];
+		metadata_map = &state->metadata_map;
+		__ssdfs_fsck_destroy_metadata_map(metadata_map);
+	}
+
+free_threads_pool:
+	free(env->threads.jobs);
+	env->threads.jobs = NULL;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "finished\n");
+
+	return res;
 }
 
 int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
@@ -2170,6 +2761,7 @@ int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
 	struct ssdfs_fsck_detection_result *detection_result;
 	union ssdfs_metadata_header *buf;
 	struct ssdfs_fsck_volume_creation_point *creation_point;
+	int index;
 	int i;
 	int err;
 
@@ -2224,10 +2816,10 @@ complete_volume_search:
 		}
 	}
 
-	/* TODO: process this case */
-	BUG_ON(env->detection_result.array.count > 1);
+	BUG_ON(env->detection_result.array.count <= 0);
 
-	creation_point = &env->detection_result.array.creation_points[0];
+	index = env->detection_result.array.count - 1;
+	creation_point = &env->detection_result.array.creation_points[index];
 
 	if (creation_point->found_metadata ==
 				SSDFS_FSCK_NOTHING_FOUND_MASK) {
