@@ -374,6 +374,7 @@ struct ssdfs_metadata_map {
  * @data_file: data file environment
  * @timestamp: timestamp defining the state of files
  * @metadata_map: metadata map
+ * @private_data: pointer on private data
  *
  * @name_buf: name buffer
  */
@@ -390,6 +391,8 @@ struct ssdfs_thread_state {
 	struct ssdfs_file_environment data_file;
 	struct ssdfs_time_range timestamp;
 	struct ssdfs_metadata_map metadata_map;
+
+	void *private_data;
 
 	char name_buf[SSDFS_MAX_NAME_LEN + 1];
 };

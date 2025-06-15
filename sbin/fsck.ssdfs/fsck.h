@@ -28,6 +28,7 @@
 
 #include "ssdfs_tools.h"
 #include "detect_file_system.h"
+#include "check_file_system.h"
 
 #define SSDFS_FSCK_INFO(show, fmt, ...) \
 	do { \
@@ -79,67 +80,6 @@ enum {
 	SSDFS_FSCK_VOLUME_HEALTHY,
 	SSDFS_FSCK_VOLUME_CHECK_FAILED,
 	SSDFS_FSCK_VOLUME_UNKNOWN_CHECK_RESULT,
-};
-
-/*
- * Corruption mask flags
- */
-#define SSDFS_FSCK_BASE_SNAPSHOT_SEGMENT_CORRUPTED		(1 << 0)
-#define SSDFS_FSCK_SUPERBLOCK_SEGMENT_CORRUPTED			(1 << 1)
-#define SSDFS_FSCK_MAPPING_TABLE_CORRUPTED			(1 << 2)
-#define SSDFS_FSCK_SEGMENT_BITMAP_CORRUPTED			(1 << 3)
-#define SSDFS_FSCK_INODES_BTREE_CORRUPTED			(1 << 4)
-#define SSDFS_FSCK_SNAPSHOTS_BTREE_CORRUPTED			(1 << 5)
-#define SSDFS_FSCK_DENTRIES_BTREE_CORRUPTED			(1 << 6)
-#define SSDFS_FSCK_EXTENTS_BTREE_CORRUPTED			(1 << 7)
-#define SSDFS_FSCK_SHARED_EXTENTS_BTREE_CORRUPTED		(1 << 8)
-#define SSDFS_FSCK_INVALID_EXTENTS_BTREE_CORRUPTED		(1 << 9)
-#define SSDFS_FSCK_SHARED_DICT_BTREE_CORRUPTED			(1 << 10)
-#define SSDFS_FSCK_XATTR_BTREE_CORRUPTED			(1 << 11)
-#define SSDFS_FSCK_SHARED_XATTR_BTREE_CORRUPTED			(1 << 12)
-
-struct ssdfs_fsck_base_snapshot_segment_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_superblock_segment_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_mapping_table_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_segment_bitmap_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_inodes_btree_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_snapshots_btree_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_invalid_extents_btree_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_shared_dictionary_btree_corruption {
-	int state;
-};
-
-struct ssdfs_fsck_corruption_details {
-	u64 mask;
-	struct ssdfs_fsck_base_snapshot_segment_corruption base_snapshot_seg;
-	struct ssdfs_fsck_superblock_segment_corruption superblock_seg;
-	struct ssdfs_fsck_mapping_table_corruption mapping_table;
-	struct ssdfs_fsck_segment_bitmap_corruption segment_bitmap;
-	struct ssdfs_fsck_inodes_btree_corruption inodes_btree;
-	struct ssdfs_fsck_snapshots_btree_corruption snapshots_btree;
-	struct ssdfs_fsck_invalid_extents_btree_corruption invalid_extents;
-	struct ssdfs_fsck_shared_dictionary_btree_corruption shared_dictionary;
 };
 
 struct ssdfs_fsck_check_result {
@@ -295,6 +235,7 @@ static inline
 void ssdfs_init_thread_state(struct ssdfs_thread_state *state,
 			     int thread_id,
 			     struct ssdfs_environment *base,
+			     struct ssdfs_fsck_environment *fsck_env,
 			     u64 pebs_per_thread,
 			     u64 pebs_count,
 			     u32 erase_size)
@@ -304,6 +245,8 @@ void ssdfs_init_thread_state(struct ssdfs_thread_state *state,
 	ssdfs_init_peb_environment(state, thread_id, pebs_per_thread,
 				   pebs_count, erase_size);
 	ssdfs_init_metadata_map(state);
+
+	state->private_data = fsck_env;
 }
 
 static inline
@@ -331,6 +274,8 @@ void ssdfs_wait_threads_activity_ending(struct ssdfs_fsck_environment *env)
 int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env);
 void ssdfs_fsck_init_detection_result(struct ssdfs_fsck_environment *env);
 void ssdfs_fsck_destroy_detection_result(struct ssdfs_fsck_environment *env);
+struct ssdfs_fsck_volume_creation_point *
+ssdfs_fsck_get_creation_point(struct ssdfs_fsck_environment *env, int index);
 
 /* check_file_system.c */
 int is_ssdfs_volume_corrupted(struct ssdfs_fsck_environment *env);

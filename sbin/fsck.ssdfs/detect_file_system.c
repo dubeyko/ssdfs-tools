@@ -23,7 +23,6 @@ enum {
 	SSDFS_FSCK_SEARCH_RESULT_STATE_MAX
 };
 
-static inline
 struct ssdfs_fsck_volume_creation_point *
 ssdfs_fsck_get_creation_point(struct ssdfs_fsck_environment *env, int index)
 {
@@ -2702,6 +2701,7 @@ int execute_whole_volume_search(struct ssdfs_fsck_environment *env)
 		ssdfs_init_thread_state(&env->threads.jobs[i],
 					i,
 					&env->base,
+					NULL,
 					pebs_per_thread,
 					pebs_count,
 					env->base.erase_size);

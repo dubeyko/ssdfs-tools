@@ -17,15 +17,6 @@
 
 #define SSDFS_FSCK_METADATA_MAP_CAPACITY_MIN		(8)
 
-#define SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND		(1 << 0)
-#define SSDFS_FSCK_SB_SEGS_FOUND			(1 << 1)
-#define SSDFS_FSCK_MAPPING_TBL_FOUND			(1 << 2)
-#define SSDFS_FSCK_SEGMENT_BITMAP_FOUND			(1 << 3)
-#define SSDFS_FSCK_MAPTBL_CACHE_FOUND			(1 << 4)
-#define SSDFS_FSCK_METADATA_PEB_MAP_PREPARED		(1 << 5)
-#define SSDFS_FSCK_NOTHING_FOUND_MASK			0x0
-#define SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK	0x1F
-
 /*
  * struct ssdfs_fsck_found_log - found log descriptor
  * @peb_id: PEB ID
@@ -121,6 +112,15 @@ struct ssdfs_fsck_mapping_table_cache {
 	void *data;
 	u32 bytes_count;
 };
+
+#define SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND		(1 << 0)
+#define SSDFS_FSCK_SB_SEGS_FOUND			(1 << 1)
+#define SSDFS_FSCK_MAPPING_TBL_FOUND			(1 << 2)
+#define SSDFS_FSCK_SEGMENT_BITMAP_FOUND			(1 << 3)
+#define SSDFS_FSCK_MAPTBL_CACHE_FOUND			(1 << 4)
+#define SSDFS_FSCK_METADATA_PEB_MAP_PREPARED		(1 << 5)
+#define SSDFS_FSCK_NOTHING_FOUND_MASK			0x0
+#define SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK	0x1F
 
 /*
  * struct ssdfs_fsck_volume_creation_point - volume creation point
