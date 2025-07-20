@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.57 [July 19, 2025]
+    (*) Introduce PEB inflation model.
+
 v.4.56 [May 26, 2025]
     (*) [fsck] Implement logic of detection a heavily corrupted
                SSDFS volume.
