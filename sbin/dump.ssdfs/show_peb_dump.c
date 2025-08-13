@@ -2954,11 +2954,11 @@ int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DBG(env->base.show_debug,
 		  "read log bytes\n");
 
-	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
-						env->peb.peb_size,
-						env->peb.log_offset,
-						env->peb.log_size,
-						&buf->magic);
+	err = ssdfs_read_segment_header(&env->base, env->peb.id,
+					env->peb.peb_size,
+					env->peb.log_offset,
+					env->peb.log_size,
+					&buf->magic);
 	if (err) {
 		SSDFS_ERR("fail to read PEB's header: "
 			  "peb_id %llu, peb_size %u, "
@@ -3980,10 +3980,10 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			  "[00%d]\tDUMP PEB...\n",
 			  step);
 
-	err = ssdfs_dumpfs_read_segment_header(env, env->peb.id,
-						env->peb.peb_size,
-						0, env->peb.peb_size,
-						&buf.magic);
+	err = ssdfs_read_segment_header(&env->base, env->peb.id,
+					env->peb.peb_size,
+					0, env->peb.peb_size,
+					&buf.magic);
 	if (err) {
 		SSDFS_ERR("fail to read PEB's header: "
 			  "peb_id %llu, peb_size %u, err %d\n",

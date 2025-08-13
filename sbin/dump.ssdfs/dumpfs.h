@@ -142,10 +142,6 @@ struct ssdfs_dumpfs_environment {
 int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env,
 			   char *file_name);
 void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env);
-int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
-				     u64 peb_id, u32 peb_size,
-				     u32 log_offset, u32 size,
-				     void *buf);
 int ssdfs_dumpfs_read_partial_log_header(struct ssdfs_dumpfs_environment *env,
 					 u64 peb_id, u32 peb_size,
 					 u32 log_offset, u32 size,

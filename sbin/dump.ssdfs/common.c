@@ -265,46 +265,6 @@ int ssdfs_dumpfs_read_partial_log_footer(struct ssdfs_dumpfs_environment *env,
 	return 0;
 }
 
-int ssdfs_dumpfs_read_segment_header(struct ssdfs_dumpfs_environment *env,
-				     u64 peb_id, u32 peb_size,
-				     u32 log_offset, u32 size,
-				     void *buf)
-{
-	size_t sg_size = max_t(size_t,
-				sizeof(struct ssdfs_segment_header),
-				sizeof(struct ssdfs_partial_log_header));
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
-	int err;
-
-	SSDFS_DBG(env->base.show_debug,
-		  "peb_id %llu, peb_size %u, "
-		  "log_offset %u, size %u\n",
-		  peb_id, peb_size, log_offset, size);
-
-	if (peb_id != SSDFS_INITIAL_SNAPSHOT_SEG)
-		offset = peb_id * peb_size;
-
-	offset += log_offset;
-
-	SSDFS_DBG(env->base.show_debug,
-		  "offset %llu, size %zu\n",
-		  offset, sg_size);
-
-	err = env->base.dev_ops->read(env->base.fd, offset, sg_size,
-				      buf, env->base.show_debug);
-	if (err) {
-		SSDFS_ERR("fail to read segment header: "
-			  "offset %llu, err %d\n",
-			  offset, err);
-		return err;
-	}
-
-	SSDFS_DBG(env->base.show_debug,
-		  "successful read\n");
-
-	return 0;
-}
-
 int ssdfs_dumpfs_read_partial_log_header(struct ssdfs_dumpfs_environment *env,
 					 u64 peb_id, u32 peb_size,
 					 u32 log_offset, u32 size,
@@ -355,11 +315,11 @@ int ssdfs_dumpfs_find_any_valid_peb(struct ssdfs_dumpfs_environment *env,
 			  "try to read the offset %llu\n",
 			  offset);
 
-		err = ssdfs_dumpfs_read_segment_header(env,
-							offset / peb_size,
-							peb_size,
-							0, peb_size,
-							hdr);
+		err = ssdfs_read_segment_header(&env->base,
+						offset / peb_size,
+						peb_size,
+						0, peb_size,
+						hdr);
 		if (err) {
 			SSDFS_ERR("fail to read segment header: "
 				  "offset %llu, err %d\n",
