@@ -2981,6 +2981,10 @@ int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
 		} else if (key == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
 			env->peb.log_size =
 				le32_to_cpu(buf->pl_hdr.log_bytes);
+		} else if (key == SSDFS_PADDING_HDR_MAGIC) {
+			SSDFS_DBG(env->base.show_debug,
+				  "found padding block\n");
+			return -ENODATA;
 		} else {
 			SSDFS_ERR("corrupted magic: common %#x, key %#x\n",
 				  le32_to_cpu(buf->magic.common),
@@ -4057,7 +4061,14 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			}
 
 			err = ssdfs_dumpfs_read_log_bytes(env, &buf);
-			if (err) {
+			if (err == -ENODATA) {
+				SSDFS_DBG(env->base.show_debug,
+					  "LOG ABSENT: peb_id: %llu, log_index %u, "
+					  "log_offset %u\n",
+					  env->peb.id, env->peb.log_index,
+					  env->peb.log_offset);
+					goto try_next_peb;
+			} else if (err) {
 				SSDFS_ERR("fail to read log's size in bytes: "
 					  "peb_id %llu, peb_size %u, "
 					  "log_offset %u, err %d\n",

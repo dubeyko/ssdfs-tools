@@ -27,6 +27,7 @@
 #define SSDFS_SEGMENT_HDR_MAGIC			0x5348		/* SH */
 #define SSDFS_LOG_FOOTER_MAGIC			0x4C46		/* LF */
 #define SSDFS_PARTIAL_LOG_HDR_MAGIC		0x5048		/* PH */
+#define SSDFS_PADDING_HDR_MAGIC			0x5044		/* PD */
 #define SSDFS_BLK_BMAP_MAGIC			0x424D		/* BM */
 #define SSDFS_FRAGMENT_DESC_MAGIC		0x66		/* f */
 #define SSDFS_CHAIN_HDR_MAGIC			0x63		/* c */
@@ -58,6 +59,9 @@
 #define SSDFS_DIFF_BLOB_MAGIC			0x4466		/* Df */
 #define SSDFS_INVEXT_BTREE_MAGIC		0x49784274	/* IxBt */
 #define SSDFS_INVEXT_BNODE_MAGIC		0x4958		/* IX */
+
+/* SSDFS padding blob */
+#define SSDFS_PADDING_BLOB		0x50414444494E4730	/* PADDING0 */
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
@@ -150,6 +154,25 @@ struct ssdfs_metadata_check {
 	__le32 csum;
 
 /* 0x0008 */
+} __attribute__((packed));
+
+/*
+ * struct ssdfs_padding_header - padding block header
+ * @magic: magic signature + revision
+ * @check: metadata checksum
+ * @blob: padding blob
+ */
+struct ssdfs_padding_header {
+/* 0x0000 */
+	struct ssdfs_signature magic;
+
+/* 0x0008 */
+	struct ssdfs_metadata_check check;
+
+/* 0x0010 */
+	__le64 blob;
+
+/* 0x0020 */
 } __attribute__((packed));
 
 /*

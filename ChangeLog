@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.58 [August 13, 2025]
+    (*) Introduce adding padding in superblock segment.
+
 v.4.57 [July 19, 2025]
     (*) Introduce PEB inflation model.
 
