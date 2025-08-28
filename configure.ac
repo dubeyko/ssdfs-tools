@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 AC_PREREQ([2.69])
-AC_INIT(ssdfs-utils, 4.58, slava@dubeyko.com)
+AC_INIT(ssdfs-utils, 4.59, slava@dubeyko.com)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([include/ssdfs_abi.h])
 AC_CONFIG_HEADERS([config.h])
@@ -45,6 +45,21 @@ AC_CHECK_LIB([z], [crc32],
 			   [Define to 1 if you have the 'zlib' library (-lz).])],
 		[AC_MSG_ERROR([ZLIB library not found])])
 AC_CHECK_HEADERS([zlib.h])
+
+AC_CHECK_LIB([lzo2], [lzo1x_1_compress],
+		[AC_DEFINE([HAVE_LIBLZO2], 1,
+			   [Define to 1 if you have the 'lzo2' library (-llzo2).])
+		 HAVE_LZO2=yes],
+		[AC_MSG_WARN([LZO2 library not found - LZO compression will be disabled])
+		 HAVE_LZO2=no])
+		 
+if test "x$HAVE_LZO2" = "xyes"; then
+	AC_CHECK_HEADERS([lzo/lzo1x.h], [],
+		[AC_MSG_WARN([LZO2 headers not found - LZO compression will be disabled])
+		 HAVE_LZO2=no])
+fi
+
+AM_CONDITIONAL([HAVE_LZO2], [test "x$HAVE_LZO2" = "xyes"])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h limits.h paths.h stdlib.h string.h sys/ioctl.h unistd.h])

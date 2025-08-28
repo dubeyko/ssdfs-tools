@@ -866,10 +866,19 @@ int is_mapping_table_cache_found(struct ssdfs_fsck_environment *env)
 		maptbl_cache->data = uncompr_data;
 		maptbl_cache->bytes_count = uncompr_size;
 	} else if (flags & SSDFS_MAPTBL_CACHE_LZO_COMPR) {
-		SSDFS_ERR("COMPRESSED STATE IS NOT SUPPORTED YET\n");
-		free(uncompr_data);
-		res = SSDFS_FSCK_SEARCH_RESULT_FAILURE;
-		goto finish_process_mapping_table_cache;
+		err = ssdfs_lzo_decompress(data, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			free(uncompr_data);
+			res = SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			goto finish_process_mapping_table_cache;
+		}
+
+		maptbl_cache->data = uncompr_data;
+		maptbl_cache->bytes_count = uncompr_size;
 	} else {
 		maptbl_cache->data = uncompr_data;
 		maptbl_cache->bytes_count = area_size - hdr_size;

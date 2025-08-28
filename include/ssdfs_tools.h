@@ -1269,6 +1269,14 @@ int ssdfs_zlib_decompress(unsigned char *cdata_in,
 			  unsigned char *data_out,
 			  u32 srclen, u32 destlen,
 			  int is_debug);
+int ssdfs_lzo_compress(unsigned char *data_in,
+		       unsigned char *cdata_out,
+		       u32 *srclen, u32 *destlen,
+		       int is_debug);
+int ssdfs_lzo_decompress(unsigned char *cdata_in,
+			 unsigned char *data_out,
+			 u32 srclen, u32 destlen,
+			 int is_debug);
 
 /* lib/mtd_readwrite.c */
 int mtd_read(int fd, u64 offset, size_t size, void *buf, int is_debug);

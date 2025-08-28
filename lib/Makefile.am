@@ -10,3 +10,6 @@ libssdfs_la_CFLAGS = -Wall -fPIC
 libssdfs_la_CPPFLAGS = -I$(top_srcdir)/include
 libssdfs_la_LDFLAGS = -static
 libssdfs_la_LIBADD = -lz -lrt
+if HAVE_LZO2
+libssdfs_la_LIBADD += -llzo2
+endif

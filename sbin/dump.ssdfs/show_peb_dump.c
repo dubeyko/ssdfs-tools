@@ -674,10 +674,31 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 			}
 			break;
 
-/*
 		case SSDFS_FRAGMENT_LZO_BLOB:
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				SSDFS_ERR("fail to allocate memory\n");
+
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+				raw_data_bytes = compr_size;
+			} else {
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+
+				res = ssdfs_lzo_decompress(data,
+							    uncompr_data,
+							    compr_size,
+							    uncompr_size,
+							    env->base.show_debug);
+				if (res) {
+					SSDFS_ERR("fail to decompress: err %d\n",
+						  res);
+					raw_data_bytes = compr_size;
+				} else {
+					data = uncompr_data;
+					raw_data_bytes = uncompr_size;
+				}
+			}
 			break;
-*/
 
 		default:
 			data = (u8 *)area_buf + offset + *parsed_bytes;
@@ -975,10 +996,27 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 		break;
 
 	case SSDFS_BLK2OFF_DESC_LZO:
-		SSDFS_DUMPFS_DUMP(env,
-			    "COMPRESSED STATE IS NOT SUPPORTED YET\n");
-		*parsed_bytes += compr_size;
-		goto finish_parse_fragment;
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			*parsed_bytes += compr_size;
+			goto finish_parse_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_lzo_decompress(fragment, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			*parsed_bytes += compr_size;
+			goto finish_parse_fragment;
+		}
+
+		fragment = uncompr_data;
+		break;
 
 	default:
 		err = -ERANGE;
@@ -1187,10 +1225,29 @@ int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
 		break;
 
 	case SSDFS_BLK2OFF_EXTENT_DESC_LZO:
-		SSDFS_DUMPFS_DUMP(env,
-				  "COMPRESSED STATE IS NOT SUPPORTED YET\n");
-		*parsed_bytes += compr_size;
-		goto finish_parse_extent_fragment;
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			*parsed_bytes += compr_size;
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_lzo_decompress(fragment, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			*parsed_bytes += compr_size;
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = uncompr_data;
+		fragment_size = uncompr_size;
+		extents_count = fragment_size / extent_desc_size;
+		break;
 
 	default:
 		err = -ERANGE;
@@ -2070,9 +2127,26 @@ parse_next_area:
 			break;
 
 		case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
-			SSDFS_DUMPFS_DUMP(env,
-				"COMPRESSED STATE IS NOT SUPPORTED YET\n");
-			goto finish_parse_fragment;
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				err = -ENOMEM;
+				SSDFS_ERR("fail to allocate memory\n");
+				goto finish_parse_fragment;
+			}
+
+			data = (u8 *)area_buf + parsed_bytes;
+
+			err = ssdfs_lzo_decompress(data, uncompr_data,
+						   compr_size, uncompr_size,
+						   env->base.show_debug);
+			if (err) {
+				SSDFS_ERR("fail to decompress: err %d\n",
+					  err);
+				goto finish_parse_fragment;
+			}
+
+			data = uncompr_data;
+			break;
 
 		default:
 			data = (u8 *)area_buf + parsed_bytes;
@@ -2228,9 +2302,24 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 
 		data = uncompr_data;
 	} else if (flags & SSDFS_MAPTBL_CACHE_LZO_COMPR) {
-		SSDFS_DUMPFS_DUMP(env,
-			"COMPRESSED STATE IS NOT SUPPORTED YET\n");
-		goto finish_parse_maptbl_cache;
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = (u8 *)area_buf + hdr_size;
+
+		err = ssdfs_lzo_decompress(data, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = uncompr_data;
 	} else {
 		data = (u8 *)area_buf + hdr_size;
 	}

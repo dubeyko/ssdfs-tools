@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.59 [August 27, 2025]
+    (*) Introduce LZO compression support.
+
 v.4.58 [August 13, 2025]
     (*) Introduce adding padding in superblock segment.
 
