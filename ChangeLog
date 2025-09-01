@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.60 [September 01, 2025]
+    (*) Introduce initial man pages content.
+
 v.4.59 [August 27, 2025]
     (*) Introduce LZO compression support.
 

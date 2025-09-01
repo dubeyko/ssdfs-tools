@@ -1,0 +1,81 @@
+.TH DUMP.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+dump.ssdfs \- dump volume of SSDFS file system
+.SH SYNOPSIS
+.B dump.ssdfs
+.RI [ options ]
+.I device
+.SH DESCRIPTION
+.B dump.ssdfs
+dumps segments' content of SSDFS file system from a given device or image file.
+This utility allows inspection of SSDFS file system structures and can extract
+raw data or parse specific components like headers, logs, bitmaps, and mapping tables.
+.SH OPTIONS
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-g ", " \-\-granularity
+Show key volume's details (default operation).
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-o ", " \-\-output-folder " " \fIfolder\fR
+Define output folder for dumped files.
+.TP
+.BR \-p ", " \-\-peb " " \fIid=value,peb_count=value,size=value,...\fR
+Show PEB dump. Full syntax includes:
+id=\fIvalue\fR,peb_count=\fIvalue\fR,size=\fIvalue\fR,log_index=\fIvalue\fR,log_count=\fIvalue\fR,log_size=\fIvalue\fR,parse_header,parse_log_footer,parse_block_bitmap,parse_blk2off_table,parse_block_state_area,parse_maptbl_cache,parse_all,raw_dump.
+.TP
+.BR \-q ", " \-\-quiet
+Quiet execution (useful for scripts).
+.TP
+.BR \-r ", " \-\-raw-dump " " \fIshow,offset=value,size=value\fR
+Show raw dump from specified offset and size.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH MODES OF OPERATION
+.B dump.ssdfs
+operates in several modes:
+.TP
+.B Granularity mode (default)
+Shows key volume details including superblock information, geometry, and
+overall file system structure.
+.TP
+.B PEB dump mode
+Dumps Physical Erase Block (PEB) content with various parsing options for
+headers, footers, bitmaps, and mapping tables.
+.TP
+.B Raw dump mode
+Extracts raw binary data from specified offset and size.
+.SH EXIT STATUS
+.B dump.ssdfs
+exits with status 0 on success, or with non-zero status on error.
+.SH EXAMPLES
+Show key volume details (default):
+.br
+.B # dump.ssdfs /dev/sdb1
+
+Dump first PEB with header parsing:
+.br
+.B # dump.ssdfs -p id=0,parse_header /dev/sdb1
+
+Extract raw data from specific offset:
+.br
+.B # dump.ssdfs -r show,offset=1024,size=4096 /dev/sdb1
+
+Dump PEB content to files in specific folder:
+.br
+.B # dump.ssdfs -o /tmp/ssdfs_dump -p id=0,parse_all /dev/sdb1
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR fsck.ssdfs (8),
+.BR tune.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2014-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

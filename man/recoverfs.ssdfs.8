@@ -1,0 +1,90 @@
+.TH RECOVERFS.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+recoverfs.ssdfs \- recover SSDFS file system
+.SH SYNOPSIS
+.B recoverfs.ssdfs
+.RI [ options ]
+.I device
+.I root-folder
+.SH DESCRIPTION
+.B recoverfs.ssdfs
+extracts data from corrupted SSDFS volume. This utility is designed to
+recover files and directories from damaged or corrupted SSDFS file systems
+by extracting readable data to a specified root folder.
+.SH OPTIONS
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-j ", " \-\-threads " " \fInumber\fR
+Define threads number for parallel processing.
+.TP
+.BR \-t ", " \-\-timestamp " " \fIminute=value,hour=value,day=value,month=value,year=value\fR
+Define timestamp of files state to recover. All parameters are required:
+minute (0-60), hour (0-24), day (1-31), month (1-12), year (>=1970).
+.TP
+.BR \-q ", " \-\-quiet
+Quiet execution (useful for scripts).
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH ARGUMENTS
+.TP
+.I device
+The device or image file containing the corrupted SSDFS file system.
+.TP
+.I root-folder
+The destination folder where recovered files will be extracted.
+The folder will be created if it doesn't exist.
+.SH OPERATION
+.B recoverfs.ssdfs
+attempts to recover data from corrupted SSDFS volumes by:
+.br
+- Scanning the device for readable file system structures
+.br
+- Extracting accessible files and directories
+.br
+- Reconstructing directory hierarchy when possible
+.br
+- Recovering file content that is still readable
+.br
+- Optionally filtering by timestamp to recover specific file states
+.SH EXIT STATUS
+.B recoverfs.ssdfs
+exits with status 0 on success, or with non-zero status on error.
+.SH EXAMPLES
+Recover all data from corrupted volume:
+.br
+.B # recoverfs.ssdfs /dev/sdb1 /tmp/recovered_data
+
+Recover data with specific timestamp:
+.br
+.B # recoverfs.ssdfs -t minute=30,hour=14,day=15,month=8,year=2025 /dev/sdb1 /tmp/recovered_data
+
+Quiet recovery with debug information:
+.br
+.B # recoverfs.ssdfs -q -d /dev/sdb1 /tmp/recovered_data
+
+Multi-threaded recovery:
+.br
+.B # recoverfs.ssdfs -j 4 /dev/sdb1 /tmp/recovered_data
+.SH NOTES
+.B recoverfs.ssdfs
+is a data recovery tool and should only be used on corrupted or damaged
+file systems. It does not modify the original device/file system.
+
+Recovery success depends on the extent of corruption. Some files may be
+partially recovered or unrecoverable if the damage is extensive.
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR fsck.ssdfs (8),
+.BR dump.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2022-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

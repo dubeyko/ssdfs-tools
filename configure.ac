@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 AC_PREREQ([2.69])
-AC_INIT(ssdfs-utils, 4.59, slava@dubeyko.com)
+AC_INIT(ssdfs-utils, 4.60, slava@dubeyko.com)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([include/ssdfs_abi.h])
 AC_CONFIG_HEADERS([config.h])
@@ -88,5 +88,6 @@ AC_CONFIG_FILES([Makefile
                  sbin/recoverfs.ssdfs/Makefile
                  sbin/snapshotfs.ssdfs/Makefile
                  sbin/tune.ssdfs/Makefile
-                 sbin/test.ssdfs/Makefile])
+                 sbin/test.ssdfs/Makefile
+                 man/Makefile])
 AC_OUTPUT

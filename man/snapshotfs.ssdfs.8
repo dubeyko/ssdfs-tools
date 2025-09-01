@@ -1,0 +1,132 @@
+.TH SNAPSHOTFS.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+snapshotfs.ssdfs \- snapshot SSDFS file system
+.SH SYNOPSIS
+.B snapshotfs.ssdfs
+.RI [ options ]
+.IR folder | file
+.SH DESCRIPTION
+.B snapshotfs.ssdfs
+manages snapshots of SSDFS file system. This utility allows creation,
+modification, listing, and deletion of file system snapshots for backup
+and versioning purposes.
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-create " " \fIname=value,mode=value,type=value,expiration=value,frequency=value,snapshots-threshold=value\fR
+Create snapshot. Parameters:
+.br
+- name: snapshot name
+.br
+- mode: READ_ONLY or READ_WRITE
+.br
+- type: PERIODIC or ONE_TIME
+.br
+- expiration: WEEK, MONTH, YEAR, or NEVER
+.br
+- frequency: SYNCFS, HOUR, DAY, WEEK, or MONTH
+.br
+- snapshots-threshold: maximum number of snapshots
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-l ", " \-\-list " " \fIminute=value,hour=value,day=value,month=value,year=value,mode=value,type=value,max-number=value\fR
+Show list of snapshots with optional filtering by time, mode, type, and maximum number.
+.TP
+.BR \-m ", " \-\-modify " " \fIminute=value,hour=value,day=value,month=value,year=value,name=value,id=value,mode=value,type=value,expiration=value,frequency=value,snapshots-threshold=value\fR
+Change snapshot's properties. Specify snapshot by name or id, along with timestamp and new properties.
+.TP
+.BR \-r ", " \-\-remove " " \fIname=value,id=value\fR
+Delete snapshot by name or id.
+.TP
+.BR \-R ", " \-\-remove-range " " \fIminute=value,hour=value,day=value,month=value,year=value\fR
+Delete range of snapshots by timestamp.
+.TP
+.BR \-s ", " \-\-show-details " " \fIname=value,id=value\fR
+Show snapshot's details by name or id.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH SNAPSHOT MODES
+.TP
+.B READ_ONLY
+Snapshot is read-only and cannot be modified.
+.TP
+.B READ_WRITE
+Snapshot allows read and write operations.
+.SH SNAPSHOT TYPES
+.TP
+.B ONE_TIME
+Single snapshot created manually.
+.TP
+.B PERIODIC
+Automatic snapshots created based on frequency.
+.SH EXPIRATION PERIODS
+.TP
+.B WEEK
+Snapshot expires after one week.
+.TP
+.B MONTH
+Snapshot expires after one month.
+.TP
+.B YEAR
+Snapshot expires after one year.
+.TP
+.B NEVER
+Snapshot never expires automatically.
+.SH FREQUENCIES
+.TP
+.B SYNCFS
+Create snapshot on each sync operation.
+.TP
+.B HOUR
+Create snapshot every hour.
+.TP
+.B DAY
+Create snapshot daily.
+.TP
+.B WEEK
+Create snapshot weekly.
+.TP
+.B MONTH
+Create snapshot monthly.
+.SH EXIT STATUS
+.B snapshotfs.ssdfs
+exits with status 0 on success, or with non-zero status on error.
+.SH EXAMPLES
+Create a read-only periodic snapshot:
+.br
+.B # snapshotfs.ssdfs -c name=backup1,mode=READ_ONLY,type=PERIODIC,expiration=MONTH,frequency=DAY,snapshots-threshold=30 /mnt/ssdfs
+
+List all snapshots:
+.br
+.B # snapshotfs.ssdfs -l max-number=100 /mnt/ssdfs
+
+Show details of specific snapshot:
+.br
+.B # snapshotfs.ssdfs -s name=backup1 /mnt/ssdfs
+
+Remove snapshot by name:
+.br
+.B # snapshotfs.ssdfs -r name=backup1 /mnt/ssdfs
+
+Remove snapshots from specific date range:
+.br
+.B # snapshotfs.ssdfs -R minute=0,hour=0,day=1,month=7,year=2025 /mnt/ssdfs
+
+Modify snapshot properties:
+.br
+.B # snapshotfs.ssdfs -m name=backup1,expiration=YEAR,frequency=WEEK /mnt/ssdfs
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR fsck.ssdfs (8),
+.BR dump.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2021-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

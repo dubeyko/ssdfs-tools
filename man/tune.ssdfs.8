@@ -1,0 +1,107 @@
+.TH TUNE.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+tune.ssdfs \- tune volume of SSDFS file system
+.SH SYNOPSIS
+.B tune.ssdfs
+.RI [ options ]
+.IR folder | file
+.SH DESCRIPTION
+.B tune.ssdfs
+adjusts tunable file system parameters on SSDFS file systems.
+This utility allows modification of various file system settings
+such as compression, backup options, and performance parameters.
+.SH OPTIONS
+.TP
+.BR \-B ", " \-\-blkbmap " " \fIhas_copy=(enable|disable),compression=(none|zlib|lzo)\fR
+Block bitmap options. Control backup copy and compression settings.
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-g ", " \-\-get_config
+Get current volume configuration and display all tunable parameters.
+.TP
+.BR \-L ", " \-\-label " " \fIlabel\fR
+Set a volume label.
+.TP
+.BR \-M ", " \-\-maptbl " " \fIhas_copy=(enable|disable),log_pages=value,migration_threshold=value,reserved_pebs_per_fragment=percentage,compression=(none|zlib|lzo)\fR
+PEB mapping table options. Configure backup copy, log pages, migration threshold,
+reserved PEBs per fragment (1%-80%), and compression.
+.TP
+.BR \-O ", " \-\-offsets_table " " \fIhas_copy=(enable|disable),compression=(none|zlib|lzo)\fR
+Offsets table options. Control backup copy and compression settings.
+.TP
+.BR \-S ", " \-\-segbmap " " \fIhas_copy=(enable|disable),log_pages=value,migration_threshold=value,compression=(none|zlib|lzo)\fR
+Segment bitmap options. Configure backup copy, log pages, migration threshold, and compression.
+.TP
+.BR \-T ", " \-\-btree " " \fImin_index_area_size=value,leaf_node_log_pages=value,hybrid_node_log_pages=value,index_node_log_pages=value\fR
+Btrees' options. Configure index area size and log pages for different node types.
+.TP
+.BR \-U ", " \-\-user_data_segment " " \fIlog_pages=value,migration_threshold=value,compression=(none|zlib|lzo)\fR
+User data segment options. Configure log pages, migration threshold, and compression.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH TUNABLE PARAMETERS
+.TP
+.B Backup Copy Options
+Control whether backup copies of critical structures (block bitmap, segment bitmap,
+mapping table, offsets table) are maintained. Options: enable or disable.
+.TP
+.B Compression Options
+Set compression type for various file system structures. Options: none, zlib, lzo.
+.TP
+.B Log Pages
+Configure the number of log pages for different structures.
+.TP
+.B Migration Threshold
+Set the maximum number of migration PEBs for segments.
+.TP
+.B Reserved PEBs per Fragment
+Configure the percentage of PEBs reserved per fragment (1%-80%).
+.SH EXIT STATUS
+.B tune.ssdfs
+exits with status 0 on success, or with non-zero status on error.
+.SH EXAMPLES
+Display current configuration:
+.br
+.B # tune.ssdfs -g /mnt/ssdfs
+
+Set volume label:
+.br
+.B # tune.ssdfs -L "MyStorage" /mnt/ssdfs
+
+Enable backup copy for block bitmap with ZLIB compression:
+.br
+.B # tune.ssdfs -B has_copy=enable,compression=zlib /mnt/ssdfs
+
+Configure mapping table with specific settings:
+.br
+.B # tune.ssdfs -M has_copy=enable,log_pages=16,migration_threshold=10,reserved_pebs_per_fragment=20,compression=lzo /mnt/ssdfs
+
+Set user data segment compression:
+.br
+.B # tune.ssdfs -U compression=zlib /mnt/ssdfs
+
+Configure btree parameters:
+.br
+.B # tune.ssdfs -T min_index_area_size=256,leaf_node_log_pages=8 /mnt/ssdfs
+.SH NOTES
+Some parameter changes may require unmounting and remounting the file system
+to take effect. Always backup important data before making configuration changes.
+
+The reserved PEBs per fragment percentage affects space utilization and
+performance. Higher values provide better wear leveling but reduce available space.
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR fsck.ssdfs (8),
+.BR dump.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2023-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

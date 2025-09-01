@@ -1,0 +1,116 @@
+.TH FSCK.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+fsck.ssdfs \- check and recover SSDFS file system
+.SH SYNOPSIS
+.B fsck.ssdfs
+.RI [ options ]
+.I device
+.SH DESCRIPTION
+.B fsck.ssdfs
+checks the consistency of SSDFS file system and optionally repairs it.
+This utility performs various consistency checks on the file system
+structures and can automatically repair detected errors or corruption.
+.SH OPTIONS
+.TP
+.BR \-B ", " \-\-pagesize " " \fIsize\fR
+Page size of target device. Supported sizes: 4KB, 8KB, 16KB, 32KB.
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-e ", " \-\-erasesize " " \fIsize\fR
+Erase size of target device. Supported sizes: 128KB, 256KB, 512KB,
+1MB, 2MB, 4MB, 8MB, and larger powers of 2.
+.TP
+.BR \-f ", " \-\-force
+Force checking even if filesystem is marked clean.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-j ", " \-\-threads " " \fInumber\fR
+Define threads number for parallel processing.
+.TP
+.BR \-n ", " \-\-no-change
+Make no changes to the filesystem (read-only check).
+.TP
+.BR \-p ", " \-\-auto-repair
+Automatic repair of detected errors without user interaction.
+.TP
+.BR \-q ", " \-\-quiet
+Quiet execution (useful for scripts).
+.TP
+.BR \-s ", " \-\-segsize " " \fIsize\fR
+Segment size of target device. Supported sizes: 128KB, 256KB, 512KB,
+1MB, 2MB, 4MB, 8MB, 16MB, 32MB, 64MB, and larger powers of 2.
+.TP
+.BR \-y ", " \-\-yes-all-questions
+Assume YES to all questions (non-interactive mode).
+.TP
+.BR \-v ", " \-\-be-verbose
+Be verbose during operation.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH OPERATION MODES
+.B fsck.ssdfs
+can operate in several modes depending on the options provided:
+.TP
+.B Check mode (default)
+Performs consistency checks and reports errors without making changes.
+.TP
+.B Repair mode (-p)
+Automatically repairs detected errors without user interaction.
+.TP
+.B Interactive mode
+Prompts user for confirmation before making repairs (default unless -p or -y specified).
+.TP
+.B Read-only mode (-n)
+Only performs checks without any modifications to the filesystem.
+.SH EXIT STATUS
+.B fsck.ssdfs
+exits with the following status codes:
+.TP
+0
+No errors detected.
+.TP
+1
+File system errors corrected.
+.TP
+2
+File system errors detected but not corrected.
+.TP
+4
+File system errors detected, corrections recommended.
+.TP
+8
+Operational error.
+.TP
+16
+Usage or syntax error.
+.SH EXAMPLES
+Check filesystem without making changes:
+.br
+.B # fsck.ssdfs -n /dev/sdb1
+
+Automatically repair filesystem:
+.br
+.B # fsck.ssdfs -p /dev/sdb1
+
+Force check even if filesystem is clean:
+.br
+.B # fsck.ssdfs -f /dev/sdb1
+
+Verbose check with automatic yes to all questions:
+.br
+.B # fsck.ssdfs -v -y /dev/sdb1
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR tune.ssdfs (8),
+.BR dump.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

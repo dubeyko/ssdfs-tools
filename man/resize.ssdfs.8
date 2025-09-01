@@ -1,0 +1,118 @@
+.TH RESIZE.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+resize.ssdfs \- resize volume of SSDFS file system
+.SH SYNOPSIS
+.B resize.ssdfs
+.RI [ options ]
+.IR device | image-file
+.SH DESCRIPTION
+.B resize.ssdfs
+resizes SSDFS file system volume by growing or shrinking the available space.
+This utility can expand or reduce the file system size while preserving data integrity.
+Various resize methods are supported including segment-based and percentage-based operations.
+.SH OPTIONS
+.TP
+.BR \-b ", " \-\-make-snapshot
+Make volume snapshot before resize operation for safety.
+.TP
+.BR \-c ", " \-\-check-by-fsck
+Check volume by fsck after resize operation to verify consistency.
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-g ", " \-\-grow-by-segments " " \fInumber\fR
+Grow volume by specified number of segments.
+.TP
+.BR \-G ", " \-\-grow-by-percentage " " \fIpercentage\fR
+Grow volume by percentage value.
+.TP
+.BR \-f ", " \-\-force
+Force file system volume resize (skip some safety checks).
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-L ", " \-\-label " " \fIstring\fR
+Set a volume label during resize.
+.TP
+.BR \-n ", " \-\-new_size " " \fIsize\fR
+Specify new volume size in bytes.
+.TP
+.BR \-r ", " \-\-rollback
+Rollback volume resize operation (undo previous resize).
+.TP
+.BR \-s ", " \-\-shrink-by-segments " " \fInumber\fR
+Shrink volume by specified number of segments.
+.TP
+.BR \-S ", " \-\-shrink-by-percentage " " \fIpercentage\fR
+Shrink volume by percentage value.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH OPERATION MODES
+.B resize.ssdfs
+supports several resize methods:
+.TP
+.B Grow Operations
+Expand file system size using segments (-g), percentage (-G), or absolute size (-n).
+.TP
+.B Shrink Operations
+Reduce file system size using segments (-s), percentage (-S), or absolute size (-n).
+.TP
+.B Rollback Operation
+Undo previous resize operation (-r).
+.SH SAFETY FEATURES
+.TP
+.B Snapshot Creation
+Use -b to create a snapshot before resize for data protection.
+.TP
+.B Post-resize Check
+Use -c to automatically run fsck after resize to verify file system consistency.
+.TP
+.B Force Override
+Use -f to bypass some safety checks (use with caution).
+.SH EXIT STATUS
+.B resize.ssdfs
+exits with status 0 on success, or with non-zero status on error.
+.SH EXAMPLES
+Grow volume by 100 segments with snapshot:
+.br
+.B # resize.ssdfs -b -g 100 /dev/sdb1
+
+Shrink volume by 20% with post-check:
+.br
+.B # resize.ssdfs -c -S 20 /dev/sdb1
+
+Resize to specific size (1GB):
+.br
+.B # resize.ssdfs -n 1073741824 /dev/sdb1
+
+Rollback previous resize operation:
+.br
+.B # resize.ssdfs -r /dev/sdb1
+
+Safe resize with all protections:
+.br
+.B # resize.ssdfs -b -c -g 50 /dev/sdb1
+.SH NOTES
+.B resize.ssdfs
+requires the file system to be unmounted before resize operations.
+Always backup important data before resizing.
+
+Growing operations are generally safer than shrinking operations.
+When shrinking, ensure sufficient free space exists to avoid data loss.
+
+Segment-based operations align with file system boundaries and are
+typically more efficient than percentage-based operations.
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR fsck.ssdfs (8),
+.BR tune.ssdfs (8),
+.BR snapshotfs.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2023-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

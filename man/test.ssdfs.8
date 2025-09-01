@@ -1,0 +1,151 @@
+.TH TEST.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+test.ssdfs \- test SSDFS file system
+.SH SYNOPSIS
+.B test.ssdfs
+.RI [ options ]
+.IR device | image-file
+.SH DESCRIPTION
+.B test.ssdfs
+performs unit tests for SSDFS file system subsystems.
+This utility provides comprehensive testing capabilities for various
+file system components including btrees, bitmaps, mapping tables,
+and memory primitives.
+.SH OPTIONS
+.TP
+.BR \-a ", " \-\-all
+Test all subsystems.
+.TP
+.BR \-b ", " \-\-block-bitmap " " \fIcapacity=value,pre-alloc=value,alloc=value,invalidate=value,reserve=value\fR
+Define block bitmap testing options with capacity, pre-allocation, allocation,
+invalidation, and reservation parameters.
+.TP
+.BR \-d ", " \-\-shared-dictionary " " \fInames_number=value,name_len=value,step_factor=value\fR
+Define shared dictionary testing options including number of names,
+name length, and step factor.
+.TP
+.BR \-D ", " \-\-shared-extents-tree " " \fIextents_number=value,extent_len=value,ref_count_max=value\fR
+Define shared extents tree testing options with number of extents,
+extent length, and maximum reference count.
+.TP
+.BR \-e ", " \-\-extent " " \fImax_len=value\fR
+Define extent related thresholds with maximum length.
+.TP
+.BR \-f ", " \-\-file " " \fImax_count=value,max_size=value\fR
+Define file related thresholds including maximum count and size.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-m ", " \-\-mapping-table " " \fIiterations=value,mappings_per_iter=value,add_migrations_per_iter=value,exclude_migrations_per_iter=value\fR
+Define PEB mapping table testing options with iterations and migration parameters.
+.TP
+.BR \-M ", " \-\-memory-primitives " " \fIiterations=value,capacity=value,count=value,item_size=value,test_folio_vector,test_folio_array,test_dynamic_array,test_all\fR
+Define memory primitives testing options for various data structures.
+.TP
+.BR \-n ", " \-\-snapshots-tree " " \fIsnapshots_number=value\fR
+Define snapshots tree testing options with number of snapshots.
+.TP
+.BR \-o ", " \-\-offset-table " " \fIcapacity=value\fR
+Define offsets table testing options with capacity parameter.
+.TP
+.BR \-p ", " \-\-pagesize " " \fIsize\fR
+Page size of target device. Supported sizes: 4096, 8192, 16384, 32768 bytes.
+.TP
+.BR \-s ", " \-\-subsystem " " \fIsubsystem_list\fR
+Define testing subsystems. Options: dentries_tree, extents_tree, block_bitmap,
+offset_table, mapping_table, memory_primitives, segment_bitmap,
+shared_dictionary, xattr_tree, shared_extents_tree, snapshots_tree.
+.TP
+.BR \-S ", " \-\-segment-bitmap " " \fIiterations=value,using_segs_per_iter=value,used_segs_per_iter=value,pre_dirty_segs_per_iter=value,dirty_segs_per_iter=value,cleaned_segs_per_iter=value\fR
+Define segment bitmap testing options with various segment state parameters.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.TP
+.BR \-x ", " \-\-xattr-tree " " \fIxattrs_number=value,name_len=value,step_factor=value,blob_len=value,blob_pattern=value\fR
+Define xattrs tree testing options with extended attributes parameters.
+.SH TESTABLE SUBSYSTEMS
+.B test.ssdfs
+can test the following subsystems:
+.TP
+.B dentries_tree
+Directory entries btree operations and consistency.
+.TP
+.B extents_tree
+File extents btree operations and management.
+.TP
+.B block_bitmap
+Block allocation bitmap functionality.
+.TP
+.B offset_table
+Block-to-offset translation table operations.
+.TP
+.B mapping_table
+Physical Erase Block (PEB) mapping table operations.
+.TP
+.B memory_primitives
+Low-level memory management structures (folio arrays, dynamic arrays).
+.TP
+.B segment_bitmap
+Segment state bitmap operations.
+.TP
+.B shared_dictionary
+Shared string dictionary functionality.
+.TP
+.B xattr_tree
+Extended attributes btree operations.
+.TP
+.B shared_extents_tree
+Shared extents reference tracking.
+.TP
+.B snapshots_tree
+File system snapshots management.
+.SH EXIT STATUS
+.B test.ssdfs
+exits with status 0 if all tests pass, or with non-zero status if any test fails.
+.SH EXAMPLES
+Test all subsystems:
+.br
+.B # test.ssdfs -a /dev/sdb1
+
+Test specific subsystem:
+.br
+.B # test.ssdfs -s block_bitmap /dev/sdb1
+
+Test block bitmap with custom parameters:
+.br
+.B # test.ssdfs -b capacity=1024,pre-alloc=100,alloc=200 /dev/sdb1
+
+Test mapping table with specific iterations:
+.br
+.B # test.ssdfs -m iterations=100,mappings_per_iter=10 /dev/sdb1
+
+Test multiple subsystems:
+.br
+.B # test.ssdfs -s dentries_tree,extents_tree,block_bitmap /dev/sdb1
+
+Test with custom page size:
+.br
+.B # test.ssdfs -p 8192 -a /dev/sdb1
+.SH NOTES
+.B test.ssdfs
+is primarily intended for SSDFS file system development and validation.
+Test operations may modify the target device/image file, so use with caution
+on production systems.
+
+Some tests may take considerable time to complete, especially with large
+iteration counts or capacity values.
+
+Testing helps ensure the reliability and correctness of SSDFS file system
+implementations across different configurations and workloads.
+.SH SEE ALSO
+.BR mkfs.ssdfs (8),
+.BR fsck.ssdfs (8),
+.BR dump.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2021-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear

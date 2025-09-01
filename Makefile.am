@@ -3,6 +3,6 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib sbin include
+SUBDIRS = lib sbin include man
 
 dist_noinst_SCRIPTS = autogen.sh

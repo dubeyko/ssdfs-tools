@@ -1,0 +1,119 @@
+.TH MKFS.SSDFS 8 "2025-08-30" "ssdfs-utils" "System Administration Commands"
+.SH NAME
+mkfs.ssdfs \- create volume of SSDFS file system
+.SH SYNOPSIS
+.B mkfs.ssdfs
+.RI [ options ]
+.I device
+.SH DESCRIPTION
+.B mkfs.ssdfs
+creates SSDFS file system on a given device or image file.
+SSDFS is a flash-friendly file system designed with goals to:
+.br
+(1) take into account the open-channel SSD model;
+.br
+(2) decrease as much as possible the write amplification issue;
+.br
+(3) decrease as much as possible the GC activity;
+.br
+(4) widely use the compression, delta-encoding, and deduplication;
+.br
+(5) prolong SSD lifetime;
+.br
+(6) decrease TCO cost of data infrastructure.
+.SH OPTIONS
+.TP
+.BR \-B ", " \-\-blkbmap " " \fIhas_copy,compression=(none|zlib|lzo)\fR
+Block bitmap options. The \fIhas_copy\fR option enables backup copy,
+and \fIcompression\fR sets the compression type.
+.TP
+.BR \-C ", " \-\-compression " " \fI(none|zlib|lzo)\fR
+Global compression type support. Options are: none, zlib, lzo.
+.TP
+.BR \-D ", " \-\-nand-dies " " \fIcount\fR
+NAND dies count. Must be an even number.
+.TP
+.BR \-d ", " \-\-debug
+Show debug output.
+.TP
+.BR \-e ", " \-\-erasesize " " \fIsize\fR
+Erase size of target device. Supported sizes: 128KB, 256KB, 512KB,
+1MB, 2MB, 4MB, 8MB, and larger powers of 2.
+.TP
+.BR \-f ", " \-\-force
+Force overwrite of existing filesystem.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-i ", " \-\-inode_size " " \fIsize\fR
+Inode size in bytes. Supported sizes: 256B, 512B, 1KB, 2KB, 4KB.
+.TP
+.BR \-j ", " \-\-threads " " \fInumber\fR
+Define erase threads number.
+.TP
+.BR \-L ", " \-\-label " " \fIlabel\fR
+Set a volume label.
+.TP
+.BR \-M ", " \-\-maptbl " " \fIhas_copy,stripes_per_fragment=value,...\fR
+PEB mapping table options. Full syntax:
+has_copy,stripes_per_fragment=\fIvalue\fR,fragments_per_peb=\fIvalue\fR,log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,reserved_pebs_per_fragment=\fIpercentage\fR,compression=(none|zlib|lzo).
+.TP
+.BR \-m ", " \-\-migration-threshold " " \fIvalue\fR
+Max amount of migration PEBs for segment.
+.TP
+.BR \-O ", " \-\-offsets_table " " \fIhas_copy,compression=(none|zlib|lzo)\fR
+Offsets table options.
+.TP
+.BR \-p ", " \-\-pagesize " " \fIsize\fR
+Page size of target device. Supported sizes: 4KB, 8KB, 16KB, 32KB.
+.TP
+.BR \-q ", " \-\-quiet
+Quiet execution (useful for scripts).
+.TP
+.BR \-R ", " \-\-erase-device
+Erase whole device or partition by mkfs.
+.TP
+.BR \-S ", " \-\-segbmap " " \fIhas_copy,segs_per_chain=value,...\fR
+Segment bitmap options. Full syntax:
+has_copy,segs_per_chain=\fIvalue\fR,fragments_per_peb=\fIvalue\fR,log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,compression=(none|zlib|lzo).
+.TP
+.BR \-s ", " \-\-segsize " " \fIsize\fR
+Segment size of target device. Supported sizes: 128KB, 256KB, 512KB,
+1MB, 2MB, 4MB, 8MB, 16MB, 32MB, 64MB, and larger powers of 2.
+.TP
+.BR \-T ", " \-\-btree " " \fInode_size=value,min_index_area_size=value,...\fR
+Btrees' options. Full syntax:
+node_size=\fIvalue\fR,min_index_area_size=\fIvalue\fR,leaf_node_log_pages=\fIvalue\fR,hybrid_node_log_pages=\fIvalue\fR,index_node_log_pages=\fIvalue\fR.
+.TP
+.BR \-U ", " \-\-user_data_segment " " \fIlog_pages=value,...\fR
+User data segment options. Full syntax:
+log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,compression=(none|zlib|lzo).
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH EXIT STATUS
+.B mkfs.ssdfs
+exits with status 0 on success, or with non-zero status on error.
+.SH EXAMPLES
+Create SSDFS filesystem on /dev/sdb1:
+.br
+.B # mkfs.ssdfs /dev/sdb1
+
+Create SSDFS filesystem with 8KB page size and ZLIB compression:
+.br
+.B # mkfs.ssdfs -p 8KB -C zlib /dev/sdb1
+
+Create SSDFS filesystem with custom label:
+.br
+.B # mkfs.ssdfs -L "MyStorage" /dev/sdb1
+.SH SEE ALSO
+.BR fsck.ssdfs (8),
+.BR tune.ssdfs (8),
+.BR dump.ssdfs (8)
+.SH AUTHORS
+Viacheslav Dubeyko <slava@dubeyko.com>
+.SH COPYRIGHT
+Copyright (c) 2014-2025 Viacheslav Dubeyko
+.br
+SPDX-License-Identifier: BSD-3-Clause-Clear
