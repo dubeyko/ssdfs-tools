@@ -84,6 +84,7 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 
 	switch (seg_type) {
 	case SSDFS_SB_SEG_TYPE:
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
 		page_size = PAGE_CACHE_SIZE;
 		break;
 
@@ -206,6 +207,7 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 
 	switch (seg_type) {
 	case SSDFS_SB_SEG_TYPE:
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
 		page_size = PAGE_CACHE_SIZE;
 		break;
 
@@ -287,6 +289,7 @@ u32 calculate_metadata_blks(struct ssdfs_volume_layout *layout,
 
 	switch (seg_type) {
 	case SSDFS_SB_SEG_TYPE:
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
 		page_size = PAGE_CACHE_SIZE;
 		break;
 
@@ -2282,6 +2285,7 @@ void __commit_log_footer(struct ssdfs_volume_layout *layout,
 
 	switch (seg_type) {
 	case SSDFS_SUPERBLOCK:
+	case SSDFS_INITIAL_SNAPSHOT:
 		page_size = SSDFS_4KB;
 		break;
 
