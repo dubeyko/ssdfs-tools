@@ -209,6 +209,34 @@ int ssdfs_dumpfs_read_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 	return 0;
 }
 
+int ssdfs_dumpfs_read_logical_block(struct ssdfs_dumpfs_environment *env,
+				    u64 peb_id, u32 peb_size,
+				    u32 log_offset, u32 log_size,
+				    u32 block_offset, u32 size,
+				    void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += block_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf, env->base.show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read logical block: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
 int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
 				   u32 log_offset, u32 log_size,

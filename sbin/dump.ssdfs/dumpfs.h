@@ -53,13 +53,15 @@ enum SSDFS_DUMPFS_PARSE_FLAGS {
 	SSDFS_PARSE_BLK2OFF_TABLE	= 1 << 3,
 	SSDFS_PARSE_BLOCK_STATE_AREA	= 1 << 4,
 	SSDFS_PARSE_MAPTBL_CACHE_AREA	= 1 << 5,
-	SSDFS_PARSE_FLAGS_MAX		= 0x3F
+	SSDFS_PARSE_MAPPING_TABLE	= 1 << 6,
+	SSDFS_PARSE_FLAGS_MAX		= 0x7F
 };
 
 #define SSDFS_PARSE_ALL_MASK \
 	(SSDFS_PARSE_HEADER | SSDFS_PARSE_LOG_FOOTER | \
 	 SSDFS_PARSE_BLOCK_BITMAP | SSDFS_PARSE_BLK2OFF_TABLE | \
-	 SSDFS_PARSE_BLOCK_STATE_AREA | SSDFS_PARSE_MAPTBL_CACHE_AREA)
+	 SSDFS_PARSE_BLOCK_STATE_AREA | SSDFS_PARSE_MAPTBL_CACHE_AREA | \
+	 SSDFS_PARSE_MAPPING_TABLE)
 
 /*
  * struct ssdfs_peb_dump_environment - PEB dump environment
@@ -166,6 +168,11 @@ int ssdfs_dumpfs_read_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,
 				   void *buf);
+int ssdfs_dumpfs_read_logical_block(struct ssdfs_dumpfs_environment *env,
+				    u64 peb_id, u32 peb_size,
+				    u32 log_offset, u32 log_size,
+				    u32 block_offset, u32 size,
+				    void *buf);
 int ssdfs_dumpfs_read_log_footer(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
 				   u32 log_offset, u32 log_size,
