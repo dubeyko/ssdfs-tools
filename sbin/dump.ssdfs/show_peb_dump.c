@@ -20,6 +20,7 @@
  */
 
 #include "dumpfs.h"
+#include "segbmap.h"
 
 /************************************************************************
  *                     Show PEB dump command                            *
@@ -3873,6 +3874,9 @@ int ssdfs_dumpfs_parse_peb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 	return err;
 }
 
+typedef int (*metadata_parse_func)(struct ssdfs_dumpfs_environment *env,
+				   u8 *frag_buf, u32 frag_size);
+
 static
 int ssdfs_dumpfs_parse_maptbl_fragment(struct ssdfs_dumpfs_environment *env,
 					u8 *frag_buf, u32 frag_size)
@@ -3930,11 +3934,212 @@ int ssdfs_dumpfs_parse_maptbl_fragment(struct ssdfs_dumpfs_environment *env,
 	return err;
 }
 
+static inline
+u32 ssdfs_segbmap_get_item_byte_offset(u32 fragment_item)
+{
+	u32 hdr_size = sizeof(struct ssdfs_segbmap_fragment_header);
+	u32 items_per_byte = SSDFS_ITEMS_PER_BYTE(SSDFS_SEG_STATE_BITS);
+	return hdr_size + (fragment_item / items_per_byte);
+}
+
+static inline
+int ssdfs_segbmap_get_state_from_byte(u8 *byte_ptr, u32 byte_item)
+{
+	u32 shift;
+
+	shift = byte_item * SSDFS_SEG_STATE_BITS;
+	return (int)((*byte_ptr >> shift) & SSDFS_SEG_STATE_MASK);
+}
+
 static
-int ssdfs_dumpfs_parse_maptbl_plain_block(struct ssdfs_dumpfs_environment *env,
+int ssdfs_dumpfs_parse_segbmap_fragment(struct ssdfs_dumpfs_environment *env,
+					u8 *frag_buf, u32 frag_size)
+{
+	struct ssdfs_segbmap_fragment_header *hdr;
+	u8 *byte_ptr;
+	size_t hdr_size = sizeof(struct ssdfs_segbmap_fragment_header);
+	u32 items_per_byte = SSDFS_ITEMS_PER_BYTE(SSDFS_SEG_STATE_BITS);
+	u8 flags;
+	u16 total_segs;
+	u64 start_seg;
+	u32 byte_offset;
+	u32 byte_item;
+	int state;
+	int i;
+	int err = 0;
+
+	frag_size = min_t(u32, frag_size, env->base.page_size);
+
+	hdr = (struct ssdfs_segbmap_fragment_header *)frag_buf;
+
+	SSDFS_DUMPFS_DUMP(env, "SEGMENT BITMAP HEADER:\n");
+
+	SSDFS_DUMPFS_DUMP(env, "MAGIC: %#x\n", le16_to_cpu(hdr->magic));
+	SSDFS_DUMPFS_DUMP(env, "SEG_INDEX: %u\n", le16_to_cpu(hdr->seg_index));
+	SSDFS_DUMPFS_DUMP(env, "PEB_INDEX: %u\n", le16_to_cpu(hdr->peb_index));
+
+	flags = hdr->flags;
+
+	SSDFS_DUMPFS_DUMP(env, "HEADER FLAGS: ");
+
+	if (flags & SSDFS_SEGBMAP_FRAG_ZLIB_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_FRAG_ZLIB_COMPR ");
+
+	if (flags & SSDFS_SEGBMAP_FRAG_LZO_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_FRAG_LZO_COMPR ");
+
+	if (flags == 0)
+		SSDFS_DUMPFS_DUMP(env, "NONE");
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	SSDFS_DUMPFS_DUMP(env, "SEG_TYPE: %u\n", hdr->seg_type);
+	start_seg = le64_to_cpu(hdr->start_item);
+	SSDFS_DUMPFS_DUMP(env, "START_ITEM: %llu\n", start_seg);
+	SSDFS_DUMPFS_DUMP(env, "SEQUENCE_ID: %u\n", le16_to_cpu(hdr->sequence_id));
+	SSDFS_DUMPFS_DUMP(env, "FRAGMENT_BYTES: %u\n",
+						le16_to_cpu(hdr->fragment_bytes));
+
+	SSDFS_DUMPFS_DUMP(env, "CHECKSUM: %#x\n", le32_to_cpu(hdr->checksum));
+
+	total_segs = le16_to_cpu(hdr->total_segs);
+	SSDFS_DUMPFS_DUMP(env, "TOTAL_SEGS: %u\n", total_segs);
+	SSDFS_DUMPFS_DUMP(env, "CLEAN_OR_USING_SEGS: %u\n",
+					le16_to_cpu(hdr->clean_or_using_segs));
+	SSDFS_DUMPFS_DUMP(env, "USED_OR_DIRTY_SEGS: %u\n",
+					le16_to_cpu(hdr->used_or_dirty_segs));
+	SSDFS_DUMPFS_DUMP(env, "BAD_SEGS: %u\n", le16_to_cpu(hdr->bad_segs));
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	for (i = 0; i < total_segs; i++) {
+		byte_offset = ssdfs_segbmap_get_item_byte_offset(i);
+
+		if (byte_offset >= frag_size) {
+			err = -ERANGE;
+			SSDFS_ERR("invalid byte_offset %u\n",
+				  byte_offset);
+			goto finish_parsing;
+		}
+
+		byte_item = i - ((byte_offset - hdr_size) * items_per_byte);
+
+		byte_ptr = frag_buf + byte_offset;
+		state = ssdfs_segbmap_get_state_from_byte(byte_ptr, byte_item);
+
+		switch (state) {
+		case SSDFS_SEG_CLEAN:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_CLEAN\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_DATA_USING:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_DATA_USING\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_LEAF_NODE_USING:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_LEAF_NODE_USING\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_HYBRID_NODE_USING:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_HYBRID_NODE_USING\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_INDEX_NODE_USING:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_INDEX_NODE_USING\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_RESERVED:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_RESERVED\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_USED:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_USED\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_PRE_DIRTY:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_PRE_DIRTY\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_DIRTY:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_DIRTY\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_BAD:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_BAD\n",
+					  i, start_seg + i);
+			break;
+
+		default:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_UNKNOWN_STATE\n",
+					  i, start_seg + i);
+			break;
+		}
+	}
+
+finish_parsing:
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	if (env->is_raw_dump_requested) {
+		u32 offset = 0;
+		u32 displayed_bytes = 0;
+
+		do {
+			u8 *ptr = frag_buf + displayed_bytes;
+			u32 rest_bytes = frag_size - displayed_bytes;
+			int res;
+
+			res = ssdfs_dumpfs_show_raw_string(env, offset,
+							   ptr, rest_bytes);
+			if (res < 0)
+				break;
+
+			offset += res;
+			displayed_bytes += res;
+		} while (displayed_bytes < frag_size);
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
+	return err;
+}
+
+static
+int ssdfs_dumpfs_parse_metadata_plain_block(struct ssdfs_dumpfs_environment *env,
 					  struct ssdfs_metadata_descriptor *desc,
 					  u32 block_index,
-					  u32 byte_offset)
+					  u32 byte_offset,
+					  metadata_parse_func do_parsing)
 {
 	u8 *block_buf = NULL;
 	size_t buf_size = env->base.page_size;
@@ -3946,7 +4151,7 @@ int ssdfs_dumpfs_parse_maptbl_plain_block(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %zu\n", buf_size);
-		goto finish_parse_maptbl_block;
+		goto finish_parse_metadata_block;
 	}
 
 	offset = le32_to_cpu(desc->offset);
@@ -3970,21 +4175,21 @@ int ssdfs_dumpfs_parse_maptbl_plain_block(struct ssdfs_dumpfs_environment *env,
 			  env->peb.log_offset,
 			  byte_offset, offset,
 			  err);
-		goto finish_parse_maptbl_block;
+		goto finish_parse_metadata_block;
 	}
 
-	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE BLOCK: block_index[%d] \n",
+	SSDFS_DUMPFS_DUMP(env, "METADATA BLOCK: block_index[%d] \n",
 			  block_index);
 
-	err = ssdfs_dumpfs_parse_maptbl_fragment(env, block_buf, buf_size);
+	err = do_parsing(env, block_buf, buf_size);
 	if (err) {
-		SSDFS_ERR("fail to parse mapping table's fragment: "
+		SSDFS_ERR("fail to parse metadata structure's fragment: "
 			  "block_index %u, err %d\n",
 			  block_index, err);
-		goto finish_parse_maptbl_block;
+		goto finish_parse_metadata_block;
 	}
 
-finish_parse_maptbl_block:
+finish_parse_metadata_block:
 	if (block_buf)
 		free(block_buf);
 	block_buf = NULL;
@@ -3993,11 +4198,12 @@ finish_parse_maptbl_block:
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_uncompr_blob(struct ssdfs_dumpfs_environment *env,
-					   struct ssdfs_fragment_desc *frag_desc,
-					   u32 block_index,
-					   u32 frag_index,
-					   u32 byte_offset)
+int ssdfs_dumpfs_parse_metadata_uncompr_blob(struct ssdfs_dumpfs_environment *env,
+					     struct ssdfs_fragment_desc *frag_desc,
+					     u32 block_index,
+					     u32 frag_index,
+					     u32 byte_offset,
+					     metadata_parse_func do_parsing)
 {
 	u8 *blob_buf = NULL;
 	u32 offset;
@@ -4014,7 +4220,7 @@ int ssdfs_dumpfs_parse_maptbl_uncompr_blob(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %u\n", uncompr_bytes);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	err = ssdfs_dumpfs_read_logical_block(env,
@@ -4035,21 +4241,21 @@ int ssdfs_dumpfs_parse_maptbl_uncompr_blob(struct ssdfs_dumpfs_environment *env,
 			  env->peb.log_offset,
 			  byte_offset, offset,
 			  err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
-	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE BLOCK: block_index[%d][%d] \n",
+	SSDFS_DUMPFS_DUMP(env, "METADATA BLOCK: block_index[%d][%d] \n",
 			  block_index, frag_index);
 
-	err = ssdfs_dumpfs_parse_maptbl_fragment(env, blob_buf, uncompr_bytes);
+	err = do_parsing(env, blob_buf, uncompr_bytes);
 	if (err) {
-		SSDFS_ERR("fail to parse mapping table's fragment: "
+		SSDFS_ERR("fail to parse metadata structure's fragment: "
 			  "block_index %u, frag_index %u, err %d\n",
 			  block_index, frag_index, err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
-finish_parse_maptbl_blob:
+finish_parse_metadata_blob:
 	if (blob_buf)
 		free(blob_buf);
 	blob_buf = NULL;
@@ -4058,11 +4264,12 @@ finish_parse_maptbl_blob:
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_zlib_blob(struct ssdfs_dumpfs_environment *env,
-					struct ssdfs_fragment_desc *frag_desc,
-					u32 block_index,
-					u32 frag_index,
-					u32 byte_offset)
+int ssdfs_dumpfs_parse_metadata_zlib_blob(struct ssdfs_dumpfs_environment *env,
+					  struct ssdfs_fragment_desc *frag_desc,
+					  u32 block_index,
+					  u32 frag_index,
+					  u32 byte_offset,
+					  metadata_parse_func do_parsing)
 {
 	u8 *blob_buf = NULL;
 	u8 *uncompr_data = NULL;
@@ -4088,7 +4295,7 @@ int ssdfs_dumpfs_parse_maptbl_zlib_blob(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %u\n", compr_bytes);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	uncompr_data = malloc(uncompr_bytes);
@@ -4096,7 +4303,7 @@ int ssdfs_dumpfs_parse_maptbl_zlib_blob(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %u\n", uncompr_bytes);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	err = ssdfs_dumpfs_read_logical_block(env,
@@ -4117,7 +4324,7 @@ int ssdfs_dumpfs_parse_maptbl_zlib_blob(struct ssdfs_dumpfs_environment *env,
 			  env->peb.log_offset,
 			  byte_offset, offset,
 			  err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	err = ssdfs_zlib_decompress(blob_buf,
@@ -4129,21 +4336,21 @@ int ssdfs_dumpfs_parse_maptbl_zlib_blob(struct ssdfs_dumpfs_environment *env,
 		SSDFS_ERR("fail to decompress: "
 			  "compr_bytes %u, uncompr_bytes %u, err %d\n",
 			  compr_bytes, uncompr_bytes, err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
-	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE BLOCK: block_index[%d][%d] \n",
+	SSDFS_DUMPFS_DUMP(env, "METADATA BLOCK: block_index[%d][%d] \n",
 			  block_index, frag_index);
 
-	err = ssdfs_dumpfs_parse_maptbl_fragment(env, uncompr_data, uncompr_bytes);
+	err = do_parsing(env, uncompr_data, uncompr_bytes);
 	if (err) {
-		SSDFS_ERR("fail to parse mapping table's fragment: "
+		SSDFS_ERR("fail to parse metadata structure's fragment: "
 			  "block_index %u, frag_index %u, err %d\n",
 			  block_index, frag_index, err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
-finish_parse_maptbl_blob:
+finish_parse_metadata_blob:
 	if (uncompr_data)
 		free(uncompr_data);
 	uncompr_data = NULL;
@@ -4156,11 +4363,12 @@ finish_parse_maptbl_blob:
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_lzo_blob(struct ssdfs_dumpfs_environment *env,
-					struct ssdfs_fragment_desc *frag_desc,
-					u32 block_index,
-					u32 frag_index,
-					u32 byte_offset)
+int ssdfs_dumpfs_parse_metadata_lzo_blob(struct ssdfs_dumpfs_environment *env,
+					 struct ssdfs_fragment_desc *frag_desc,
+					 u32 block_index,
+					 u32 frag_index,
+					 u32 byte_offset,
+					 metadata_parse_func do_parsing)
 {
 	u8 *blob_buf = NULL;
 	u8 *uncompr_data = NULL;
@@ -4186,7 +4394,7 @@ int ssdfs_dumpfs_parse_maptbl_lzo_blob(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %u\n", compr_bytes);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	uncompr_data = malloc(uncompr_bytes);
@@ -4194,7 +4402,7 @@ int ssdfs_dumpfs_parse_maptbl_lzo_blob(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %u\n", uncompr_bytes);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	err = ssdfs_dumpfs_read_logical_block(env,
@@ -4215,7 +4423,7 @@ int ssdfs_dumpfs_parse_maptbl_lzo_blob(struct ssdfs_dumpfs_environment *env,
 			  env->peb.log_offset,
 			  byte_offset, offset,
 			  err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
 	err = ssdfs_lzo_decompress(blob_buf,
@@ -4227,21 +4435,21 @@ int ssdfs_dumpfs_parse_maptbl_lzo_blob(struct ssdfs_dumpfs_environment *env,
 		SSDFS_ERR("fail to decompress: "
 			  "compr_bytes %u, uncompr_bytes %u, err %d\n",
 			  compr_bytes, uncompr_bytes, err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
-	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE BLOCK: block_index[%d][%d] \n",
+	SSDFS_DUMPFS_DUMP(env, "METADATA BLOCK: block_index[%d][%d] \n",
 			  block_index, frag_index);
 
-	err = ssdfs_dumpfs_parse_maptbl_fragment(env, uncompr_data, uncompr_bytes);
+	err = do_parsing(env, uncompr_data, uncompr_bytes);
 	if (err) {
-		SSDFS_ERR("fail to parse mapping table's fragment: "
+		SSDFS_ERR("fail to parse metadata structure's fragment: "
 			  "block_index %u, frag_index %u, err %d\n",
 			  block_index, frag_index, err);
-		goto finish_parse_maptbl_blob;
+		goto finish_parse_metadata_blob;
 	}
 
-finish_parse_maptbl_blob:
+finish_parse_metadata_blob:
 	if (uncompr_data)
 		free(uncompr_data);
 	uncompr_data = NULL;
@@ -4254,10 +4462,11 @@ finish_parse_maptbl_blob:
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
+int ssdfs_dumpfs_parse_metadata_portion(struct ssdfs_dumpfs_environment *env,
 					u32 block_index,
 					u32 area_offset,
-					u32 portion_offset)
+					u32 portion_offset,
+					metadata_parse_func do_parsing)
 {
 	struct ssdfs_block_state_descriptor *blk_desc;
 	struct ssdfs_fragments_chain_header *chain_hdr;
@@ -4274,7 +4483,7 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %zu\n", buf_size);
-		goto finish_parse_maptbl_block;
+		goto finish_parse_metadata_block;
 	}
 
 	SSDFS_DBG(env->base.show_debug,
@@ -4299,7 +4508,7 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 			  env->peb.log_offset,
 			  portion_offset,
 			  err);
-		goto finish_parse_maptbl_block;
+		goto finish_parse_metadata_block;
 	}
 
 	blk_desc = (struct ssdfs_block_state_descriptor *)desc_buf;
@@ -4309,7 +4518,7 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 		err = -EIO;
 		SSDFS_ERR("chain header magic is invalid: "
 			  "magic %#x\n", chain_hdr->magic);
-		goto finish_parse_maptbl_block;
+		goto finish_parse_metadata_block;
 	}
 
 	fragments_count = le16_to_cpu(chain_hdr->fragments_count);
@@ -4331,11 +4540,12 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 
 		switch (frag_desc->type) {
 		case SSDFS_FRAGMENT_UNCOMPR_BLOB:
-			err = ssdfs_dumpfs_parse_maptbl_uncompr_blob(env,
+			err = ssdfs_dumpfs_parse_metadata_uncompr_blob(env,
 								     frag_desc,
 								     block_index,
 								     i,
-								     area_offset);
+								     area_offset,
+								     do_parsing);
 			if (err) {
 				SSDFS_ERR("fail to parse uncompr blob: "
 					  "block_index %u, frag_index %d, "
@@ -4345,11 +4555,12 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 			break;
 
 		case SSDFS_FRAGMENT_ZLIB_BLOB:
-			err = ssdfs_dumpfs_parse_maptbl_zlib_blob(env,
+			err = ssdfs_dumpfs_parse_metadata_zlib_blob(env,
 								  frag_desc,
 								  block_index,
 								  i,
-								  area_offset);
+								  area_offset,
+								  do_parsing);
 			if (err) {
 				SSDFS_ERR("fail to parse zlib blob: "
 					  "block_index %u, frag_index %d, "
@@ -4359,11 +4570,12 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 			break;
 
 		case SSDFS_FRAGMENT_LZO_BLOB:
-			err = ssdfs_dumpfs_parse_maptbl_lzo_blob(env,
+			err = ssdfs_dumpfs_parse_metadata_lzo_blob(env,
 								 frag_desc,
 								 block_index,
 								 i,
-								 area_offset);
+								 area_offset,
+								 do_parsing);
 			if (err) {
 				SSDFS_ERR("fail to parse lzo blob: "
 					  "block_index %u, frag_index %d, "
@@ -4379,7 +4591,7 @@ int ssdfs_dumpfs_parse_maptbl_portion(struct ssdfs_dumpfs_environment *env,
 		}
 	}
 
-finish_parse_maptbl_block:
+finish_parse_metadata_block:
 	if (desc_buf)
 		free(desc_buf);
 	desc_buf = NULL;
@@ -4388,12 +4600,13 @@ finish_parse_maptbl_block:
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_block(struct ssdfs_dumpfs_environment *env,
-				    struct ssdfs_metadata_descriptor *desc_array,
-				    u32 block_index,
-				    u8 area_type,
-				    u16 log_start_page,
-				    u32 offset_inside_area)
+int ssdfs_dumpfs_parse_metadata_block(struct ssdfs_dumpfs_environment *env,
+				struct ssdfs_metadata_descriptor *desc_array,
+				u32 block_index,
+				u8 area_type,
+				u16 log_start_page,
+				u32 offset_inside_area,
+				metadata_parse_func do_parsing)
 {
 	struct ssdfs_metadata_descriptor *desc;
 	u32 area_offset;
@@ -4407,10 +4620,11 @@ int ssdfs_dumpfs_parse_maptbl_block(struct ssdfs_dumpfs_environment *env,
 	switch (area_type) {
 	case SSDFS_LOG_MAIN_AREA:
 		desc = &desc_array[SSDFS_COLD_PAYLOAD_AREA_INDEX];
-		err = ssdfs_dumpfs_parse_maptbl_plain_block(env,
-							    desc,
-							    block_index,
-							    offset_inside_area);
+		err = ssdfs_dumpfs_parse_metadata_plain_block(env,
+							      desc,
+							      block_index,
+							      offset_inside_area,
+							      do_parsing);
 		break;
 
 	case SSDFS_LOG_DIFFS_AREA:
@@ -4425,10 +4639,11 @@ int ssdfs_dumpfs_parse_maptbl_block(struct ssdfs_dumpfs_environment *env,
 			  area_offset, area_type,
 			  portion_offset, block_index);
 
-		err = ssdfs_dumpfs_parse_maptbl_portion(env,
-							block_index,
-							area_offset,
-							portion_offset);
+		err = ssdfs_dumpfs_parse_metadata_portion(env,
+							  block_index,
+							  area_offset,
+							  portion_offset,
+							  do_parsing);
 		break;
 
 	case SSDFS_LOG_JOURNAL_AREA:
@@ -4443,10 +4658,11 @@ int ssdfs_dumpfs_parse_maptbl_block(struct ssdfs_dumpfs_environment *env,
 			  area_offset, area_type,
 			  portion_offset, block_index);
 
-		err = ssdfs_dumpfs_parse_maptbl_portion(env,
-							block_index,
-							area_offset,
-							portion_offset);
+		err = ssdfs_dumpfs_parse_metadata_portion(env,
+							  block_index,
+							  area_offset,
+							  portion_offset,
+							  do_parsing);
 
 	default:
 		err = -EIO;
@@ -4455,7 +4671,7 @@ int ssdfs_dumpfs_parse_maptbl_block(struct ssdfs_dumpfs_environment *env,
 	}
 
 	if (err) {
-		SSDFS_ERR("fail to parse mapping table's block: "
+		SSDFS_ERR("fail to parse metadata structure's block: "
 			  "block_index %u, err %d\n",
 			  block_index, err);
 	}
@@ -4464,10 +4680,10 @@ int ssdfs_dumpfs_parse_maptbl_block(struct ssdfs_dumpfs_environment *env,
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_blocks(struct ssdfs_dumpfs_environment *env,
-				     struct ssdfs_metadata_descriptor *desc_array,
-				     void *data, u16 compr_size,
-				     u16 uncompr_size)
+int ssdfs_dumpfs_parse_metadata_blocks(struct ssdfs_dumpfs_environment *env,
+				struct ssdfs_metadata_descriptor *desc_array,
+				void *data, u16 compr_size, u16 uncompr_size,
+				metadata_parse_func do_parsing)
 {
 	struct ssdfs_block_descriptor *blk_desc;
 	size_t blk_desc_size = sizeof(struct ssdfs_block_descriptor);
@@ -4494,13 +4710,14 @@ int ssdfs_dumpfs_parse_maptbl_blocks(struct ssdfs_dumpfs_environment *env,
 			  "log_start_page %u, offset_inside_area %u\n",
 			  log_start_page, offset_inside_area);
 
-		err = ssdfs_dumpfs_parse_maptbl_block(env, desc_array,
-						      block_index,
-						      area_type,
-						      log_start_page,
-						      offset_inside_area);
+		err = ssdfs_dumpfs_parse_metadata_block(env, desc_array,
+							block_index,
+							area_type,
+							log_start_page,
+							offset_inside_area,
+							do_parsing);
 		if (err) {
-			SSDFS_ERR("fail to parse maptbl block: "
+			SSDFS_ERR("fail to parse metadata structure's block: "
 				  "index %d, area_type %#x, "
 				  "log_start_page %u, offset_inside_area %u, "
 				  "err %d\n",
@@ -4513,8 +4730,9 @@ int ssdfs_dumpfs_parse_maptbl_blocks(struct ssdfs_dumpfs_environment *env,
 }
 
 static
-int __ssdfs_dumpfs_parse_mapping_table(struct ssdfs_dumpfs_environment *env,
-					struct ssdfs_metadata_descriptor *desc_array)
+int __ssdfs_dumpfs_parse_metadata(struct ssdfs_dumpfs_environment *env,
+				  struct ssdfs_metadata_descriptor *desc_array,
+				  metadata_parse_func do_parsing)
 {
 	struct ssdfs_metadata_descriptor *desc;
 	struct ssdfs_area_block_table *area_hdr = NULL;
@@ -4529,7 +4747,7 @@ int __ssdfs_dumpfs_parse_mapping_table(struct ssdfs_dumpfs_environment *env,
 	int err = 0;
 
 	SSDFS_DBG(env->base.show_debug,
-		  "parse mapping table\n");
+		  "parse metadata structure\n");
 
 	desc = &desc_array[SSDFS_BLK_DESC_AREA_INDEX];
 
@@ -4551,7 +4769,7 @@ int __ssdfs_dumpfs_parse_mapping_table(struct ssdfs_dumpfs_environment *env,
 		err = -ENOMEM;
 		SSDFS_ERR("fail to allocate memory: "
 			  "size %u\n", area_size);
-		goto finish_parse_mapping_table;
+		goto finish_parse_metadata;
 	}
 
 	memset(area_buf, 0, area_size);
@@ -4571,14 +4789,14 @@ int __ssdfs_dumpfs_parse_mapping_table(struct ssdfs_dumpfs_environment *env,
 			  env->peb.id, env->peb.peb_size,
 			  env->peb.log_index,
 			  env->peb.log_offset, err);
-		goto finish_parse_mapping_table;
+		goto finish_parse_metadata;
 	}
 
 	if (area_size < area_hdr_size) {
 		err = -EIO;
 		SSDFS_ERR("area_size %u < area_hdr_size %zu\n",
 			  area_size, area_hdr_size);
-		goto finish_parse_mapping_table;
+		goto finish_parse_metadata;
 	}
 
 parse_next_area:
@@ -4594,7 +4812,7 @@ parse_next_area:
 		SSDFS_ERR("fragments_count %u > MAX %u\n",
 			  fragments_count,
 			  SSDFS_BLK_TABLE_MAX);
-		goto finish_parse_mapping_table;
+		goto finish_parse_metadata;
 	}
 
 	fragments_count = min_t(u16, fragments_count,
@@ -4615,7 +4833,7 @@ parse_next_area:
 			SSDFS_ERR("size %u is lesser than %u\n",
 				  area_size - parsed_bytes,
 				  compr_size);
-			goto finish_parse_mapping_table;
+			goto finish_parse_metadata;
 		}
 
 		switch (area_hdr->chain_hdr.type) {
@@ -4668,11 +4886,12 @@ parse_next_area:
 			break;
 		}
 
-		err = ssdfs_dumpfs_parse_maptbl_blocks(env, desc_array, data,
+		err = ssdfs_dumpfs_parse_metadata_blocks(env, desc_array, data,
 						le16_to_cpu(frag->compr_size),
-						le16_to_cpu(frag->uncompr_size));
+						le16_to_cpu(frag->uncompr_size),
+						do_parsing);
 		if (err) {
-			SSDFS_ERR("fail to parse mapping table's blocks: "
+			SSDFS_ERR("fail to parse metadata structure's blocks: "
 				  "err %d\n", err);
 		}
 
@@ -4692,7 +4911,7 @@ finish_parse_fragment:
 			err = -ERANGE;
 			SSDFS_ERR("type %#x is invalid\n",
 				  le8_to_cpu(frag->type));
-			goto finish_parse_mapping_table;
+			goto finish_parse_metadata;
 		}
 
 		if (le32_to_cpu(frag->offset) != parsed_bytes) {
@@ -4704,12 +4923,12 @@ finish_parse_fragment:
 				SSDFS_ERR("offset %u != parsed_bytes %u\n",
 					  le32_to_cpu(frag->offset),
 					  parsed_bytes);
-				goto finish_parse_mapping_table;
+				goto finish_parse_metadata;
 			} else if (le32_to_cpu(frag->offset) % SSDFS_4KB) {
 				err = -ERANGE;
 				SSDFS_ERR("unaligned offset %u\n",
 					  le32_to_cpu(frag->offset));
-				goto finish_parse_mapping_table;
+				goto finish_parse_metadata;
 			}
 
 			parsed_bytes += rest_bytes;
@@ -4719,14 +4938,14 @@ finish_parse_fragment:
 				SSDFS_ERR("offset %u != parsed_bytes %u\n",
 					  le32_to_cpu(frag->offset),
 					  parsed_bytes);
-				goto finish_parse_mapping_table;
+				goto finish_parse_metadata;
 			}
 		}
 
 		goto parse_next_area;
 	}
 
-finish_parse_mapping_table:
+finish_parse_metadata:
 	if (area_buf)
 		free(area_buf);
 	area_buf = NULL;
@@ -4751,7 +4970,27 @@ int ssdfs_dumpfs_parse_maptbl_in_full_log(struct ssdfs_dumpfs_environment *env,
 	env->base.page_size = 1 << seg_hdr->volume_hdr.log_pagesize;
 
 	desc_array = seg_hdr->desc_array;
-	return __ssdfs_dumpfs_parse_mapping_table(env, desc_array);
+	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
+					     ssdfs_dumpfs_parse_maptbl_fragment);
+}
+
+static
+int ssdfs_dumpfs_parse_segbmap_in_full_log(struct ssdfs_dumpfs_environment *env,
+					   struct ssdfs_segment_header *seg_hdr)
+{
+	struct ssdfs_metadata_descriptor *desc_array;
+
+	if (le16_to_cpu(seg_hdr->seg_type) != SSDFS_SEGBMAP_SEG_TYPE)
+		return 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse segment bitmap in full log\n");
+
+	env->base.page_size = 1 << seg_hdr->volume_hdr.log_pagesize;
+
+	desc_array = seg_hdr->desc_array;
+	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
+					     ssdfs_dumpfs_parse_segbmap_fragment);
 }
 
 static
@@ -4989,11 +5228,21 @@ finish_parse_maptbl_cache:
 
 parse_mapping_table:
 	if (!(env->peb.parse_flags & SSDFS_PARSE_MAPPING_TABLE))
-		goto parse_log_footer;
+		goto parse_segment_bitmap;
 
 	err = ssdfs_dumpfs_parse_maptbl_in_full_log(env, &buf->seg_hdr);
 	if (err) {
 		SSDFS_ERR("fail to parse maping table: err %d\n", err);
+		err = 0;
+	}
+
+parse_segment_bitmap:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_SEGMENT_BITMAP))
+		goto parse_log_footer;
+
+	err = ssdfs_dumpfs_parse_segbmap_in_full_log(env, &buf->seg_hdr);
+	if (err) {
+		SSDFS_ERR("fail to parse segment bitmap: err %d\n", err);
 		err = 0;
 	}
 
@@ -5052,7 +5301,27 @@ int ssdfs_dumpfs_parse_maptbl_in_partial_log(struct ssdfs_dumpfs_environment *en
 	env->base.page_size = 1 << pl_hdr->log_pagesize;
 
 	desc_array = pl_hdr->desc_array;
-	return __ssdfs_dumpfs_parse_mapping_table(env, desc_array);
+	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
+					     ssdfs_dumpfs_parse_maptbl_fragment);
+}
+
+static
+int ssdfs_dumpfs_parse_segbmap_in_partial_log(struct ssdfs_dumpfs_environment *env,
+					      struct ssdfs_partial_log_header *pl_hdr)
+{
+	struct ssdfs_metadata_descriptor *desc_array;
+
+	if (le16_to_cpu(pl_hdr->seg_type) != SSDFS_SEGBMAP_SEG_TYPE)
+		return 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse segment bitmap in partial log\n");
+
+	env->base.page_size = 1 << pl_hdr->log_pagesize;
+
+	desc_array = pl_hdr->desc_array;
+	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
+					     ssdfs_dumpfs_parse_segbmap_fragment);
 }
 
 static
@@ -5206,11 +5475,21 @@ finish_parse_blk_desc_array:
 
 parse_mapping_table:
 	if (!(env->peb.parse_flags & SSDFS_PARSE_MAPPING_TABLE))
-		goto parse_log_footer;
+		goto parse_segment_bitmap;
 
 	err = ssdfs_dumpfs_parse_maptbl_in_partial_log(env, &buf->pl_hdr);
 	if (err) {
 		SSDFS_ERR("fail to parse maping table: err %d\n", err);
+		err = 0;
+	}
+
+parse_segment_bitmap:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_SEGMENT_BITMAP))
+		goto parse_log_footer;
+
+	err = ssdfs_dumpfs_parse_segbmap_in_partial_log(env, &buf->pl_hdr);
+	if (err) {
+		SSDFS_ERR("fail to parse segment bitmap: err %d\n", err);
 		err = 0;
 	}
 

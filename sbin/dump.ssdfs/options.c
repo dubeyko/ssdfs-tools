@@ -46,8 +46,8 @@ void print_usage(void)
 		   "log_index=value,log_count=value,log_size=value,"
 		   "parse_header,parse_log_footer,parse_block_bitmap,"
 		   "parse_blk2off_table,parse_block_state_area,"
-		   "parse_maptbl_cache,parse_maptbl,parse_all,raw_dump]\t  "
-		   "show PEB dump.\n");
+		   "parse_maptbl_cache,parse_maptbl,parse_segbmap,"
+		   "parse_all,raw_dump]\t  show PEB dump.\n");
 	SSDFS_INFO("\t [-q|--quiet]\t\t  quiet execution (useful for scripts).\n");
 	SSDFS_INFO("\t [-r|--raw-dump show,offset=value,size=value]\t  "
 		   "show raw dump.\n");
@@ -97,6 +97,7 @@ void parse_options(int argc, char *argv[],
 		PEB_PARSE_BLOCK_STATE_OPT,
 		PEB_PARSE_MAPTBL_CACHE_OPT,
 		PEB_PARSE_MAPTBL_OPT,
+		PEB_PARSE_SEGBMAP_OPT,
 		PEB_PARSE_ALL_OPT,
 		PEB_SHOW_RAW_DUMP_OPT,
 	};
@@ -114,6 +115,7 @@ void parse_options(int argc, char *argv[],
 		[PEB_PARSE_BLOCK_STATE_OPT]	= "parse_block_state_area",
 		[PEB_PARSE_MAPTBL_CACHE_OPT]	= "parse_maptbl_cache",
 		[PEB_PARSE_MAPTBL_OPT]		= "parse_maptbl",
+		[PEB_PARSE_SEGBMAP_OPT]		= "parse_segbmap",
 		[PEB_PARSE_ALL_OPT]		= "parse_all",
 		[PEB_SHOW_RAW_DUMP_OPT]		= "raw_dump",
 		NULL
@@ -222,6 +224,9 @@ void parse_options(int argc, char *argv[],
 					break;
 				case PEB_PARSE_MAPTBL_OPT:
 					peb->parse_flags |= SSDFS_PARSE_MAPPING_TABLE;
+					break;
+				case PEB_PARSE_SEGBMAP_OPT:
+					peb->parse_flags |= SSDFS_PARSE_SEGMENT_BITMAP;
 					break;
 				case PEB_PARSE_ALL_OPT:
 					peb->parse_flags = SSDFS_PARSE_ALL_MASK;
