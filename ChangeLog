@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.64 [October 01, 2025]
+    (*) [dumpfs] Fix logic of dumping block bitmap.
+
 v.4.63 [September 29, 2025]
     (*) [dumpfs] Implement dumping logic of segment bitmap.
 

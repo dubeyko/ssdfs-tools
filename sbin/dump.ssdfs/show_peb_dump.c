@@ -614,10 +614,12 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 		u32 compr_size;
 		u32 uncompr_size;
 
-		if (i > 0 && ((size - *parsed_bytes) < frag_desc_size)) {
-			SSDFS_ERR("size %u is lesser than %zu\n",
-				  size - *parsed_bytes,
-				  frag_desc_size);
+		if (*parsed_bytes >= size) {
+			SSDFS_ERR("invalid fragments_count: "
+				  "index %d, fragments_count %u, "
+				  "size %u, parsed_bytes %u\n",
+				  i, fragments_count,
+				  size, *parsed_bytes);
 			return -EINVAL;
 		}
 
