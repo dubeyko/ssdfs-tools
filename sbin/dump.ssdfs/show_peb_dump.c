@@ -2106,8 +2106,8 @@ parse_next_area:
 			return -EINVAL;
 		}
 
-		switch (area_hdr->chain_hdr.type) {
-		case SSDFS_BLK_DESC_ZLIB_CHAIN_HDR:
+		switch (frag->type) {
+		case SSDFS_DATA_BLK_DESC_ZLIB:
 			uncompr_data = malloc(uncompr_size);
 			if (!uncompr_data) {
 				err = -ENOMEM;
@@ -2129,7 +2129,7 @@ parse_next_area:
 			data = uncompr_data;
 			break;
 
-		case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
+		case SSDFS_DATA_BLK_DESC_LZO:
 			uncompr_data = malloc(uncompr_size);
 			if (!uncompr_data) {
 				err = -ENOMEM;
@@ -4838,8 +4838,8 @@ parse_next_area:
 			goto finish_parse_metadata;
 		}
 
-		switch (area_hdr->chain_hdr.type) {
-		case SSDFS_BLK_DESC_ZLIB_CHAIN_HDR:
+		switch (frag->type) {
+		case SSDFS_DATA_BLK_DESC_ZLIB:
 			uncompr_data = malloc(uncompr_size);
 			if (!uncompr_data) {
 				err = -ENOMEM;
@@ -4861,7 +4861,7 @@ parse_next_area:
 			data = uncompr_data;
 			break;
 
-		case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
+		case SSDFS_DATA_BLK_DESC_LZO:
 			uncompr_data = malloc(uncompr_size);
 			if (!uncompr_data) {
 				err = -ENOMEM;

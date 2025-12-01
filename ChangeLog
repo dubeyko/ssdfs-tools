@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.65 [November 30, 2025]
+    (*) [dumpfs] Fix logic of dumping offset translation table.
+
 v.4.64 [October 01, 2025]
     (*) [dumpfs] Fix logic of dumping block bitmap.
 
