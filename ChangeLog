@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.66 [December 28, 2025]
+    (*) [mkfs] Fix incorrect logic of mark_unallocated_pebs_as_pre_erased().
+
 v.4.65 [November 30, 2025]
     (*) [dumpfs] Fix logic of dumping offset translation table.
 

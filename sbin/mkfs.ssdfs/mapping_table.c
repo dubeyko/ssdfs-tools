@@ -1243,6 +1243,10 @@ int mark_unallocated_pebs_as_pre_erased(struct ssdfs_volume_layout *layout)
 				  start_peb, pebs_count, peb_id);
 
 			BUG_ON(peb_id < start_peb);
+
+			if (pebs_count == 0)
+				goto define_next_peb_id;
+
 			BUG_ON(peb_id >= (start_peb + pebs_count));
 
 			peb_index = peb_id - start_peb;
@@ -1252,6 +1256,7 @@ int mark_unallocated_pebs_as_pre_erased(struct ssdfs_volume_layout *layout)
 				define_peb_as_pre_erased(pebtbl, j);
 			}
 
+define_next_peb_id:
 			peb_id = start_peb + pebs_count;
 		}
 
