@@ -5,7 +5,7 @@
  *
  * sbin/fsck.ssdfs/recover_file_system.c - recover file system functionality.
  *
- * Copyright (c) 2025 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2025-2026 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

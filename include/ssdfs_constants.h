@@ -5,7 +5,7 @@
  *
  * include/ssdfs_constants.h - SSDFS constant values.
  *
- * Copyright (c) 2020-2025 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2020-2026 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

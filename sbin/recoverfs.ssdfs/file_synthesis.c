@@ -6,7 +6,7 @@
  * sbin/recoverfs.ssdfs/file_synthesis.c - implementation of files
  *                                         synthesis logic.
  *
- * Copyright (c) 2023-2025 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2023-2026 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

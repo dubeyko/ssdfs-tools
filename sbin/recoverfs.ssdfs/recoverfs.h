@@ -5,7 +5,7 @@
  *
  * sbin/recoverfs.ssdfs/recoverfs.h - declarations of recoverfs utility.
  *
- * Copyright (c) 2022-2025 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2022-2026 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

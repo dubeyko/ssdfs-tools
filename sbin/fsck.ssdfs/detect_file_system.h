@@ -5,7 +5,7 @@
  *
  * sbin/fsck.ssdfs/detect_file_system.h - declarations of structures for detection step.
  *
- * Copyright (c) 2025 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2025-2026 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *

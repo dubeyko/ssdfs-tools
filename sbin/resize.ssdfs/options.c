@@ -5,7 +5,7 @@
  *
  * sbin/resize.ssdfs/options.c - parsing command line options functionality.
  *
- * Copyright (c) 2023-2025 Viacheslav Dubeyko <slava@dubeyko.com>
+ * Copyright (c) 2023-2026 Viacheslav Dubeyko <slava@dubeyko.com>
  * All rights reserved.
  *              http://www.ssdfs.org/
  *
