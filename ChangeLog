@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.67 [January 20, 2026]
+    (*) [dumpfs] Add dumping logic for using_invalidated erase block state.
+
 v.4.66 [December 28, 2025]
     (*) [mkfs] Fix incorrect logic of mark_unallocated_pebs_as_pre_erased().
 

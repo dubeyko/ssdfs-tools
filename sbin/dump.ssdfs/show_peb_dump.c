@@ -2458,6 +2458,21 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_RECOVERING_STATE, ");
 			break;
 
+		case SSDFS_MAPTBL_USING_INVALIDATED_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env,
+				"SSDFS_MAPTBL_USING_INVALIDATED_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_SRC_USING_INVALIDATED_STATE:
+			SSDFS_DUMPFS_DUMP(env,
+				"SSDFS_MAPTBL_MIGRATION_SRC_USING_INVALIDATED_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_USING_INVALIDATED_STATE:
+			SSDFS_DUMPFS_DUMP(env,
+				"SSDFS_MAPTBL_MIGRATION_DST_USING_INVALIDATED_STATE, ");
+			break;
+
 		default:
 			SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_UNKNOWN_PEB_STATE, ");
 			break;
@@ -3844,6 +3859,18 @@ int ssdfs_dumpfs_parse_peb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 			SSDFS_DUMPFS_DUMP(env, "state: SSDFS_MAPTBL_RECOVERING_STATE, ");
 			break;
 
+		case SSDFS_MAPTBL_USING_INVALIDATED_PEB_STATE:
+			SSDFS_DUMPFS_DUMP(env, "state: SSDFS_MAPTBL_USING_INVALIDATED_PEB_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_SRC_USING_INVALIDATED_STATE:
+			SSDFS_DUMPFS_DUMP(env, "state: SSDFS_MAPTBL_MIGRATION_SRC_USING_INVALIDATED_STATE, ");
+			break;
+
+		case SSDFS_MAPTBL_MIGRATION_DST_USING_INVALIDATED_STATE:
+			SSDFS_DUMPFS_DUMP(env, "state: SSDFS_MAPTBL_MIGRATION_DST_USING_INVALIDATED_STATE, ");
+			break;
+
 		default:
 			SSDFS_DUMPFS_DUMP(env, "state: SSDFS_MAPTBL_UNKNOWN_PEB_STATE, ");
 			break;
@@ -4097,6 +4124,13 @@ int ssdfs_dumpfs_parse_segbmap_fragment(struct ssdfs_dumpfs_environment *env,
 			SSDFS_DUMPFS_DUMP(env,
 					  "[%d] SEG %llu: "
 					  "SSDFS_SEG_BAD\n",
+					  i, start_seg + i);
+			break;
+
+		case SSDFS_SEG_DATA_USING_INVALIDATED:
+			SSDFS_DUMPFS_DUMP(env,
+					  "[%d] SEG %llu: "
+					  "SSDFS_SEG_DATA_USING_INVALIDATED\n",
 					  i, start_seg + i);
 			break;
 
