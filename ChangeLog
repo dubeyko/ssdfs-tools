@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.68 [January 29, 2026]
+    (*) On-disk layout has version 1.20.
+
 v.4.67 [January 20, 2026]
     (*) [dumpfs] Add dumping logic for using_invalidated erase block state.
 

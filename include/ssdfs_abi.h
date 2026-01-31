@@ -65,7 +65,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		19
+#define SSDFS_MINOR_REVISION		20
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -2765,36 +2765,6 @@ struct ssdfs_dentries_btree_node_header {
 	(SSDFS_SHARED_DICT_INDEX_BMAP_SIZE + SSDFS_RAW_SHARED_DICT_BMAP_SIZE)
 
 /*
- * struct ssdfs_shdict_search_key - generalized search key
- * @name.hash_lo: low hash32 value
- * @name.hash_hi: tail hash of the name
- * @range.prefix_len: prefix length in bytes
- * @range.start_index: starting index into lookup table2
- * @range.reserved: private part of concrete structure
- *
- * This key is generalized version of the first part of any
- * item in lookup1, lookup2 and hash tables. This structure
- * is needed for the generic way of making search in all
- * tables.
- */
-struct ssdfs_shdict_search_key {
-/* 0x0000 */
-	union {
-		__le32 hash_lo;
-		__le32 hash_hi;
-	} name __attribute__((packed));
-
-/* 0x0004 */
-	union {
-		__le8 prefix_len;
-		__le16 start_index;
-		__le32 reserved;
-	} range __attribute__((packed));
-
-/* 0x0008 */
-} __attribute__((packed));
-
-/*
  * struct ssdfs_shdict_ltbl1_item - shared dictionary lookup table1 item
  * @hash_lo: low hash32 value
  * @start_index: starting index into lookup table2
@@ -2816,7 +2786,7 @@ struct ssdfs_shdict_ltbl1_item {
 
 /*
  * struct ssdfs_shdict_ltbl2_item - shared dictionary lookup table2 item
- * @hash_lo: low hash32 value
+ * @hash: hash value
  * @prefix_len: prefix length in bytes
  * @str_count: count of strings in the range
  * @hash_index: index of the hash in the hash table
@@ -2834,17 +2804,20 @@ struct ssdfs_shdict_ltbl1_item {
  */
 struct ssdfs_shdict_ltbl2_item {
 /* 0x0000 */
-	__le32 hash_lo;
+	__le64 hash;
+
+/* 0x0008 */
 	__le8 prefix_len;
 	__le8 str_count;
 	__le16 hash_index;
+	__le32 reserved;
 
-/* 0x0008 */
+/* 0x0010 */
 } __attribute__((packed));
 
 /*
  * struct ssdfs_shdict_htbl_item - shared dictionary hash table item
- * @hash_hi: tail hash of the name
+ * @hash: hash of the name
  * @str_offset: offset in bytes to string
  * @str_len: string length
  * @type: string type
@@ -2855,12 +2828,15 @@ struct ssdfs_shdict_ltbl2_item {
  */
 struct ssdfs_shdict_htbl_item {
 /* 0x0000 */
-	__le32 hash_hi;
+	__le64 hash;
+
+/* 0x0008 */
 	__le16 str_offset;
 	__le8 str_len;
 	__le8 type;
+	__le32 reserved;
 
-/* 0x0008 */
+/* 0x0010 */
 } __attribute__((packed));
 
 /* Name string types */
@@ -2871,6 +2847,30 @@ enum {
 	SSDFS_FULL_NAME,
 	SSDFS_NAME_TYPE_MAX
 };
+
+/*
+ * union ssdfs_shdict_search_key - generalized search key
+ * @hash_lo: low hash32 value
+ * @hash: hash of the name
+ * @ltbl1_item: lookup1 table item
+ * @ltbl2_item: lookup2 table item
+ * @ltbl1_item: lookup1 table item
+ * @htbl_item: hash table item
+ *
+ * This key is generalized version of any item in lookup1,
+ * lookup2 and hash tables. This structure is needed for
+ * the generic way of making search in all tables.
+ */
+union ssdfs_shdict_search_key {
+/* 0x0000 */
+	__le32 hash_lo;
+	__le64 hash;
+	struct ssdfs_shdict_ltbl1_item ltbl1_item;
+	struct ssdfs_shdict_ltbl2_item ltbl2_item;
+	struct ssdfs_shdict_htbl_item htbl_item;
+
+/* 0x0010 */
+} __attribute__((packed));
 
 /*
  * struct ssdfs_shared_dict_area - area descriptor
