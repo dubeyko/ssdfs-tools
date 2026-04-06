@@ -121,6 +121,26 @@ ssdfs_dumpfs_parse_fragments_chain_hdr(struct ssdfs_dumpfs_environment *env,
 			"CHAIN TYPE: SSDFS_BLK2OFF_LZO_CHAIN_HDR\n");
 		break;
 
+	case SSDFS_BLK_DESC_LZ4_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_BLK_DESC_LZ4_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK2OFF_LZ4_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_BLK2OFF_LZ4_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK_DESC_ZSTD_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_BLK_DESC_ZSTD_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_BLK2OFF_ZSTD_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_BLK2OFF_ZSTD_CHAIN_HDR\n");
+		break;
+
 	case SSDFS_BLK_BMAP_CHAIN_HDR:
 		SSDFS_DUMPFS_DUMP(env,
 			"CHAIN TYPE: SSDFS_BLK_BMAP_CHAIN_HDR\n");
@@ -224,6 +244,46 @@ void ssdfs_dumpfs_parse_fragment_header(struct ssdfs_dumpfs_environment *env,
 	case SSDFS_BLK2OFF_DESC_LZO:
 		SSDFS_DUMPFS_DUMP(env,
 			"FRAGMENT TYPE: SSDFS_BLK2OFF_DESC_LZO\n");
+		break;
+
+	case SSDFS_FRAGMENT_LZ4_BLOB:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_FRAGMENT_LZ4_BLOB\n");
+		break;
+
+	case SSDFS_DATA_BLK_DESC_LZ4:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_DATA_BLK_DESC_LZ4\n");
+		break;
+
+	case SSDFS_BLK2OFF_EXTENT_DESC_LZ4:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_BLK2OFF_EXTENT_DESC_LZ4\n");
+		break;
+
+	case SSDFS_BLK2OFF_DESC_LZ4:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_BLK2OFF_DESC_LZ4\n");
+		break;
+
+	case SSDFS_FRAGMENT_ZSTD_BLOB:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_FRAGMENT_ZSTD_BLOB\n");
+		break;
+
+	case SSDFS_DATA_BLK_DESC_ZSTD:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_DATA_BLK_DESC_ZSTD\n");
+		break;
+
+	case SSDFS_BLK2OFF_EXTENT_DESC_ZSTD:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_BLK2OFF_EXTENT_DESC_ZSTD\n");
+		break;
+
+	case SSDFS_BLK2OFF_DESC_ZSTD:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_BLK2OFF_DESC_ZSTD\n");
 		break;
 
 	case SSDFS_NEXT_TABLE_DESC:
@@ -703,6 +763,58 @@ ssdfs_dumpfs_parse_block_bitmap_fragment(struct ssdfs_dumpfs_environment *env,
 			}
 			break;
 
+		case SSDFS_FRAGMENT_LZ4_BLOB:
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				SSDFS_ERR("fail to allocate memory\n");
+
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+				raw_data_bytes = compr_size;
+			} else {
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+
+				res = ssdfs_lz4_decompress(data,
+							    uncompr_data,
+							    compr_size,
+							    uncompr_size,
+							    env->base.show_debug);
+				if (res) {
+					SSDFS_ERR("fail to decompress: err %d\n",
+						  res);
+					raw_data_bytes = compr_size;
+				} else {
+					data = uncompr_data;
+					raw_data_bytes = uncompr_size;
+				}
+			}
+			break;
+
+		case SSDFS_FRAGMENT_ZSTD_BLOB:
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				SSDFS_ERR("fail to allocate memory\n");
+
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+				raw_data_bytes = compr_size;
+			} else {
+				data = (u8 *)area_buf + offset + *parsed_bytes;
+
+				res = ssdfs_zstd_decompress(data,
+							    uncompr_data,
+							    compr_size,
+							    uncompr_size,
+							    env->base.show_debug);
+				if (res) {
+					SSDFS_ERR("fail to decompress: err %d\n",
+						  res);
+					raw_data_bytes = compr_size;
+				} else {
+					data = uncompr_data;
+					raw_data_bytes = uncompr_size;
+				}
+			}
+			break;
+
 		default:
 			data = (u8 *)area_buf + offset + *parsed_bytes;
 			raw_data_bytes = compr_size;
@@ -809,6 +921,16 @@ int ssdfs_dumpfs_parse_block_bitmap(struct ssdfs_dumpfs_environment *env,
 	case SSDFS_BLK_BMAP_LZO_BLOB:
 		SSDFS_DUMPFS_DUMP(env,
 			"BLOCK BITMAP TYPE: SSDFS_BLK_BMAP_LZO_BLOB\n");
+		break;
+
+	case SSDFS_BLK_BMAP_LZ4_BLOB:
+		SSDFS_DUMPFS_DUMP(env,
+			"BLOCK BITMAP TYPE: SSDFS_BLK_BMAP_LZ4_BLOB\n");
+		break;
+
+	case SSDFS_BLK_BMAP_ZSTD_BLOB:
+		SSDFS_DUMPFS_DUMP(env,
+			"BLOCK BITMAP TYPE: SSDFS_BLK_BMAP_ZSTD_BLOB\n");
 		break;
 
 	default:
@@ -1011,6 +1133,52 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 		err = ssdfs_lzo_decompress(fragment, uncompr_data,
 					   compr_size, uncompr_size,
 					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			*parsed_bytes += compr_size;
+			goto finish_parse_fragment;
+		}
+
+		fragment = uncompr_data;
+		break;
+
+	case SSDFS_BLK2OFF_DESC_LZ4:
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			*parsed_bytes += compr_size;
+			goto finish_parse_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_lz4_decompress(fragment, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			*parsed_bytes += compr_size;
+			goto finish_parse_fragment;
+		}
+
+		fragment = uncompr_data;
+		break;
+
+	case SSDFS_BLK2OFF_DESC_ZSTD:
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			*parsed_bytes += compr_size;
+			goto finish_parse_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_zstd_decompress(fragment, uncompr_data,
+					    compr_size, uncompr_size,
+					    env->base.show_debug);
 		if (err) {
 			SSDFS_ERR("fail to decompress: err %d\n",
 				  err);
@@ -1252,6 +1420,56 @@ int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
 		extents_count = fragment_size / extent_desc_size;
 		break;
 
+	case SSDFS_BLK2OFF_EXTENT_DESC_LZ4:
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			*parsed_bytes += compr_size;
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_lz4_decompress(fragment, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			*parsed_bytes += compr_size;
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = uncompr_data;
+		fragment_size = uncompr_size;
+		extents_count = fragment_size / extent_desc_size;
+		break;
+
+	case SSDFS_BLK2OFF_EXTENT_DESC_ZSTD:
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			*parsed_bytes += compr_size;
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = area_buf;
+
+		err = ssdfs_zstd_decompress(fragment, uncompr_data,
+					    compr_size, uncompr_size,
+					    env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			*parsed_bytes += compr_size;
+			goto finish_parse_extent_fragment;
+		}
+
+		fragment = uncompr_data;
+		fragment_size = uncompr_size;
+		extents_count = fragment_size / extent_desc_size;
+		break;
+
 	default:
 		err = -ERANGE;
 		SSDFS_ERR("unexpected fragment type %#x\n",
@@ -1370,6 +1588,12 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 
 		if (flags & SSDFS_BLK2OFF_TBL_LZO_COMPR)
 			SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK2OFF_TBL_LZO_COMPR ");
+
+		if (flags & SSDFS_BLK2OFF_TBL_LZ4_COMPR)
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK2OFF_TBL_LZ4_COMPR ");
+
+		if (flags & SSDFS_BLK2OFF_TBL_ZSTD_COMPR)
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK2OFF_TBL_ZSTD_COMPR ");
 
 		if (flags == 0)
 			SSDFS_DUMPFS_DUMP(env, "NONE");
@@ -1701,6 +1925,12 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 	if (feature_compat_ro & SSDFS_LZO_COMPAT_RO_FLAG)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_LZO_COMPAT_RO_FLAG ");
 
+	if (feature_compat_ro & SSDFS_LZ4_COMPAT_RO_FLAG)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_LZ4_COMPAT_RO_FLAG ");
+
+	if (feature_compat_ro & SSDFS_ZSTD_COMPAT_RO_FLAG)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_ZSTD_COMPAT_RO_FLAG ");
+
 	if (feature_compat_ro == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -1768,6 +1998,16 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 			"COMPRESSION: SSDFS_BLK_BMAP_LZO_COMPR_TYPE\n");
 		break;
 
+	case SSDFS_BLK_BMAP_LZ4_COMPR_TYPE:
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSION: SSDFS_BLK_BMAP_LZ4_COMPR_TYPE\n");
+		break;
+
+	case SSDFS_BLK_BMAP_ZSTD_COMPR_TYPE:
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSION: SSDFS_BLK_BMAP_ZSTD_COMPR_TYPE\n");
+		break;
+
 	default:
 		SSDFS_DUMPFS_DUMP(env, "COMPRESSION: UNKNOWN\n");
 		break;
@@ -1806,6 +2046,16 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 			"COMPRESSION: SSDFS_BLK2OFF_TBL_LZO_COMPR_TYPE\n");
 		break;
 
+	case SSDFS_BLK2OFF_TBL_LZ4_COMPR_TYPE:
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSION: SSDFS_BLK2OFF_TBL_LZ4_COMPR_TYPE\n");
+		break;
+
+	case SSDFS_BLK2OFF_TBL_ZSTD_COMPR_TYPE:
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSION: SSDFS_BLK2OFF_TBL_ZSTD_COMPR_TYPE\n");
+		break;
+
 	default:
 		SSDFS_DUMPFS_DUMP(env, "COMPRESSION: UNKNOWN\n");
 		break;
@@ -1839,6 +2089,16 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 	case SSDFS_USER_DATA_LZO_COMPR_TYPE:
 		SSDFS_DUMPFS_DUMP(env,
 			"COMPRESSION: SSDFS_USER_DATA_LZO_COMPR_TYPE\n");
+		break;
+
+	case SSDFS_USER_DATA_LZ4_COMPR_TYPE:
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSION: SSDFS_USER_DATA_LZ4_COMPR_TYPE\n");
+		break;
+
+	case SSDFS_USER_DATA_ZSTD_COMPR_TYPE:
+		SSDFS_DUMPFS_DUMP(env,
+			"COMPRESSION: SSDFS_USER_DATA_ZSTD_COMPR_TYPE\n");
 		break;
 
 	default:
@@ -2265,6 +2525,12 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 	if (flags & SSDFS_MAPTBL_CACHE_LZO_COMPR)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_CACHE_LZO_COMPR ");
 
+	if (flags & SSDFS_MAPTBL_CACHE_LZ4_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_CACHE_LZ4_COMPR ");
+
+	if (flags & SSDFS_MAPTBL_CACHE_ZSTD_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_CACHE_ZSTD_COMPR ");
+
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -2316,6 +2582,44 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		err = ssdfs_lzo_decompress(data, uncompr_data,
 					   compr_size, uncompr_size,
 					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = uncompr_data;
+	} else if (flags & SSDFS_MAPTBL_CACHE_LZ4_COMPR) {
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = (u8 *)area_buf + hdr_size;
+
+		err = ssdfs_lz4_decompress(data, uncompr_data,
+					   compr_size, uncompr_size,
+					   env->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n",
+				  err);
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = uncompr_data;
+	} else if (flags & SSDFS_MAPTBL_CACHE_ZSTD_COMPR) {
+		uncompr_data = malloc(uncompr_size);
+		if (!uncompr_data) {
+			SSDFS_ERR("fail to allocate memory\n");
+			goto finish_parse_maptbl_cache;
+		}
+
+		data = (u8 *)area_buf + hdr_size;
+
+		err = ssdfs_zstd_decompress(data, uncompr_data,
+					    compr_size, uncompr_size,
+					    env->base.show_debug);
 		if (err) {
 			SSDFS_ERR("fail to decompress: err %d\n",
 				  err);
@@ -2546,6 +2850,12 @@ void ssdfs_dumpfs_parse_maptbl_sb_header(struct ssdfs_dumpfs_environment *env,
 	if (flags & SSDFS_MAPTBL_MAKE_LZO_COMPR)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MAKE_LZO_COMPR ");
 
+	if (flags & SSDFS_MAPTBL_MAKE_LZ4_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MAKE_LZ4_COMPR ");
+
+	if (flags & SSDFS_MAPTBL_MAKE_ZSTD_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_MAPTBL_MAKE_ZSTD_COMPR ");
+
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -2664,6 +2974,12 @@ void ssdfs_dumpfs_parse_segbmap_sb_header(struct ssdfs_dumpfs_environment *env,
 
 	if (flags & SSDFS_SEGBMAP_MAKE_LZO_COMPR)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_MAKE_LZO_COMPR ");
+
+	if (flags & SSDFS_SEGBMAP_MAKE_LZ4_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_MAKE_LZ4_COMPR ");
+
+	if (flags & SSDFS_SEGBMAP_MAKE_ZSTD_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_MAKE_ZSTD_COMPR ");
 
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
@@ -4016,6 +4332,12 @@ int ssdfs_dumpfs_parse_segbmap_fragment(struct ssdfs_dumpfs_environment *env,
 
 	if (flags & SSDFS_SEGBMAP_FRAG_LZO_COMPR)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_FRAG_LZO_COMPR ");
+
+	if (flags & SSDFS_SEGBMAP_FRAG_LZ4_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_FRAG_LZ4_COMPR ");
+
+	if (flags & SSDFS_SEGBMAP_FRAG_ZSTD_COMPR)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEGBMAP_FRAG_ZSTD_COMPR ");
 
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");

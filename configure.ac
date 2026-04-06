@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 AC_PREREQ([2.69])
-AC_INIT(ssdfs-utils, 4.68, slava@dubeyko.com)
+AC_INIT(ssdfs-utils, 4.69, slava@dubeyko.com)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([include/ssdfs_abi.h])
 AC_CONFIG_HEADERS([config.h])
@@ -60,6 +60,36 @@ if test "x$HAVE_LZO2" = "xyes"; then
 fi
 
 AM_CONDITIONAL([HAVE_LZO2], [test "x$HAVE_LZO2" = "xyes"])
+
+AC_CHECK_LIB([lz4], [LZ4_compress_default],
+		[AC_DEFINE([HAVE_LIBLZ4], 1,
+			   [Define to 1 if you have the 'lz4' library (-llz4).])
+		 HAVE_LZ4=yes],
+		[AC_MSG_WARN([LZ4 library not found - LZ4 compression will be disabled])
+		 HAVE_LZ4=no])
+
+if test "x$HAVE_LZ4" = "xyes"; then
+	AC_CHECK_HEADERS([lz4.h], [],
+		[AC_MSG_WARN([LZ4 headers not found - LZ4 compression will be disabled])
+		 HAVE_LZ4=no])
+fi
+
+AM_CONDITIONAL([HAVE_LZ4], [test "x$HAVE_LZ4" = "xyes"])
+
+AC_CHECK_LIB([zstd], [ZSTD_compress],
+		[AC_DEFINE([HAVE_LIBZSTD], 1,
+			   [Define to 1 if you have the 'zstd' library (-lzstd).])
+		 HAVE_ZSTD=yes],
+		[AC_MSG_WARN([ZSTD library not found - ZSTD compression will be disabled])
+		 HAVE_ZSTD=no])
+
+if test "x$HAVE_ZSTD" = "xyes"; then
+	AC_CHECK_HEADERS([zstd.h], [],
+		[AC_MSG_WARN([ZSTD headers not found - ZSTD compression will be disabled])
+		 HAVE_ZSTD=no])
+fi
+
+AM_CONDITIONAL([HAVE_ZSTD], [test "x$HAVE_ZSTD" = "xyes"])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h limits.h paths.h stdlib.h string.h sys/ioctl.h unistd.h])

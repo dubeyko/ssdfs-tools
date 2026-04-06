@@ -539,6 +539,14 @@ static int init_segbmap_sb_header(struct ssdfs_volume_layout *layout)
 		flags |= SSDFS_SEGBMAP_MAKE_LZO_COMPR;
 		break;
 
+	case SSDFS_LZ4_BLOB:
+		flags |= SSDFS_SEGBMAP_MAKE_LZ4_COMPR;
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		flags |= SSDFS_SEGBMAP_MAKE_ZSTD_COMPR;
+		break;
+
 	default:
 		SSDFS_ERR("invalid compression type %#x\n",
 			  layout->segbmap.compression);

@@ -150,6 +150,8 @@ struct ssdfs_metadata_check {
 #define SSDFS_CRC32			(1 << 0)
 #define SSDFS_ZLIB_COMPRESSED		(1 << 1)
 #define SSDFS_LZO_COMPRESSED		(1 << 2)
+#define SSDFS_LZ4_COMPRESSED		(1 << 3)
+#define SSDFS_ZSTD_COMPRESSED		(1 << 4)
 	__le16 flags;
 	__le32 csum;
 
@@ -258,7 +260,9 @@ struct ssdfs_segbmap_sb_header {
 #define SSDFS_SEGBMAP_ERROR		(1 << 1)
 #define SSDFS_SEGBMAP_MAKE_ZLIB_COMPR	(1 << 2)
 #define SSDFS_SEGBMAP_MAKE_LZO_COMPR	(1 << 3)
-#define SSDFS_SEGBMAP_FLAGS_MASK	(0xF)
+#define SSDFS_SEGBMAP_MAKE_LZ4_COMPR	(1 << 4)
+#define SSDFS_SEGBMAP_MAKE_ZSTD_COMPR	(1 << 5)
+#define SSDFS_SEGBMAP_FLAGS_MASK	(0x3F)
 
 enum {
 	SSDFS_MAIN_MAPTBL_SEG,
@@ -322,7 +326,9 @@ struct ssdfs_maptbl_sb_header {
 #define SSDFS_MAPTBL_MAKE_LZO_COMPR	(1 << 3)
 #define SSDFS_MAPTBL_UNDER_FLUSH	(1 << 4)
 #define SSDFS_MAPTBL_START_MIGRATION	(1 << 5)
-#define SSDFS_MAPTBL_FLAGS_MASK		(0x3F)
+#define SSDFS_MAPTBL_MAKE_LZ4_COMPR	(1 << 6)
+#define SSDFS_MAPTBL_MAKE_ZSTD_COMPR	(1 << 7)
+#define SSDFS_MAPTBL_FLAGS_MASK		(0xFF)
 
 /*
  * struct ssdfs_btree_descriptor - generic btree descriptor
@@ -730,6 +736,8 @@ struct ssdfs_blk_bmap_options {
 #define SSDFS_BLK_BMAP_NOCOMPR_TYPE		(0)
 #define SSDFS_BLK_BMAP_ZLIB_COMPR_TYPE		(1)
 #define SSDFS_BLK_BMAP_LZO_COMPR_TYPE		(2)
+#define SSDFS_BLK_BMAP_LZ4_COMPR_TYPE		(3)
+#define SSDFS_BLK_BMAP_ZSTD_COMPR_TYPE		(4)
 	__le8 compression;
 	__le8 reserved;
 
@@ -750,6 +758,8 @@ struct ssdfs_blk2off_tbl_options {
 #define SSDFS_BLK2OFF_TBL_NOCOMPR_TYPE		(0)
 #define SSDFS_BLK2OFF_TBL_ZLIB_COMPR_TYPE	(1)
 #define SSDFS_BLK2OFF_TBL_LZO_COMPR_TYPE	(2)
+#define SSDFS_BLK2OFF_TBL_LZ4_COMPR_TYPE	(3)
+#define SSDFS_BLK2OFF_TBL_ZSTD_COMPR_TYPE	(4)
 	__le8 compression;
 	__le8 reserved;
 
@@ -770,6 +780,8 @@ struct ssdfs_user_data_options {
 #define SSDFS_USER_DATA_NOCOMPR_TYPE		(0)
 #define SSDFS_USER_DATA_ZLIB_COMPR_TYPE		(1)
 #define SSDFS_USER_DATA_LZO_COMPR_TYPE		(2)
+#define SSDFS_USER_DATA_LZ4_COMPR_TYPE		(3)
+#define SSDFS_USER_DATA_ZSTD_COMPR_TYPE		(4)
 	__le8 compression;
 	__le8 reserved1;
 	__le16 migration_threshold;
@@ -1389,6 +1401,8 @@ struct ssdfs_volume_state {
 /* Read-Only compatible feature flags */
 #define SSDFS_ZLIB_COMPAT_RO_FLAG	(1 << 0)
 #define SSDFS_LZO_COMPAT_RO_FLAG	(1 << 1)
+#define SSDFS_LZ4_COMPAT_RO_FLAG	(1 << 2)
+#define SSDFS_ZSTD_COMPAT_RO_FLAG	(1 << 3)
 
 #define SSDFS_FEATURE_COMPAT_SUPP \
 	(SSDFS_HAS_SEGBMAP_COMPAT_FLAG | SSDFS_HAS_MAPTBL_COMPAT_FLAG | \
@@ -1400,7 +1414,8 @@ struct ssdfs_volume_state {
 	 SSDFS_HAS_INVALID_EXTENTS_TREE_COMPAT_FLAG)
 
 #define SSDFS_FEATURE_COMPAT_RO_SUPP \
-	(SSDFS_ZLIB_COMPAT_RO_FLAG | SSDFS_LZO_COMPAT_RO_FLAG)
+	(SSDFS_ZLIB_COMPAT_RO_FLAG | SSDFS_LZO_COMPAT_RO_FLAG | \
+	 SSDFS_LZ4_COMPAT_RO_FLAG | SSDFS_ZSTD_COMPAT_RO_FLAG)
 
 #define SSDFS_FEATURE_INCOMPAT_SUPP	0ULL
 
@@ -1798,7 +1813,11 @@ struct ssdfs_fragments_chain_header {
 #define SSDFS_BLK2OFF_ZLIB_CHAIN_HDR	0x7
 #define SSDFS_BLK2OFF_LZO_CHAIN_HDR	0x8
 #define SSDFS_BLK_BMAP_CHAIN_HDR	0x9
-#define SSDFS_CHAIN_HDR_TYPE_MAX	(SSDFS_BLK_BMAP_CHAIN_HDR + 1)
+#define SSDFS_BLK_DESC_LZ4_CHAIN_HDR	0xA
+#define SSDFS_BLK2OFF_LZ4_CHAIN_HDR	0xB
+#define SSDFS_BLK_DESC_ZSTD_CHAIN_HDR	0xC
+#define SSDFS_BLK2OFF_ZSTD_CHAIN_HDR	0xD
+#define SSDFS_CHAIN_HDR_TYPE_MAX	(SSDFS_BLK2OFF_ZSTD_CHAIN_HDR + 1)
 
 /* Fragments chain flags */
 #define SSDFS_MULTIPLE_HDR_CHAIN	(1 << 0)
@@ -1851,7 +1870,15 @@ struct ssdfs_fragment_desc {
 #define SSDFS_BLK2OFF_DESC_ZLIB		12
 #define SSDFS_BLK2OFF_DESC_LZO		13
 #define SSDFS_NEXT_TABLE_DESC		14
-#define SSDFS_FRAGMENT_DESC_MAX_TYPE	(SSDFS_NEXT_TABLE_DESC + 1)
+#define SSDFS_FRAGMENT_LZ4_BLOB		15
+#define SSDFS_DATA_BLK_DESC_LZ4		16
+#define SSDFS_BLK2OFF_EXTENT_DESC_LZ4	17
+#define SSDFS_BLK2OFF_DESC_LZ4		18
+#define SSDFS_FRAGMENT_ZSTD_BLOB	19
+#define SSDFS_DATA_BLK_DESC_ZSTD	20
+#define SSDFS_BLK2OFF_EXTENT_DESC_ZSTD	21
+#define SSDFS_BLK2OFF_DESC_ZSTD		22
+#define SSDFS_FRAGMENT_DESC_MAX_TYPE	(SSDFS_BLK2OFF_DESC_ZSTD + 1)
 
 /* Fragment descriptor flags */
 #define SSDFS_FRAGMENT_HAS_CSUM		(1 << 0)
@@ -1881,7 +1908,9 @@ struct ssdfs_block_bitmap_header {
 #define SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB	(0)
 #define SSDFS_BLK_BMAP_ZLIB_BLOB		(1)
 #define SSDFS_BLK_BMAP_LZO_BLOB			(2)
-#define SSDFS_BLK_BMAP_TYPE_MAX			(SSDFS_BLK_BMAP_LZO_BLOB + 1)
+#define SSDFS_BLK_BMAP_LZ4_BLOB			(3)
+#define SSDFS_BLK_BMAP_ZSTD_BLOB		(4)
+#define SSDFS_BLK_BMAP_TYPE_MAX			(SSDFS_BLK_BMAP_ZSTD_BLOB + 1)
 	__le8 type;
 
 /* 0x0010 */
@@ -2110,6 +2139,8 @@ struct ssdfs_blk2off_table_header {
 /* 0x0008 */
 #define SSDFS_BLK2OFF_TBL_ZLIB_COMPR	(1 << 1)
 #define SSDFS_BLK2OFF_TBL_LZO_COMPR	(1 << 2)
+#define SSDFS_BLK2OFF_TBL_LZ4_COMPR	(1 << 3)
+#define SSDFS_BLK2OFF_TBL_ZSTD_COMPR	(1 << 4)
 	struct ssdfs_metadata_check check;
 
 /* 0x0010 */
@@ -2305,6 +2336,8 @@ struct ssdfs_segbmap_fragment_header {
 	__le16 peb_index;
 #define SSDFS_SEGBMAP_FRAG_ZLIB_COMPR	(1 << 0)
 #define SSDFS_SEGBMAP_FRAG_LZO_COMPR	(1 << 1)
+#define SSDFS_SEGBMAP_FRAG_LZ4_COMPR	(1 << 2)
+#define SSDFS_SEGBMAP_FRAG_ZSTD_COMPR	(1 << 3)
 	__le8 flags;
 	__le8 seg_type;
 
@@ -2455,9 +2488,11 @@ struct ssdfs_peb_table_fragment_header {
 #define SSDFS_PEBTBL_UNDER_RECOVERING		(1 << 2)
 #define SSDFS_PEBTBL_BADBLK_EXIST		(1 << 3)
 #define SSDFS_PEBTBL_TRY_CORRECT_PEBS_AGAIN	(1 << 4)
+#define SSDFS_PEBTBL_FRAG_LZ4_COMPR		(1 << 5)
+#define SSDFS_PEBTBL_FRAG_ZSTD_COMPR		(1 << 6)
 #define SSDFS_PEBTBL_FIND_RECOVERING_PEBS \
 	(SSDFS_PEBTBL_UNDER_RECOVERING | SSDFS_PEBTBL_BADBLK_EXIST)
-#define SSDFS_PEBTBL_FLAGS_MASK			0x1F
+#define SSDFS_PEBTBL_FLAGS_MASK			0x7F
 
 /* PEB table recover thresholds */
 #define SSDFS_PEBTBL_FIRST_RECOVER_TRY		(0)
@@ -2506,6 +2541,8 @@ struct ssdfs_leb_table_fragment_header {
 	__le16 magic;
 #define SSDFS_LEBTBL_FRAG_ZLIB_COMPR	(1 << 0)
 #define SSDFS_LEBTBL_FRAG_LZO_COMPR	(1 << 1)
+#define SSDFS_LEBTBL_FRAG_LZ4_COMPR	(1 << 2)
+#define SSDFS_LEBTBL_FRAG_ZSTD_COMPR	(1 << 3)
 	__le16 flags;
 	__le32 checksum;
 
@@ -2577,6 +2614,8 @@ struct ssdfs_maptbl_cache_header {
 	__le16 sequence_id;
 #define SSDFS_MAPTBL_CACHE_ZLIB_COMPR	(1 << 0)
 #define SSDFS_MAPTBL_CACHE_LZO_COMPR	(1 << 1)
+#define SSDFS_MAPTBL_CACHE_LZ4_COMPR	(1 << 2)
+#define SSDFS_MAPTBL_CACHE_ZSTD_COMPR	(1 << 3)
 	__le16 flags;
 	__le16 items_count;
 	__le16 bytes_count;

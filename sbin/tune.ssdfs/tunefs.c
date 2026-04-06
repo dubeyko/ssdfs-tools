@@ -89,6 +89,14 @@ void ssdfs_tunefs_show_current_configuration(struct ssdfs_tunefs_options *option
 		SSDFS_TUNEFS_SHOW("BLOCK BITMAP: LZO COMPRESSION\n");
 		break;
 
+	case SSDFS_BLK_BMAP_LZ4_COMPR_TYPE:
+		SSDFS_TUNEFS_SHOW("BLOCK BITMAP: LZ4 COMPRESSION\n");
+		break;
+
+	case SSDFS_BLK_BMAP_ZSTD_COMPR_TYPE:
+		SSDFS_TUNEFS_SHOW("BLOCK BITMAP: ZSTD COMPRESSION\n");
+		break;
+
 	default:
 		SSDFS_TUNEFS_SHOW("BLOCK BITMAP: UNRECOGNIZED COMPRESSION\n");
 		break;
@@ -109,6 +117,14 @@ void ssdfs_tunefs_show_current_configuration(struct ssdfs_tunefs_options *option
 
 	case SSDFS_BLK2OFF_TBL_LZO_COMPR_TYPE:
 		SSDFS_TUNEFS_SHOW("OFFSET TRANSLATION TABLE: LZO COMPRESSION\n");
+		break;
+
+	case SSDFS_BLK2OFF_TBL_LZ4_COMPR_TYPE:
+		SSDFS_TUNEFS_SHOW("OFFSET TRANSLATION TABLE: LZ4 COMPRESSION\n");
+		break;
+
+	case SSDFS_BLK2OFF_TBL_ZSTD_COMPR_TYPE:
+		SSDFS_TUNEFS_SHOW("OFFSET TRANSLATION TABLE: ZSTD COMPRESSION\n");
 		break;
 
 	default:
@@ -133,6 +149,12 @@ void ssdfs_tunefs_show_current_configuration(struct ssdfs_tunefs_options *option
 	} else if (options->old_config.segbmap_flags &
 						SSDFS_SEGBMAP_MAKE_LZO_COMPR) {
 		SSDFS_TUNEFS_SHOW("SEGMENT BITMAP: LZO COMPRESSION\n");
+	} else if (options->old_config.segbmap_flags &
+						SSDFS_SEGBMAP_MAKE_LZ4_COMPR) {
+		SSDFS_TUNEFS_SHOW("SEGMENT BITMAP: LZ4 COMPRESSION\n");
+	} else if (options->old_config.segbmap_flags &
+						SSDFS_SEGBMAP_MAKE_ZSTD_COMPR) {
+		SSDFS_TUNEFS_SHOW("SEGMENT BITMAP: ZSTD COMPRESSION\n");
 	} else {
 		SSDFS_TUNEFS_SHOW("SEGMENT BITMAP: UNCOMPRESSED BLOB\n");
 	}
@@ -149,6 +171,12 @@ void ssdfs_tunefs_show_current_configuration(struct ssdfs_tunefs_options *option
 	} else if (options->old_config.maptbl_flags &
 						SSDFS_MAPTBL_MAKE_LZO_COMPR) {
 		SSDFS_TUNEFS_SHOW("MAPPING TABLE: LZO COMPRESSION\n");
+	} else if (options->old_config.maptbl_flags &
+						SSDFS_MAPTBL_MAKE_LZ4_COMPR) {
+		SSDFS_TUNEFS_SHOW("MAPPING TABLE: LZ4 COMPRESSION\n");
+	} else if (options->old_config.maptbl_flags &
+						SSDFS_MAPTBL_MAKE_ZSTD_COMPR) {
+		SSDFS_TUNEFS_SHOW("MAPPING TABLE: ZSTD COMPRESSION\n");
 	} else {
 		SSDFS_TUNEFS_SHOW("MAPPING TABLE: UNCOMPRESSED BLOB\n");
 	}
@@ -176,6 +204,14 @@ void ssdfs_tunefs_show_current_configuration(struct ssdfs_tunefs_options *option
 
 	case SSDFS_USER_DATA_LZO_COMPR_TYPE:
 		SSDFS_TUNEFS_SHOW("USER DATA: LZO COMPRESSION\n");
+		break;
+
+	case SSDFS_USER_DATA_LZ4_COMPR_TYPE:
+		SSDFS_TUNEFS_SHOW("USER DATA: LZ4 COMPRESSION\n");
+		break;
+
+	case SSDFS_USER_DATA_ZSTD_COMPR_TYPE:
+		SSDFS_TUNEFS_SHOW("USER DATA: ZSTD COMPRESSION\n");
 		break;
 
 	default:

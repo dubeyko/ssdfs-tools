@@ -54,6 +54,10 @@ void define_compression_option(struct ssdfs_volume_layout *layout)
 		feature_compat_ro |= SSDFS_ZLIB_COMPAT_RO_FLAG;
 	else if (layout->compression == SSDFS_LZO_BLOB)
 		feature_compat_ro |= SSDFS_LZO_COMPAT_RO_FLAG;
+	else if (layout->compression == SSDFS_LZ4_BLOB)
+		feature_compat_ro |= SSDFS_LZ4_COMPAT_RO_FLAG;
+	else if (layout->compression == SSDFS_ZSTD_BLOB)
+		feature_compat_ro |= SSDFS_ZSTD_COMPAT_RO_FLAG;
 
 	layout->sb.vs.feature_compat_ro = cpu_to_le64(feature_compat_ro);
 }
@@ -81,6 +85,16 @@ int prepare_block_bitmap_options(struct ssdfs_volume_layout *layout)
 	case SSDFS_LZO_BLOB:
 		flags |= SSDFS_BLK_BMAP_MAKE_COMPRESSION;
 		compression = SSDFS_BLK_BMAP_LZO_COMPR_TYPE;
+		break;
+
+	case SSDFS_LZ4_BLOB:
+		flags |= SSDFS_BLK_BMAP_MAKE_COMPRESSION;
+		compression = SSDFS_BLK_BMAP_LZ4_COMPR_TYPE;
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		flags |= SSDFS_BLK_BMAP_MAKE_COMPRESSION;
+		compression = SSDFS_BLK_BMAP_ZSTD_COMPR_TYPE;
 		break;
 
 	default:
@@ -118,6 +132,16 @@ int prepare_blk2off_table_options(struct ssdfs_volume_layout *layout)
 	case SSDFS_LZO_BLOB:
 		flags |= SSDFS_BLK2OFF_TBL_MAKE_COMPRESSION;
 		compression = SSDFS_BLK2OFF_TBL_LZO_COMPR_TYPE;
+		break;
+
+	case SSDFS_LZ4_BLOB:
+		flags |= SSDFS_BLK2OFF_TBL_MAKE_COMPRESSION;
+		compression = SSDFS_BLK2OFF_TBL_LZ4_COMPR_TYPE;
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		flags |= SSDFS_BLK2OFF_TBL_MAKE_COMPRESSION;
+		compression = SSDFS_BLK2OFF_TBL_ZSTD_COMPR_TYPE;
 		break;
 
 	default:

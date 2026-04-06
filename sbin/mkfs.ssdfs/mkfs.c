@@ -92,6 +92,16 @@ int prepare_user_data_options(struct ssdfs_volume_layout *layout)
 		compression = SSDFS_USER_DATA_LZO_COMPR_TYPE;
 		break;
 
+	case SSDFS_LZ4_BLOB:
+		flags |= SSDFS_USER_DATA_MAKE_COMPRESSION;
+		compression = SSDFS_USER_DATA_LZ4_COMPR_TYPE;
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		flags |= SSDFS_USER_DATA_MAKE_COMPRESSION;
+		compression = SSDFS_USER_DATA_ZSTD_COMPR_TYPE;
+		break;
+
 	default:
 		SSDFS_ERR("invalid compression type %#x\n",
 			  layout->user_data_seg.compression);

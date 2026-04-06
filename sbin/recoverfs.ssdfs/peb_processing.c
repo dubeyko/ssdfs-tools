@@ -337,13 +337,11 @@ int ssdfs_copy_blk_desc_fragment(struct ssdfs_thread_state *state,
 	switch (chain_hdr->type) {
 	case SSDFS_BLK_DESC_CHAIN_HDR:
 	case SSDFS_BLK_DESC_ZLIB_CHAIN_HDR:
+	case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
+	case SSDFS_BLK_DESC_LZ4_CHAIN_HDR:
+	case SSDFS_BLK_DESC_ZSTD_CHAIN_HDR:
 		/* expected chain header type */
 		break;
-
-	case SSDFS_BLK_DESC_LZO_CHAIN_HDR:
-		SSDFS_ERR("unexpected chain header type %#x\n",
-			  chain_hdr->type);
-		return -EINVAL;
 
 	default:
 		SSDFS_ERR("unknown chain header type %#x\n",
@@ -423,8 +421,42 @@ int ssdfs_copy_blk_desc_fragment(struct ssdfs_thread_state *state,
 		break;
 
 	case SSDFS_DATA_BLK_DESC_LZO:
-		SSDFS_ERR("TODO: implement LZO support\n");
-		return -EOPNOTSUPP;
+		src_ptr = env->buffer.ptr + offset;
+		dst_ptr = SSDFS_CONTENT_BUFFER(area)->ptr;
+
+		err = ssdfs_lzo_decompress(src_ptr, dst_ptr,
+					   compr_size, uncompr_size,
+					   state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n", err);
+			return err;
+		}
+		break;
+
+	case SSDFS_DATA_BLK_DESC_LZ4:
+		src_ptr = env->buffer.ptr + offset;
+		dst_ptr = SSDFS_CONTENT_BUFFER(area)->ptr;
+
+		err = ssdfs_lz4_decompress(src_ptr, dst_ptr,
+					   compr_size, uncompr_size,
+					   state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n", err);
+			return err;
+		}
+		break;
+
+	case SSDFS_DATA_BLK_DESC_ZSTD:
+		src_ptr = env->buffer.ptr + offset;
+		dst_ptr = SSDFS_CONTENT_BUFFER(area)->ptr;
+
+		err = ssdfs_zstd_decompress(src_ptr, dst_ptr,
+					    compr_size, uncompr_size,
+					    state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n", err);
+			return err;
+		}
 		break;
 
 	default:
@@ -1041,8 +1073,39 @@ int ssdfs_recoverfs_parse_block_fragment(struct ssdfs_thread_state *state,
 		break;
 
 	case SSDFS_FRAGMENT_LZO_BLOB:
-		SSDFS_ERR("TODO: implement LZO support\n");
-		return -EOPNOTSUPP;
+		src_ptr = (u8 *)compr_content->ptr + src_offset;
+		dst_ptr = (u8 *)uncompr_content->ptr;
+		err = ssdfs_lzo_decompress(src_ptr, dst_ptr,
+					   compr_size, uncompr_size,
+					   state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n", err);
+			return err;
+		}
+		break;
+
+	case SSDFS_FRAGMENT_LZ4_BLOB:
+		src_ptr = (u8 *)compr_content->ptr + src_offset;
+		dst_ptr = (u8 *)uncompr_content->ptr;
+		err = ssdfs_lz4_decompress(src_ptr, dst_ptr,
+					   compr_size, uncompr_size,
+					   state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n", err);
+			return err;
+		}
+		break;
+
+	case SSDFS_FRAGMENT_ZSTD_BLOB:
+		src_ptr = (u8 *)compr_content->ptr + src_offset;
+		dst_ptr = (u8 *)uncompr_content->ptr;
+		err = ssdfs_zstd_decompress(src_ptr, dst_ptr,
+					    compr_size, uncompr_size,
+					    state->base.show_debug);
+		if (err) {
+			SSDFS_ERR("fail to decompress: err %d\n", err);
+			return err;
+		}
 		break;
 
 	default:

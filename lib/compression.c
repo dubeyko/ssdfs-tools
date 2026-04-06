@@ -18,6 +18,14 @@
 #include <lzo/lzo1x.h>
 #endif
 
+#ifdef HAVE_LIBLZ4
+#include <lz4.h>
+#endif
+
+#ifdef HAVE_LIBZSTD
+#include <zstd.h>
+#endif
+
 #include "ssdfs_tools.h"
 
 int ssdfs_zlib_compress(unsigned char *data_in,
@@ -274,6 +282,194 @@ int ssdfs_lzo_decompress(unsigned char *cdata_in,
 			 int is_debug)
 {
 	SSDFS_ERR("LZO decompression is not supported\n");
+	return -EOPNOTSUPP;
+}
+#endif
+
+#ifdef HAVE_LIBLZ4
+int ssdfs_lz4_compress(unsigned char *data_in,
+		       unsigned char *cdata_out,
+		       u32 *srclen, u32 *destlen,
+		       int is_debug)
+{
+	int out_len;
+
+	SSDFS_DBG(is_debug,
+		  "data_in %p, cdata_out %p, "
+		  "srclen %u, destlen %u\n",
+		  data_in, cdata_out, *srclen, *destlen);
+
+	out_len = LZ4_compress_default((const char *)data_in,
+				       (char *)cdata_out,
+				       (int)*srclen,
+				       (int)*destlen);
+	if (out_len == 0) {
+		SSDFS_DBG(is_debug,
+			  "unable to compress: srclen %u\n",
+			  *srclen);
+		return -E2BIG;
+	}
+
+	if ((u32)out_len >= *srclen) {
+		SSDFS_DBG(is_debug,
+			  "unable to compress: srclen %u, out_len %d\n",
+			  *srclen, out_len);
+		return -E2BIG;
+	}
+
+	*destlen = (u32)out_len;
+
+	SSDFS_DBG(is_debug,
+		  "compress has succeded: srclen %u, destlen %u\n",
+		  *srclen, *destlen);
+
+	return 0;
+}
+
+int ssdfs_lz4_decompress(unsigned char *cdata_in,
+			 unsigned char *data_out,
+			 u32 srclen, u32 destlen,
+			 int is_debug)
+{
+	int out_len;
+
+	SSDFS_DBG(is_debug,
+		  "cdata_in %p, data_out %p, "
+		  "srclen %u, destlen %u\n",
+		  cdata_in, data_out, srclen, destlen);
+
+	out_len = LZ4_decompress_safe((const char *)cdata_in,
+				      (char *)data_out,
+				      (int)srclen,
+				      (int)destlen);
+	if (out_len < 0) {
+		SSDFS_ERR("LZ4 decompression failed: err %d\n", out_len);
+		return -EFAULT;
+	}
+
+	if ((u32)out_len != destlen) {
+		SSDFS_ERR("decompressed size mismatch: "
+			  "expected %u, got %d\n",
+			  destlen, out_len);
+		return -EFAULT;
+	}
+
+	SSDFS_DBG(is_debug,
+		  "decompression has succeded: "
+		  "srclen %u, destlen %d\n",
+		  srclen, out_len);
+
+	return 0;
+}
+#else
+int ssdfs_lz4_compress(unsigned char *data_in,
+		       unsigned char *cdata_out,
+		       u32 *srclen, u32 *destlen,
+		       int is_debug)
+{
+	SSDFS_ERR("LZ4 compression is not supported\n");
+	return -EOPNOTSUPP;
+}
+
+int ssdfs_lz4_decompress(unsigned char *cdata_in,
+			 unsigned char *data_out,
+			 u32 srclen, u32 destlen,
+			 int is_debug)
+{
+	SSDFS_ERR("LZ4 decompression is not supported\n");
+	return -EOPNOTSUPP;
+}
+#endif
+
+#ifdef HAVE_LIBZSTD
+int ssdfs_zstd_compress(unsigned char *data_in,
+			unsigned char *cdata_out,
+			u32 *srclen, u32 *destlen,
+			int is_debug)
+{
+	size_t out_len;
+
+	SSDFS_DBG(is_debug,
+		  "data_in %p, cdata_out %p, "
+		  "srclen %u, destlen %u\n",
+		  data_in, cdata_out, *srclen, *destlen);
+
+	out_len = ZSTD_compress(cdata_out, (size_t)*destlen,
+				data_in, (size_t)*srclen,
+				ZSTD_CLEVEL_DEFAULT);
+	if (ZSTD_isError(out_len)) {
+		SSDFS_DBG(is_debug,
+			  "unable to compress: srclen %u, err %s\n",
+			  *srclen, ZSTD_getErrorName(out_len));
+		return -E2BIG;
+	}
+
+	if (out_len >= (size_t)*srclen) {
+		SSDFS_DBG(is_debug,
+			  "unable to compress: srclen %u, out_len %zu\n",
+			  *srclen, out_len);
+		return -E2BIG;
+	}
+
+	*destlen = (u32)out_len;
+
+	SSDFS_DBG(is_debug,
+		  "compress has succeded: srclen %u, destlen %u\n",
+		  *srclen, *destlen);
+
+	return 0;
+}
+
+int ssdfs_zstd_decompress(unsigned char *cdata_in,
+			  unsigned char *data_out,
+			  u32 srclen, u32 destlen,
+			  int is_debug)
+{
+	size_t out_len;
+
+	SSDFS_DBG(is_debug,
+		  "cdata_in %p, data_out %p, "
+		  "srclen %u, destlen %u\n",
+		  cdata_in, data_out, srclen, destlen);
+
+	out_len = ZSTD_decompress(data_out, (size_t)destlen,
+				  cdata_in, (size_t)srclen);
+	if (ZSTD_isError(out_len)) {
+		SSDFS_ERR("ZSTD decompression failed: %s\n",
+			  ZSTD_getErrorName(out_len));
+		return -EFAULT;
+	}
+
+	if (out_len != (size_t)destlen) {
+		SSDFS_ERR("decompressed size mismatch: "
+			  "expected %u, got %zu\n",
+			  destlen, out_len);
+		return -EFAULT;
+	}
+
+	SSDFS_DBG(is_debug,
+		  "decompression has succeded: "
+		  "srclen %u, destlen %zu\n",
+		  srclen, out_len);
+
+	return 0;
+}
+#else
+int ssdfs_zstd_compress(unsigned char *data_in,
+			unsigned char *cdata_out,
+			u32 *srclen, u32 *destlen,
+			int is_debug)
+{
+	SSDFS_ERR("ZSTD compression is not supported\n");
+	return -EOPNOTSUPP;
+}
+
+int ssdfs_zstd_decompress(unsigned char *cdata_in,
+			  unsigned char *data_out,
+			  u32 srclen, u32 destlen,
+			  int is_debug)
+{
+	SSDFS_ERR("ZSTD decompression is not supported\n");
 	return -EOPNOTSUPP;
 }
 #endif

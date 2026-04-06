@@ -32,7 +32,7 @@ void print_usage(void)
 	SSDFS_INFO("Usage: tune.ssdfs <options> [<folder> | <file>]\n");
 	SSDFS_INFO("Options:\n");
 	SSDFS_INFO("\t [-B|--blkbmap has_copy=(enable|disable),"
-		   "compression=(none|zlib|lzo)]\t  "
+		   "compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "block bitmap options.\n");
 	SSDFS_INFO("\t [-d|--debug]\t\t  show debug output.\n");
 	SSDFS_INFO("\t [-h|--help]\t\t  display help message and exit.\n");
@@ -40,20 +40,20 @@ void print_usage(void)
 	SSDFS_INFO("\t [-L|--label]\t\t  set a volume label.\n");
 	SSDFS_INFO("\t [-M|--maptbl has_copy=(enable|disable),log_pages=value,"
 		   "migration_threshold=value,reserved_pebs_per_fragment=percentage,"
-		   "compression=(none|zlib|lzo)]\t  "
+		   "compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "PEB mapping table options.\n");
 	SSDFS_INFO("\t [-O|--offsets_table has_copy=(enable|disable),"
-		   "compression=(none|zlib|lzo)]\t  "
+		   "compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "offsets table options.\n");
 	SSDFS_INFO("\t [-S|--segbmap has_copy=(enable|disable),log_pages=value,"
-		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
+		   "migration_threshold=value,compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "segment bitmap options.\n");
 	SSDFS_INFO("\t [-T|--btree min_index_area_size=value,"
 		   "leaf_node_log_pages=value,hybrid_node_log_pages=value,"
 		   "index_node_log_pages=value]\t  "
 		   "btrees' options.\n");
 	SSDFS_INFO("\t [-U|--user_data_segment log_pages=value,"
-		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
+		   "migration_threshold=value,compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "user data segment options.\n");
 	SSDFS_INFO("\t [-V|--version]\t\t  print version and exit.\n");
 }
@@ -133,6 +133,10 @@ static int get_compression_id(char *value)
 		id = SSDFS_ZLIB_BLOB;
 	else if (strcmp(value, SSDFS_LZO_COMPRESSION_STRING) == 0)
 		id = SSDFS_LZO_BLOB;
+	else if (strcmp(value, SSDFS_LZ4_COMPRESSION_STRING) == 0)
+		id = SSDFS_LZ4_BLOB;
+	else if (strcmp(value, SSDFS_ZSTD_COMPRESSION_STRING) == 0)
+		id = SSDFS_ZSTD_BLOB;
 	else {
 		SSDFS_ERR("Unsupported compression type %s.\n",
 			  value);

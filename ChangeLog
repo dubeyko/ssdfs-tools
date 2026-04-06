@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.69 [April 05, 2026]
+    (*) Introduce LZ4 and ZSTD compression support.
+
 v.4.68 [January 29, 2026]
     (*) On-disk layout has version 1.20.
 

@@ -38,7 +38,7 @@ void print_usage(void)
 	SSDFS_MKFS_INFO(SSDFS_TRUE, "create volume of SSDFS file system\n\n");
 	SSDFS_INFO("Usage: mkfs.ssdfs <options> [<device> | <image-file>]\n");
 	SSDFS_INFO("Options:\n");
-	SSDFS_INFO("\t [-B|--blkbmap has_copy,compression=(none|zlib|lzo)]\t  "
+	SSDFS_INFO("\t [-B|--blkbmap has_copy,compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "block bitmap options.\n");
 	SSDFS_INFO("\t [-C|--compression (none|zlib|lzo)]\t  "
 		   "compression type support.\n");
@@ -56,12 +56,12 @@ void print_usage(void)
 		   "fragments_per_peb=value,log_pages=value,"
 		   "migration_threshold=value,"
 		   "reserved_pebs_per_fragment=percentage,"
-		   "compression=(none|zlib|lzo)]\t  "
+		   "compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "PEB mapping table options.\n");
 	SSDFS_INFO("\t [-m|--migration-threshold]  max amount of migration PEBs "
 		   "for segment.\n");
 	SSDFS_INFO("\t [-O|--offsets_table has_copy,"
-		   "compression=(none|zlib|lzo)]\t  "
+		   "compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "offsets table options.\n");
 	SSDFS_INFO("\t [-p|--pagesize size]\t  page size of target device "
 		   "(4KB|8KB|16KB|32KB).\n");
@@ -70,7 +70,7 @@ void print_usage(void)
 	SSDFS_INFO("\t [-R|--erase-device]  erase whole device or partition by mkfs.\n");
 	SSDFS_INFO("\t [-S|--segbmap has_copy,segs_per_chain=value,"
 		   "fragments_per_peb=value,log_pages=value,"
-		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
+		   "migration_threshold=value,compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "segment bitmap options.\n");
 	SSDFS_INFO("\t [-s|--segsize size]\t  segment size of target device "
 		   "(128KB|256KB|512KB|1MB|2MB|4MB|8MB|16MB|32MB|64MB|...).\n");
@@ -79,7 +79,7 @@ void print_usage(void)
 		   "index_node_log_pages=value]\t  "
 		   "btrees' options.\n");
 	SSDFS_INFO("\t [-U|--user_data_segment log_pages=value,"
-		   "migration_threshold=value,compression=(none|zlib|lzo)]\t  "
+		   "migration_threshold=value,compression=(none|zlib|lzo|lz4|zstd)]\t  "
 		   "user data segment options.\n");
 	SSDFS_INFO("\t [-V|--version]\t\t  print version and exit.\n");
 }
@@ -244,6 +244,10 @@ static int get_compression_id(char *value)
 		id = SSDFS_ZLIB_BLOB;
 	else if (strcmp(value, "lzo") == 0)
 		id = SSDFS_LZO_BLOB;
+	else if (strcmp(value, "lz4") == 0)
+		id = SSDFS_LZ4_BLOB;
+	else if (strcmp(value, "zstd") == 0)
+		id = SSDFS_ZSTD_BLOB;
 	else {
 		SSDFS_ERR("Unsupported compression type %s.\n",
 			  value);

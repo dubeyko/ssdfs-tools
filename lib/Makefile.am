@@ -13,3 +13,9 @@ libssdfs_la_LIBADD = -lz -lrt
 if HAVE_LZO2
 libssdfs_la_LIBADD += -llzo2
 endif
+if HAVE_LZ4
+libssdfs_la_LIBADD += -llz4
+endif
+if HAVE_ZSTD
+libssdfs_la_LIBADD += -lzstd
+endif

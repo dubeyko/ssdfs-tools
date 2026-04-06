@@ -737,7 +737,7 @@ static int ssdfs_fragment_descriptor_init(struct ssdfs_fragment_desc *desc,
 	}
 
 	if (type < SSDFS_FRAGMENT_UNCOMPR_BLOB ||
-	    type > SSDFS_BLK2OFF_DESC_LZO) {
+	    type > SSDFS_BLK2OFF_DESC_ZSTD) {
 		SSDFS_ERR("invalid type %#x\n", type);
 		return -EINVAL;
 	}
@@ -849,7 +849,6 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 	switch (layout->blkbmap.compression) {
 	case SSDFS_UNCOMPRESSED_BLOB:
-	case SSDFS_LZO_BLOB:
 		type = SSDFS_BLK_BMAP_UNCOMPRESSED_BLOB;
 		break;
 
@@ -858,12 +857,20 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 		type = SSDFS_BLK_BMAP_ZLIB_BLOB;
 		break;
 
-/*
 	case SSDFS_LZO_BLOB:
 		flags |= SSDFS_BLK_BMAP_COMPRESSED;
 		type = SSDFS_BLK_BMAP_LZO_BLOB;
 		break;
-*/
+
+	case SSDFS_LZ4_BLOB:
+		flags |= SSDFS_BLK_BMAP_COMPRESSED;
+		type = SSDFS_BLK_BMAP_LZ4_BLOB;
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		flags |= SSDFS_BLK_BMAP_COMPRESSED;
+		type = SSDFS_BLK_BMAP_ZSTD_BLOB;
+		break;
 
 	default:
 		BUG();
@@ -985,7 +992,6 @@ static int __pre_commit_block_bitmap(struct ssdfs_volume_layout *layout,
 
 		switch (layout->blkbmap.compression) {
 		case SSDFS_UNCOMPRESSED_BLOB:
-		case SSDFS_LZO_BLOB:
 make_uncompressed_blob:
 			type = SSDFS_FRAGMENT_UNCOMPR_BLOB;
 			compr_size = fragment_size;
@@ -1007,11 +1013,50 @@ make_uncompressed_blob:
 			}
 			break;
 
-/*
 		case SSDFS_LZO_BLOB:
 			type = SSDFS_FRAGMENT_LZO_BLOB;
+			err = ssdfs_lzo_compress(fragment,
+						 compr_fragment,
+						 &fragment_size,
+						 &compr_size,
+						 layout->env.show_debug);
+			if (err) {
+				SSDFS_ERR("fail to compress: "
+					  "fragment_size %u, err %d\n",
+					  fragment_size, err);
+				goto fail_pre_commit_blk_bmap;
+			}
 			break;
-*/
+
+		case SSDFS_LZ4_BLOB:
+			type = SSDFS_FRAGMENT_LZ4_BLOB;
+			err = ssdfs_lz4_compress(fragment,
+						 compr_fragment,
+						 &fragment_size,
+						 &compr_size,
+						 layout->env.show_debug);
+			if (err) {
+				SSDFS_ERR("fail to compress: "
+					  "fragment_size %u, err %d\n",
+					  fragment_size, err);
+				goto fail_pre_commit_blk_bmap;
+			}
+			break;
+
+		case SSDFS_ZSTD_BLOB:
+			type = SSDFS_FRAGMENT_ZSTD_BLOB;
+			err = ssdfs_zstd_compress(fragment,
+						  compr_fragment,
+						  &fragment_size,
+						  &compr_size,
+						  layout->env.show_debug);
+			if (err) {
+				SSDFS_ERR("fail to compress: "
+					  "fragment_size %u, err %d\n",
+					  fragment_size, err);
+				goto fail_pre_commit_blk_bmap;
+			}
+			break;
 
 		default:
 			BUG();
@@ -1047,7 +1092,6 @@ make_uncompressed_blob:
 
 	switch (layout->blkbmap.compression) {
 	case SSDFS_UNCOMPRESSED_BLOB:
-	case SSDFS_LZO_BLOB:
 		extent->state = SSDFS_UNCOMPRESSED_BLOB;
 		break;
 
@@ -1055,10 +1099,17 @@ make_uncompressed_blob:
 		extent->state = SSDFS_ZLIB_BLOB;
 		break;
 
-/*
 	case SSDFS_LZO_BLOB:
+		extent->state = SSDFS_LZO_BLOB;
 		break;
-*/
+
+	case SSDFS_LZ4_BLOB:
+		extent->state = SSDFS_LZ4_BLOB;
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		extent->state = SSDFS_ZSTD_BLOB;
+		break;
 
 	default:
 		BUG();
