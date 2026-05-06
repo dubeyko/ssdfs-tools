@@ -86,6 +86,7 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	case SSDFS_SB_SEG_TYPE:
 	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
 		page_size = PAGE_CACHE_SIZE;
+		inline_capacity = page_size - hdr_size;
 		break;
 
 	default:

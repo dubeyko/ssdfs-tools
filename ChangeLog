@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.70 [May 06, 2026]
+    (*) Fix issue of wrong calculation of superblock
+        segment's payload.
+
 v.4.69 [April 05, 2026]
     (*) Introduce LZ4 and ZSTD compression support.
 
