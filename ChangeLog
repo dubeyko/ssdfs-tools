@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.71 [July 25, 2026]
+    (*) [mkfs] Fix logic of PEB mapping table's cache creation.
+
 v.4.70 [May 06, 2026]
     (*) Fix issue of wrong calculation of superblock
         segment's payload.

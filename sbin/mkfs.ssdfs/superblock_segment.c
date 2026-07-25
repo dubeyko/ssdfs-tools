@@ -1586,7 +1586,7 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	u32 fragments;
 	u32 log_pages = 0;
 	size_t hdr_size = sizeof(struct ssdfs_segment_header);
-	u32 inline_capacity = layout->page_size - hdr_size;
+	u32 inline_capacity = PAGE_CACHE_SIZE - hdr_size;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1671,9 +1671,9 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			BUG_ON(extent->buf);
 			BUG_ON(layout->maptbl_cache.fragment_size !=
-				layout->page_size);
+				PAGE_CACHE_SIZE);
 
-			peb_buffer_size = fragments * layout->page_size;
+			peb_buffer_size = fragments * PAGE_CACHE_SIZE;
 
 			extent->buf = malloc(peb_buffer_size);
 			if (!extent->buf) {
@@ -1689,11 +1689,11 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 				sptr = layout->maptbl_cache.fragments_array[k];
 				dptr = (u8 *)extent->buf +
-						(k * layout->page_size);
+						(k * PAGE_CACHE_SIZE);
 
 				BUG_ON(!sptr || !dptr);
 
-				memcpy(dptr, sptr, layout->page_size);
+				memcpy(dptr, sptr, PAGE_CACHE_SIZE);
 			}
 
 			extent->bytes_count = layout->maptbl_cache.bytes_count;
