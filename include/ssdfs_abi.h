@@ -65,7 +65,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		20
+#define SSDFS_MINOR_REVISION		21
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -224,7 +224,7 @@ enum {
 	SSDFS_SEGBMAP_SEG_COPY_MAX,
 };
 
-#define SSDFS_SEGBMAP_SEGS	8
+#define SSDFS_SEGBMAP_RESERVED_EXTENTS	(4)
 
 /*
  * struct ssdfs_segbmap_sb_header - superblock's segment bitmap header
@@ -250,7 +250,9 @@ struct ssdfs_segbmap_sb_header {
 	__le16 segs_count;
 
 /* 0x0010 */
-	__le64 segs[SSDFS_SEGBMAP_SEGS][SSDFS_SEGBMAP_SEG_COPY_MAX];
+#define SEGBMAP_LIMIT1	(SSDFS_SEGBMAP_RESERVED_EXTENTS)
+#define SEGBMAP_LIMIT2	(SSDFS_SEGBMAP_SEG_COPY_MAX)
+	struct ssdfs_meta_area_extent extents[SEGBMAP_LIMIT1][SEGBMAP_LIMIT2];
 
 /* 0x0090 */
 } __attribute__((packed));

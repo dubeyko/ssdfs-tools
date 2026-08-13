@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.72 [August 13, 2026]
+    (*) Switch segment bitmap on metadata extents.
+
 v.4.71 [July 25, 2026]
     (*) [mkfs] Fix logic of PEB mapping table's cache creation.
 

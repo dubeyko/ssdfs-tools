@@ -30,13 +30,13 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 {
 	int seg_state = SSDFS_DEDICATED_SEGMENT;
 	u64 seg_nums;
-	u16 fragments;
-	u16 fragments_per_peb = layout->segbmap.fragments_per_peb;
-	u16 fragments_per_seg;
-	u8 segs_per_chain = layout->segbmap.segs_per_chain;
+	u32 fragments;
+	u32 fragments_per_peb = layout->segbmap.fragments_per_peb;
+	u32 fragments_per_seg;
+	u32 segs_per_chain = layout->segbmap.segs_per_chain;
 	u32 fragment_size = layout->page_size;
-	u16 pebs_per_seg;
-	u8 segbmap_segs;
+	u32 pebs_per_seg;
+	u32 segbmap_segs;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
@@ -46,11 +46,10 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	pebs_per_seg = (u64)(layout->seg_size / layout->env.erase_size);
 
 	fragments_per_seg = fragments_per_peb * pebs_per_seg;
-	segbmap_segs = (u8)((fragments + fragments_per_seg - 1) /
-				fragments_per_seg);
+	segbmap_segs = (fragments + fragments_per_seg - 1) /
+				fragments_per_seg;
 
-	if (layout->env.erase_size < ((u32)fragments_per_peb * fragment_size) ||
-	    segbmap_segs > SSDFS_SEGBMAP_SEGS) {
+	if (layout->env.erase_size < (fragments_per_peb * fragment_size)) {
 		u32 metadata = layout->page_size * 2;
 		u32 payload_bytes;
 
@@ -70,15 +69,8 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	}
 
 	fragments_per_seg = fragments_per_peb * pebs_per_seg;
-	segbmap_segs = (u8)((fragments + fragments_per_seg - 1) /
-				fragments_per_seg);
-
-	if (segbmap_segs > SSDFS_SEGBMAP_SEGS) {
-		SSDFS_ERR("segbmap_segs %u > max %u\n",
-			  segbmap_segs,
-			  SSDFS_SEGBMAP_SEGS);
-		return -E2BIG;
-	}
+	segbmap_segs = (fragments + fragments_per_seg - 1) /
+				fragments_per_seg;
 
 	fragments_per_seg = fragments / segbmap_segs;
 
@@ -127,6 +119,13 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 		*segs = segs_per_chain * 2;
 	else
 		*segs = segs_per_chain;
+
+	if (*segs > ((seg_nums * 10) / 100)) {
+		SSDFS_ERR("segbmap is huge: "
+			  "segbmap_segs %d, seg_nums %llu\n",
+			  *segs, seg_nums);
+		return -E2BIG;
+	}
 
 	layout->segbmap.fragments_count = fragments;
 	layout->segbmap.fragment_size = fragment_size;
@@ -496,16 +495,102 @@ static define_seg_op define_seg[SSDFS_METADATA_ITEMS_MAX] = {
 	define_user_data_seg_id,
 };
 
+static
+int define_segbmap_extents(struct ssdfs_volume_layout *layout,
+			   int seg_chain_type)
+{
+	struct ssdfs_segbmap_sb_header *hdr = &layout->sb.vh.segbmap;
+	struct ssdfs_metadata_desc *desc = &layout->meta_array[SSDFS_SEGBMAP];
+	struct ssdfs_meta_area_extent *extent;
+	u16 segs_per_chain = layout->segbmap.segs_per_chain;
+	int replication = layout->segbmap.has_backup_copy ?
+				SSDFS_SEGBMAP_SEG_COPY_MAX : 1;
+	int seg_index = desc->start_seg_index;
+	u64 seg_id = U64_MAX;
+	u32 extent_len;
+	int i, j;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "layout %p, seg_chain_type %d, segs_per_chain %u\n",
+		  layout, seg_chain_type, segs_per_chain);
+
+	BUG_ON(seg_chain_type < SSDFS_MAIN_SEGBMAP_SEG ||
+		seg_chain_type >= SSDFS_SEGBMAP_SEG_COPY_MAX);
+
+	for (i = 0; i < SSDFS_SEGBMAP_RESERVED_EXTENTS; i++) {
+		extent = &hdr->extents[i][seg_chain_type];
+		extent->type = cpu_to_le16(SSDFS_EMPTY_EXTENT_TYPE);
+	}
+
+	if (seg_chain_type == SSDFS_COPY_SEGBMAP_SEG &&
+	    !layout->segbmap.has_backup_copy) {
+		/* no backup copy is requested */
+		return 0;
+	}
+
+	for (i = 0, j = 0, extent_len = 0; i < segs_per_chain; i++) {
+		int cur_seg_index = seg_index + (i * replication) +
+					seg_chain_type;
+		int type = layout->segs[cur_seg_index].seg_type;
+		u64 cur_seg_id = layout->segs[cur_seg_index].seg_id;
+
+		if (type != SSDFS_SEGBMAP) {
+			SSDFS_ERR("invalid seg_type %#x\n", type);
+			return -ERANGE;
+		}
+
+		if (seg_id == U64_MAX) {
+			seg_id = cur_seg_id;
+			extent_len = 1;
+		} else if ((seg_id + extent_len) != cur_seg_id) {
+			extent = &hdr->extents[j][seg_chain_type];
+
+			extent->start_id = cpu_to_le64(seg_id);
+			extent->len = cpu_to_le32(extent_len);
+			extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
+			extent->flags = 0;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "extent (index %d, seg_id %llu, "
+				  "extent_len %u)\n",
+				  j, seg_id, extent_len);
+
+			seg_id = cur_seg_id;
+			extent_len = 1;
+			j++;
+			BUG_ON(j >= SSDFS_SEGBMAP_RESERVED_EXTENTS);
+		} else
+			extent_len++;
+	}
+
+	if (extent_len != 0) {
+		BUG_ON(seg_id == U64_MAX);
+		BUG_ON(j >= SSDFS_SEGBMAP_RESERVED_EXTENTS);
+
+		extent = &hdr->extents[j][seg_chain_type];
+		extent->start_id = cpu_to_le64(seg_id);
+		extent->len = cpu_to_le32(extent_len);
+		extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
+		extent->flags = 0;
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "extent (index %d, seg_id %llu, "
+			  "extent_len %u)\n",
+			  j, seg_id, extent_len);
+	}
+
+	return 0;
+}
+
 static int init_segbmap_sb_header(struct ssdfs_volume_layout *layout)
 {
 	struct ssdfs_segbmap_sb_header *hdr = &layout->sb.vh.segbmap;
-	struct ssdfs_metadata_desc *desc;
+	size_t extent_size = sizeof(struct ssdfs_meta_area_extent);
 	u32 fragments_per_peb = layout->segbmap.fragments_per_peb;
 	u32 pebs_per_seg = layout->segbmap.pebs_per_seg;
 	u32 fragments_per_seg;
 	u16 flags = 0;
-	int seg_index;
-	int i, j;
+	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
@@ -557,34 +642,23 @@ static int init_segbmap_sb_header(struct ssdfs_volume_layout *layout)
 
 	hdr->segs_count = cpu_to_le16(layout->segbmap.segs_per_chain);
 
-	desc = &layout->meta_array[SSDFS_SEGBMAP];
-	seg_index = desc->start_seg_index;
+	memset(hdr->extents, 0xFF,
+	       extent_size * SSDFS_SEGBMAP_RESERVED_EXTENTS *
+	       SSDFS_SEGBMAP_SEG_COPY_MAX);
 
-	for (i = 0; i < SSDFS_SEGBMAP_SEGS; i++) {
-		for (j = 0; j < SSDFS_SEGBMAP_SEG_COPY_MAX; j++) {
-			hdr->segs[i][j] = cpu_to_le64(U64_MAX);
-		}
+	err = define_segbmap_extents(layout, SSDFS_MAIN_SEGBMAP_SEG);
+	if (err) {
+		SSDFS_ERR("fail to define main segbmap extents: err %d\n",
+			  err);
+		return err;
 	}
 
-	BUG_ON(layout->segbmap.segs_per_chain > SSDFS_SEGBMAP_SEGS);
-
-	for (i = 0; i < layout->segbmap.segs_per_chain; i++) {
-		int replication = SSDFS_SEGBMAP_SEG_COPY_MAX;
-
-		for (j = 0; j < replication; j++) {
-			int type = layout->segs[seg_index].seg_type;
-			u64 seg_id = layout->segs[seg_index].seg_id;
-
-			if (type != SSDFS_SEGBMAP) {
-				SSDFS_ERR("invalid seg_type %#x\n", type);
-				return -ERANGE;
-			}
-
-			hdr->segs[i][j] = cpu_to_le64(seg_id);
-			seg_index++;
-
-			if (!layout->segbmap.has_backup_copy)
-				break;
+	if (layout->segbmap.has_backup_copy) {
+		err = define_segbmap_extents(layout, SSDFS_COPY_SEGBMAP_SEG);
+		if (err) {
+			SSDFS_ERR("fail to define copy segbmap extents: "
+				  "err %d\n", err);
+			return err;
 		}
 	}
 
@@ -760,8 +834,7 @@ int segbmap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	meta_desc = &layout->meta_array[SSDFS_SEGBMAP];
 	segs_count = meta_desc->segs_count;
 
-	if (segs_count <= 0 ||
-	    segs_count > (SSDFS_SEGBMAP_SEGS * SSDFS_SEGBMAP_SEG_COPY_MAX)) {
+	if (segs_count <= 0 || segs_count > layout->segs_capacity) {
 		SSDFS_ERR("invalid segs_count %d\n", segs_count);
 		return -ERANGE;
 	}
@@ -1075,8 +1148,7 @@ int segbmap_mkfs_commit(struct ssdfs_volume_layout *layout)
 	meta_desc = &layout->meta_array[SSDFS_SEGBMAP];
 	segs_count = meta_desc->segs_count;
 
-	if (segs_count <= 0 ||
-	    segs_count > (SSDFS_SEGBMAP_SEGS * SSDFS_SEGBMAP_SEG_COPY_MAX)) {
+	if (segs_count <= 0 || segs_count > layout->segs_capacity) {
 		SSDFS_ERR("invalid segs_count %d\n", segs_count);
 		return -ERANGE;
 	}

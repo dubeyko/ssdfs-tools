@@ -2986,15 +2986,76 @@ void ssdfs_dumpfs_parse_segbmap_sb_header(struct ssdfs_dumpfs_environment *env,
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
-	SSDFS_DUMPFS_DUMP(env, "SEGMENT BITMAP SEGMENTS:\n");
+	SSDFS_DUMPFS_DUMP(env, "SEGMENT BITMAP EXTENTS:\n");
 
-	for (i = 0; i < SSDFS_SEGBMAP_SEGS; i++) {
+	for (i = 0; i < SSDFS_SEGBMAP_RESERVED_EXTENTS; i++) {
+		struct ssdfs_meta_area_extent *extent;
+
+		extent = &segbmap->extents[i][SSDFS_MAIN_SEGBMAP_SEG];
+
 		SSDFS_DUMPFS_DUMP(env,
-			   "SEG[%d][MAIN]: %llu; SEG[%d][COPY]: %llu\n",
+			   "extent[%d][MAIN]: start_id %llu, len %u, ",
 			   i,
-			   le64_to_cpu(segbmap->segs[i][SSDFS_MAIN_SEGBMAP_SEG]),
+			   le64_to_cpu(extent->start_id),
+			   le32_to_cpu(extent->len));
+
+		switch (le16_to_cpu(extent->type)) {
+		case SSDFS_EMPTY_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_EMPTY_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_SEG_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_SEG_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_PEB_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_BLK_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK_EXTENT_TYPE, ");
+			break;
+
+		default:
+			SSDFS_DUMPFS_DUMP(env, "UNKNOWN_EXTENT_TYPE, ");
+			break;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "flags %#x\n",
+			   le16_to_cpu(extent->flags));
+
+		extent = &segbmap->extents[i][SSDFS_COPY_SEGBMAP_SEG];
+
+		SSDFS_DUMPFS_DUMP(env,
+			   "extent[%d][COPY]: start_id %llu, len %u, ",
 			   i,
-			   le64_to_cpu(segbmap->segs[i][SSDFS_COPY_SEGBMAP_SEG]));
+			   le64_to_cpu(extent->start_id),
+			   le32_to_cpu(extent->len));
+
+		switch (le16_to_cpu(extent->type)) {
+		case SSDFS_EMPTY_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_EMPTY_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_SEG_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_SEG_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_PEB_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_EXTENT_TYPE, ");
+			break;
+
+		case SSDFS_BLK_EXTENT_TYPE:
+			SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK_EXTENT_TYPE, ");
+			break;
+
+		default:
+			SSDFS_DUMPFS_DUMP(env, "UNKNOWN_EXTENT_TYPE, ");
+			break;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "flags %#x\n",
+			   le16_to_cpu(extent->flags));
 	}
 }
 

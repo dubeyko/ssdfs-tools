@@ -127,11 +127,6 @@ static void check_segbmap_segs_per_chain(int *value)
 		SSDFS_WARN("invalid segbmap option: "
 			   "segs_per_chain will equal to %d\n",
 			   *value);
-	} else if (*value > SSDFS_SEGBMAP_SEGS) {
-		*value = SSDFS_SEGBMAP_SEGS;
-		SSDFS_WARN("invalid segbmap option: "
-			   "segs_per_chain will equal to %d\n",
-			   *value);
 	}
 }
 

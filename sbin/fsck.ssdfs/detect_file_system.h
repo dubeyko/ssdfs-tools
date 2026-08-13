@@ -87,11 +87,15 @@ struct ssdfs_fsck_logs_pair_array {
  * @array: array of found log pairs
  * @segbmap_sb_hdr: segment bitmap's header in superblock
  * @segs_count: number of segments in segment bitmap metadata structure
+ * @found_segs: number of found segments
+ * @extents_count: number of extents describing segment bitmap metadata structure
  */
 struct ssdfs_fsck_segment_bitmap_detection {
 	struct ssdfs_fsck_logs_pair_array array;
 	struct ssdfs_segbmap_sb_header segbmap_sb_hdr;
 	u32 segs_count;
+	u32 found_segs;
+	u32 extents_count;
 };
 
 /*
@@ -224,6 +228,8 @@ static inline
 void ssdfs_fsck_init_segbmap(struct ssdfs_fsck_volume_creation_point *ptr)
 {
 	ptr->segbmap.segs_count = 0;
+	ptr->segbmap.found_segs = 0;
+	ptr->segbmap.extents_count = 0;
 	ssdfs_fsck_init_logs_pair_array(&ptr->segbmap.array);
 }
 
@@ -231,6 +237,8 @@ static inline
 void ssdfs_fsck_destroy_segbmap(struct ssdfs_fsck_volume_creation_point *ptr)
 {
 	ptr->segbmap.segs_count = 0;
+	ptr->segbmap.found_segs = 0;
+	ptr->segbmap.extents_count = 0;
 	ssdfs_fsck_destroy_logs_pair_array(&ptr->segbmap.array);
 }
 

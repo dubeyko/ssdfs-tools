@@ -1000,9 +1000,13 @@ int ssdfs_fsck_allocate_segbmap_logs_array(struct ssdfs_fsck_environment *env)
 	struct ssdfs_segbmap_sb_header *segbmap_hdr;
 	struct ssdfs_fsck_segment_bitmap_detection *segbmap;
 	struct ssdfs_fsck_found_log *log;
-	u16 segs_count;
+	u32 segs_count;
+	u32 extents_count;
 	u32 lebs_count;
 	u32 lebs_per_seg;
+	u64 volume_segs;
+	u64 threshold;
+	int i, j;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "Allocate segment bitmap found logs array\n");
@@ -1024,24 +1028,89 @@ int ssdfs_fsck_allocate_segbmap_logs_array(struct ssdfs_fsck_environment *env)
 	log = &creation_point->superblock_seg.logs[SSDFS_MAIN_SB_SEG];
 	segbmap_hdr = &log->header.seg_hdr.volume_hdr.segbmap;
 
-	segs_count = le16_to_cpu(segbmap_hdr->segs_count);
+	lebs_per_seg = env->seg_size / env->base.erase_size;
+	BUG_ON(lebs_per_seg == 0);
 
-	if (segs_count == 0 || segs_count > SSDFS_SEGBMAP_SEGS) {
+	segs_count = 0;
+	extents_count = 0;
+
+	for (i = 0; i < SEGBMAP_LIMIT1; i++) {
+		struct ssdfs_meta_area_extent *extent;
+		u32 len;
+
+		for (j = 0; j < SEGBMAP_LIMIT2; j++) {
+			extent = &segbmap_hdr->extents[i][j];
+
+			SSDFS_DBG(env->base.show_debug,
+				  "extent[%d][%d]: (start_id %llu, len %u, type %#x)\n",
+				  i, j,
+				  le64_to_cpu(extent->start_id),
+				  le32_to_cpu(extent->len),
+				  le16_to_cpu(extent->type));
+
+			switch (le16_to_cpu(extent->type)) {
+			case SSDFS_EMPTY_EXTENT_TYPE:
+				/* skip empty extent */
+				continue;
+
+			case SSDFS_SEG_EXTENT_TYPE:
+				segs_count += le32_to_cpu(extent->len);
+				extents_count++;
+				break;
+
+			case SSDFS_PEB_EXTENT_TYPE:
+				len = le32_to_cpu(extent->len);
+				BUG_ON(len % lebs_per_seg);
+				segs_count += len / lebs_per_seg;
+				extents_count++;
+				break;
+
+			case SSDFS_BLK_EXTENT_TYPE:
+				SSDFS_ERR("unexpected extent type %#x\n",
+					  le16_to_cpu(extent->type));
+				return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+
+			default:
+				if (extents_count > 0) {
+					/* skip invalid extent */
+				} else {
+					SSDFS_ERR("unexpected extent type %#x\n",
+						  le16_to_cpu(extent->type));
+					return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+				}
+			}
+		}
+	}
+
+	volume_segs = env->base.fs_size / env->seg_size;
+	threshold = (volume_segs * 25) / 100;
+
+	if (segs_count == 0 || segs_count > threshold) {
 		SSDFS_ERR("invalid number of segment bitmap segments: "
 			  "segs_count %u\n", segs_count);
 		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
 	}
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
-	BUG_ON(lebs_per_seg == 0);
+	if (extents_count == 0 || extents_count > SEGBMAP_LIMIT1) {
+		SSDFS_ERR("invalid number of segment bitmap extents: "
+			  "extents_count %u\n", extents_count);
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+	}
+
 	lebs_count = segs_count * lebs_per_seg;
 	BUG_ON(lebs_count == 0);
-	BUG_ON(lebs_count > (SSDFS_SEGBMAP_SEGS * lebs_per_seg));
+	BUG_ON(lebs_count > (threshold * lebs_per_seg));
 
 	segbmap = &creation_point->segbmap;
 	segbmap->segs_count = segs_count;
+	segbmap->found_segs = 0;
+	segbmap->extents_count = extents_count;
 	memcpy(&segbmap->segbmap_sb_hdr, segbmap_hdr,
 		sizeof(struct ssdfs_segbmap_sb_header));
+
+	SSDFS_DBG(env->base.show_debug,
+		  "extents_count %u, lebs_count %u\n",
+		  extents_count, lebs_count);
 
 	segbmap->array.pairs = calloc(lebs_count,
 					sizeof(struct ssdfs_fsck_logs_pair));
@@ -1224,50 +1293,26 @@ int ssdfs_fsck_find_segbmap_peb(struct ssdfs_fsck_environment *env,
 }
 
 static
-int __ssdfs_fsck_find_segbmap_segment(struct ssdfs_fsck_environment *env,
-				      int seg_index,
-				      int copy_index)
+int ssdfs_fsck_find_segbmap_peb_by_leb(struct ssdfs_fsck_environment *env,
+					u64 leb_id, int copy_index)
 {
 	struct ssdfs_fsck_volume_creation_point *creation_point;
 	struct ssdfs_fsck_segment_bitmap_detection *segbmap;
-	u16 flags;
-	u64 seg_id;
-	u64 start_leb_id;
-	u64 leb_id;
-	u32 lebs_per_seg;
+	struct ssdfs_fsck_found_log *log;
 	u64 peb_id;
-	u16 fragments_per_seg;
-	u16 fragments_per_peb;
-	u16 processed_fragments = 0;
-	int i;
 	int res;
 
 	SSDFS_DBG(env->base.show_debug,
-		  "Find segment bitmap's segment: "
-		  "seg_index %d, copy_index %d\n",
-		  seg_index, copy_index);
+		  "Find segment bitmap's PEB: "
+		  "leb_id %llu, copy_index %d\n",
+		  leb_id, copy_index);
 
-	creation_point = ssdfs_fsck_get_creation_point(env, 0);
-
-	if (!creation_point) {
-		SSDFS_ERR("fail to get creation point\n");
-		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
-	}
-
-	segbmap = &creation_point->segbmap;
-
-	if (segbmap->segs_count == 0 ||
-	    segbmap->segs_count > SSDFS_SEGBMAP_SEGS) {
-		SSDFS_ERR("invalid number of segment bitmap segments: "
-			  "segs_count %u\n", segbmap->segs_count);
-		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
-	}
-
-	if (seg_index >= segbmap->segs_count) {
-		SSDFS_ERR("invalid segment index: "
-			  "seg_index %d, segs_count %u\n",
-			  seg_index, segbmap->segs_count);
-		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+	if (leb_id >= U64_MAX) {
+		SSDFS_DBG(env->base.show_debug,
+			  "Invalid LEB: "
+			  "leb_id %llu\n",
+			  leb_id);
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
 	}
 
 	if (copy_index >= SSDFS_FSCK_LOGS_NUMBER_MAX) {
@@ -1278,82 +1323,104 @@ int __ssdfs_fsck_find_segbmap_segment(struct ssdfs_fsck_environment *env,
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	flags = le16_to_cpu(segbmap->segbmap_sb_hdr.flags);
+	creation_point = ssdfs_fsck_get_creation_point(env, 0);
 
-	switch (copy_index) {
-	case SSDFS_FSCK_COPY_LOG:
-		if (flags & SSDFS_SEGBMAP_HAS_COPY) {
-			/*
-			 * continue logic
-			 */
-		} else {
-			SSDFS_DBG(env->base.show_debug,
-				  "There is no copy of segment bitmap: "
-				  "seg_index %d, copy_index %d\n",
-				  seg_index, copy_index);
-			goto finish_search_segmap_segment;
-		}
-		break;
-
-	default:
-		/* continue logic */
-		break;
+	if (!creation_point) {
+		SSDFS_ERR("fail to get creation point\n");
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	seg_id = le64_to_cpu(segbmap->segbmap_sb_hdr.segs[seg_index][copy_index]);
+	segbmap = &creation_point->segbmap;
+
+	peb_id = ssdfs_maptbl_cache_convert_leb2peb(env, leb_id);
+	if (peb_id >= U64_MAX) {
+		SSDFS_DBG(env->base.show_debug,
+			  "Found invalid PEB ID: "
+			  "leb_id %llu\n",
+			  leb_id);
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+	}
+
+	log = &segbmap->array.pairs[segbmap->array.count].logs[copy_index];
+
+	res = ssdfs_fsck_find_segbmap_peb(env, log, peb_id);
+	switch (res) {
+	case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
+		/* continue logic */
+		break;
+
+	case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
+		SSDFS_DBG(env->base.show_debug,
+			  "unable to find segment bitmap's PEB: "
+			  "leb_id %llu, peb_id %llu\n",
+			  leb_id, peb_id);
+		return res;
+
+	default:
+		SSDFS_DBG(env->base.show_debug,
+			  "fail to find segment bitmap's PEB: "
+			  "leb_id %llu, peb_id %llu\n",
+			  leb_id, peb_id);
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+	}
+
+	SSDFS_DBG(env->base.show_debug,
+		  "finished\n");
+
+	return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+}
+
+static
+int ssdfs_fsck_find_segbmap_segment_by_id(struct ssdfs_fsck_environment *env,
+					   u64 seg_id, int copy_index)
+{
+	struct ssdfs_fsck_volume_creation_point *creation_point;
+	struct ssdfs_fsck_segment_bitmap_detection *segbmap;
+	u32 lebs_per_seg;
+	u64 start_leb_id;
+	u64 leb_id;
+	u64 peb_id;
+	int i;
+	int res;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "Find segment bitmap's segment: "
+		  "seg_id %llu, copy_index %d\n",
+		  seg_id, copy_index);
 
 	if (seg_id >= U64_MAX) {
 		SSDFS_DBG(env->base.show_debug,
-			  "Found invalid segment ID: "
-			  "seg_index %d, copy_index %d\n",
-			  seg_index, copy_index);
+			  "Invalid segment ID: "
+			  "seg_id %llu\n",
+			  seg_id);
 		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
 	}
 
-	fragments_per_seg = le16_to_cpu(segbmap->segbmap_sb_hdr.fragments_per_seg);
-
-	if (fragments_per_seg == 0 || fragments_per_seg >= U16_MAX) {
-		SSDFS_DBG(env->base.show_debug,
-			  "Found invalid fragments_per_seg: "
-			  "seg_index %d, copy_index %d\n",
-			  seg_index, copy_index);
-		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+	if (copy_index >= SSDFS_FSCK_LOGS_NUMBER_MAX) {
+		SSDFS_ERR("invalid copy_index: "
+			  "copy_index %d, logs_number_max %u\n",
+			  copy_index,
+			  (u32)SSDFS_FSCK_LOGS_NUMBER_MAX);
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	fragments_per_peb = le16_to_cpu(segbmap->segbmap_sb_hdr.fragments_per_peb);
+	creation_point = ssdfs_fsck_get_creation_point(env, 0);
 
-	if (fragments_per_peb == 0 || fragments_per_peb >= U16_MAX) {
-		SSDFS_DBG(env->base.show_debug,
-			  "Found invalid fragments_per_peb: "
-			  "seg_index %d, copy_index %d\n",
-			  seg_index, copy_index);
-		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+	if (!creation_point) {
+		SSDFS_ERR("fail to get creation point\n");
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
+
+	segbmap = &creation_point->segbmap;
 
 	lebs_per_seg = env->seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
-
-	if (fragments_per_seg % fragments_per_peb ||
-	    (fragments_per_seg / fragments_per_peb) > lebs_per_seg) {
-		SSDFS_DBG(env->base.show_debug,
-			  "Found invalid fragments_per_peb: "
-			  "seg_index %d, copy_index %d, "
-			  "fragments_per_peb %u, fragments_per_seg %u, "
-			  "lebs_per_seg %u\n",
-			  seg_index, copy_index,
-			  fragments_per_peb, fragments_per_seg,
-			  lebs_per_seg);
-		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
-	}
 
 	start_leb_id = seg_id * lebs_per_seg;
 
 	for (i = 0; i < lebs_per_seg; i++) {
 		struct ssdfs_fsck_found_log *log;
 		leb_id = start_leb_id + i;
-
-		if (processed_fragments >= fragments_per_seg)
-			goto finish_search_segmap_segment;
 
 		peb_id = ssdfs_maptbl_cache_convert_leb2peb(env, leb_id);
 		if (peb_id >= U64_MAX) {
@@ -1386,11 +1453,8 @@ int __ssdfs_fsck_find_segbmap_segment(struct ssdfs_fsck_environment *env,
 				  seg_id, leb_id, peb_id);
 			return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 		}
-
-		processed_fragments += fragments_per_peb;
 	}
 
-finish_search_segmap_segment:
 	SSDFS_DBG(env->base.show_debug,
 		  "finished\n");
 
@@ -1398,17 +1462,24 @@ finish_search_segmap_segment:
 }
 
 static inline
-int ssdfs_fsck_find_segbmap_segment(struct ssdfs_fsck_environment *env,
-				    int seg_index)
+int ssdfs_fsck_find_segbmap_extent(struct ssdfs_fsck_environment *env,
+				   int extent_index)
 {
 	struct ssdfs_fsck_volume_creation_point *creation_point;
 	struct ssdfs_fsck_segment_bitmap_detection *segbmap;
+	struct ssdfs_segbmap_sb_header *segbmap_hdr;
+	struct ssdfs_meta_area_extent *extent;
+	u32 lebs_per_seg;
+	u64 start_id;
+	u32 len;
+	u16 flags;
+	int i;
 	int res;
 
 	SSDFS_DBG(env->base.show_debug,
-		  "Find segment bitmap's segment: "
-		  "seg_index %d\n",
-		  seg_index);
+		  "Find segment bitmap's extent: "
+		  "extent_index %d\n",
+		  extent_index);
 
 	creation_point = ssdfs_fsck_get_creation_point(env, 0);
 
@@ -1418,46 +1489,177 @@ int ssdfs_fsck_find_segbmap_segment(struct ssdfs_fsck_environment *env,
 	}
 
 	segbmap = &creation_point->segbmap;
+	segbmap_hdr = &segbmap->segbmap_sb_hdr;
 
-	res = __ssdfs_fsck_find_segbmap_segment(env, seg_index,
-						SSDFS_FSCK_MAIN_LOG);
-	switch (res) {
-	case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
-		/* continue logic */
-		break;
+	lebs_per_seg = env->seg_size / env->base.erase_size;
+	BUG_ON(lebs_per_seg == 0);
 
-	case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
-		SSDFS_DBG(env->base.show_debug,
-			  "unable to find main segment bitmap's segment: "
-			  "seg_index %d\n", seg_index);
-		return res;
-
-	default:
-		SSDFS_ERR("fail to find main segment bitmap's segment: "
-			  "seg_index %d\n", seg_index);
+	if (extent_index >= SEGBMAP_LIMIT1) {
+		SSDFS_ERR("invalid extent index: "
+			  "extent_index %d, upper_limit %u\n",
+			  extent_index, (u32)SEGBMAP_LIMIT1);
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	res = __ssdfs_fsck_find_segbmap_segment(env, seg_index,
-						SSDFS_FSCK_COPY_LOG);
-	switch (res) {
-	case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
-		/* continue logic */
+	extent = &segbmap_hdr->extents[extent_index][SSDFS_FSCK_MAIN_LOG];
+
+	switch (le16_to_cpu(extent->type)) {
+	case SSDFS_EMPTY_EXTENT_TYPE:
+		/* skip empty extent */
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+
+	case SSDFS_SEG_EXTENT_TYPE:
+		start_id = le64_to_cpu(extent->start_id);
+		len = le32_to_cpu(extent->len);
+
+		for (i = 0; i < len; i++) {
+			res = ssdfs_fsck_find_segbmap_segment_by_id(env,
+							start_id + i,
+							SSDFS_FSCK_MAIN_LOG);
+			switch (res) {
+			case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
+				/* continue logic */
+				break;
+
+			case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
+				SSDFS_DBG(env->base.show_debug,
+					  "unable to find segment bitmap\n");
+				return res;
+
+			default:
+				SSDFS_ERR("fail to find segment bitmap: "
+					  "seg_id %llu\n", start_id + i);
+				return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			}
+		}
+
+		segbmap->found_segs += len;
 		break;
 
-	case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
-		SSDFS_DBG(env->base.show_debug,
-			  "unable to find copy segment bitmap's segment: "
-			  "seg_index %d\n", seg_index);
-		return res;
+	case SSDFS_PEB_EXTENT_TYPE:
+		start_id = le64_to_cpu(extent->start_id);
+		len = le32_to_cpu(extent->len);
+
+		for (i = 0; i < len; i++) {
+			res = ssdfs_fsck_find_segbmap_peb_by_leb(env,
+							start_id + i,
+							SSDFS_FSCK_MAIN_LOG);
+			switch (res) {
+			case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
+				/* continue logic */
+				break;
+
+			case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
+				SSDFS_DBG(env->base.show_debug,
+					  "unable to find segment bitmap\n");
+				return res;
+
+			default:
+				SSDFS_ERR("fail to find segment bitmap: "
+					  "seg_id %llu\n", start_id + i);
+				return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			}
+		}
+
+		BUG_ON(len % lebs_per_seg);
+		segbmap->found_segs += len / lebs_per_seg;
+		break;
+
+	case SSDFS_BLK_EXTENT_TYPE:
+		SSDFS_ERR("unexpected extent type %#x\n",
+			  le16_to_cpu(extent->type));
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
 
 	default:
-		SSDFS_ERR("fail to find copy segment bitmap's segment: "
-			  "seg_index %d\n", seg_index);
-		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+		SSDFS_ERR("unexpected extent type %#x\n",
+			  le16_to_cpu(extent->type));
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
 	}
 
-	segbmap->array.count++;
+	extent = &segbmap_hdr->extents[extent_index][SSDFS_FSCK_COPY_LOG];
+	flags = le16_to_cpu(segbmap_hdr->flags);
+
+	switch (le16_to_cpu(extent->type)) {
+	case SSDFS_EMPTY_EXTENT_TYPE:
+		if (flags & SSDFS_SEGBMAP_HAS_COPY) {
+			/* backup copy is not found */
+			return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+		} else {
+			/* backup copy is absent */
+			return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+		}
+
+	case SSDFS_SEG_EXTENT_TYPE:
+		start_id = le64_to_cpu(extent->start_id);
+		len = le32_to_cpu(extent->len);
+
+		for (i = 0; i < len; i++) {
+			res = ssdfs_fsck_find_segbmap_segment_by_id(env,
+							start_id + i,
+							SSDFS_FSCK_COPY_LOG);
+			switch (res) {
+			case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
+				/* continue logic */
+				break;
+
+			case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
+				SSDFS_DBG(env->base.show_debug,
+					  "unable to find segment bitmap\n");
+				return res;
+
+			default:
+				SSDFS_ERR("fail to find segment bitmap: "
+					  "seg_id %llu\n", start_id + i);
+				return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			}
+		}
+
+		segbmap->found_segs += len;
+		break;
+
+	case SSDFS_PEB_EXTENT_TYPE:
+		start_id = le64_to_cpu(extent->start_id);
+		len = le32_to_cpu(extent->len);
+
+		for (i = 0; i < len; i++) {
+			res = ssdfs_fsck_find_segbmap_peb_by_leb(env,
+							start_id + i,
+							SSDFS_FSCK_COPY_LOG);
+			switch (res) {
+			case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
+				/* continue logic */
+				break;
+
+			case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
+				SSDFS_DBG(env->base.show_debug,
+					  "unable to find segment bitmap\n");
+				return res;
+
+			default:
+				SSDFS_ERR("fail to find segment bitmap: "
+					  "seg_id %llu\n", start_id + i);
+				return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+			}
+		}
+
+		BUG_ON(len % lebs_per_seg);
+		segbmap->found_segs += len / lebs_per_seg;
+		break;
+
+	case SSDFS_BLK_EXTENT_TYPE:
+		SSDFS_ERR("unexpected extent type %#x\n",
+			  le16_to_cpu(extent->type));
+		return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+
+	default:
+		if (flags & SSDFS_SEGBMAP_HAS_COPY) {
+			/* backup copy is not found */
+			return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+		} else {
+			/* backup copy is absent */
+			return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+		}
+	}
 
 	SSDFS_DBG(env->base.show_debug,
 		  "finished\n");
@@ -1469,7 +1671,7 @@ static
 int is_segment_bitmap_found(struct ssdfs_fsck_environment *env)
 {
 	struct ssdfs_fsck_volume_creation_point *creation_point;
-	u32 segs_count;
+	u32 extents_count;
 	int i;
 	int res;
 
@@ -1499,16 +1701,16 @@ int is_segment_bitmap_found(struct ssdfs_fsck_environment *env)
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	segs_count = creation_point->segbmap.segs_count;
+	extents_count = creation_point->segbmap.extents_count;
 
-	if (segs_count == 0 || segs_count >= U32_MAX) {
-		SSDFS_ERR("invalid segs_count %u\n",
-			  segs_count);
+	if (extents_count == 0 || extents_count > SEGBMAP_LIMIT1) {
+		SSDFS_ERR("invalid extents_count %u\n",
+			  extents_count);
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	for (i = 0; i < segs_count; i++) {
-		res = ssdfs_fsck_find_segbmap_segment(env, i);
+	for (i = 0; i < extents_count; i++) {
+		res = ssdfs_fsck_find_segbmap_extent(env, i);
 		switch (res) {
 		case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
 			/* continue logic */
@@ -1521,7 +1723,7 @@ int is_segment_bitmap_found(struct ssdfs_fsck_environment *env)
 
 		default:
 			SSDFS_ERR("fail to find segment bitmap: "
-				  "segment index %d\n", i);
+				  "extent index %d\n", i);
 			return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 		}
 	}
