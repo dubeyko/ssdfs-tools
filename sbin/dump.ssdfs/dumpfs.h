@@ -69,6 +69,7 @@ enum SSDFS_DUMPFS_PARSE_FLAGS {
  * @id: PEB's identification number
  * @pebs_count: count of PEBs in the range
  * @peb_size: PEB size in bytes
+ * @create_time: volume create_time
  * @show_all_logs: should all logs be shown?
  * @log_offset: log offset in bytes
  * @log_size: log's size in bytes
@@ -80,6 +81,7 @@ struct ssdfs_peb_dump_environment {
 	u64 id;
 	u64 pebs_count;
 	u32 peb_size;
+	u64 create_time;
 
 	int show_all_logs;
 	u32 log_offset;

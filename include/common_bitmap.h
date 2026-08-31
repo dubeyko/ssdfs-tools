@@ -29,15 +29,16 @@
 
 #define ALIGNED_START_ITEM(item, state_bits) ({ \
 	u64 aligned_start; \
-	aligned_start = (item >> state_bits) << state_bits; \
+	aligned_start = (u64)(item) / SSDFS_ITEMS_PER_BYTE(state_bits); \
+	aligned_start *= SSDFS_ITEMS_PER_BYTE(state_bits); \
 	aligned_start; \
 })
 
 #define ALIGNED_END_ITEM(item, state_bits) ({ \
 	u64 aligned_end; \
-	aligned_end = item + SSDFS_ITEMS_PER_BYTE(state_bits) - 1; \
-	aligned_end >>= state_bits; \
-	aligned_end <<= state_bits; \
+	aligned_end = (u64)(item) + SSDFS_ITEMS_PER_BYTE(state_bits) - 1; \
+	aligned_end /= SSDFS_ITEMS_PER_BYTE(state_bits); \
+	aligned_end *= SSDFS_ITEMS_PER_BYTE(state_bits); \
 	aligned_end; \
 })
 

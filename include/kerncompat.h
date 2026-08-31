@@ -71,10 +71,14 @@
 #define BUG() abort()
 #ifdef __CHECKER__
 #define __force    __attribute__((force))
+#ifndef __bitwise__
 #define __bitwise__ __attribute__((bitwise))
+#endif
 #else
 #define __force
+#ifndef __bitwise__
 #define __bitwise__
+#endif
 #endif
 
 #ifndef __CHECKER__

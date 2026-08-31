@@ -5535,12 +5535,12 @@ parse_block_state_area:
 		err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
 							area_size);
 		if (err) {
-			err = 0;
 			SSDFS_ERR("fail to parse block descriptors: "
 				  "peb_id %llu, log_index %u, "
 				  "log_offset %u, err %d\n",
 				  env->peb.id, env->peb.log_index,
 				  env->peb.log_offset, err);
+			err = 0;
 			goto finish_parse_blk_desc_array;
 		}
 
@@ -5610,12 +5610,12 @@ parse_maptbl_cache_area:
 		err = ssdfs_dumpfs_parse_maptbl_cache(env, area_buf,
 							area_size);
 		if (err) {
-			err = 0;
 			SSDFS_ERR("fail to parse mapping table cache: "
 				  "peb_id %llu, log_index %u, "
 				  "log_offset %u, err %d\n",
 				  env->peb.id, env->peb.log_index,
 				  env->peb.log_offset, err);
+			err = 0;
 			goto finish_parse_maptbl_cache;
 		}
 
@@ -5857,12 +5857,12 @@ parse_block_state_area:
 		err = ssdfs_dumpfs_parse_blk_desc_array(env, area_buf,
 							area_size);
 		if (err) {
-			err = 0;
 			SSDFS_ERR("fail to parse block descriptors: "
 				  "peb_id %llu, log_index %u, "
 				  "log_offset %u, err %d\n",
 				  env->peb.id, env->peb.log_index,
 				  env->peb.log_offset, err);
+			err = 0;
 			goto finish_parse_blk_desc_array;
 		}
 
@@ -6005,11 +6005,34 @@ finish_parse_partial_log:
 	return err;
 }
 
+static
+void ssdfs_dumpfs_check_peb_geometry(struct ssdfs_dumpfs_environment *env,
+				     u64 create_time, u8 log_pagesize,
+				     u8 log_erasesize)
+{
+	if (env->peb.create_time == 0)
+		return;
+
+	if (create_time == env->peb.create_time)
+		return;
+
+	env->base.page_size = 1u << log_pagesize;
+	env->peb.peb_size = 1u << log_erasesize;
+
+	SSDFS_DUMPFS_INFO(env->base.show_info,
+			  "PEB %llu: create_time %llu differs from the "
+			  "volume baseline %llu; page_size %u, erase_size %u\n",
+			  env->peb.id, create_time, env->peb.create_time,
+			  env->base.page_size, env->peb.peb_size);
+}
+
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 {
 	union ssdfs_metadata_header buf;
 	u64 peb_id;
 	u64 pebs_count;
+	u32 volume_page_size;
+	u32 volume_erase_size;
 	int log_index;
 	u32 logs_count;
 	u32 max_logs;
@@ -6078,10 +6101,15 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		goto finish_peb_dump;
 	}
 
+	env->peb.create_time = le64_to_cpu(buf.seg_hdr.volume_hdr.create_time);
+
 	peb_id = env->peb.id;
 	pebs_count = env->peb.pebs_count;
 	log_index = env->peb.log_index;
 	logs_count = env->peb.logs_count;
+
+	volume_page_size = env->base.page_size;
+	volume_erase_size = env->peb.peb_size;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "peb_id %llu, pebs_count %llu, "
@@ -6096,6 +6124,10 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 	}
 
 	while (env->peb.pebs_count > 0) {
+		u64 create_time;
+		u8 log_pagesize;
+		u8 log_erasesize;
+
 		if (env->peb.id < (env->base.fs_size / env->peb.peb_size)) {
 			env->peb.log_index = 0;
 			env->peb.logs_count = max_logs;
@@ -6157,8 +6189,20 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 				goto try_next_log;
 			}
 
+			create_time =
+				le64_to_cpu(buf.seg_hdr.volume_hdr.create_time);
+			log_pagesize = buf.seg_hdr.volume_hdr.log_pagesize;
+			log_erasesize = buf.seg_hdr.volume_hdr.log_erasesize;
+
 			if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
 			    le16_to_cpu(buf.magic.key) == SSDFS_SEGMENT_HDR_MAGIC) {
+				if (env->peb.log_index == 0) {
+					ssdfs_dumpfs_check_peb_geometry(env,
+								create_time,
+								log_pagesize,
+								log_erasesize);
+				}
+
 				err = ssdfs_dumpfs_parse_full_log(env, &buf);
 				if (err) {
 					SSDFS_ERR("fail to parse the full log: "
@@ -6167,6 +6211,13 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 				}
 			} else if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
 				   le16_to_cpu(buf.magic.key) == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
+				if (env->peb.log_index == 0) {
+					ssdfs_dumpfs_check_peb_geometry(env,
+								create_time,
+								log_pagesize,
+								log_erasesize);
+				}
+
 				err = ssdfs_dumpfs_parse_partial_log(env, &buf);
 				if (err) {
 					SSDFS_ERR("fail to parse the partial log: "
@@ -6209,6 +6260,8 @@ try_next_log:
 try_next_peb:
 		env->peb.id++;
 		env->peb.pebs_count--;
+		env->base.page_size = volume_page_size;
+		env->peb.peb_size = volume_erase_size;
 	}
 
 stop_peb_dumping:

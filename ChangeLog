@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.73 [August 30, 2026]
+    (*) Fix multiple issues in mkfs.ssdfs and dump.ssdfs tools.
+
 v.4.72 [August 13, 2026]
     (*) Switch segment bitmap on metadata extents.
 

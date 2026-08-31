@@ -60,7 +60,7 @@ int segbmap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 		if (fragments_per_peb == 0)
 			fragments_per_peb = 1;
 
-		fragments_per_peb = min_t(u16, fragments_per_peb, fragments);
+		fragments_per_peb = (u16)min_t(u32, fragments_per_peb, fragments);
 		layout->segbmap.fragments_per_peb = fragments_per_peb;
 
 		SSDFS_WARN("it will be used the new value: "
@@ -262,6 +262,12 @@ static int segbmap_prepare_fragment(struct ssdfs_volume_layout *layout,
 	BUG_ON(fragment_bytes >= USHRT_MAX);
 
 	items_per_fragment = ssdfs_segbmap_items_per_fragment(PAGE_CACHE_SIZE);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "start_item %llu, seg_nums %llu, "
+		  "items_per_fragment %u\n",
+		  start_item, seg_nums, items_per_fragment);
+
 	items_per_fragment = min_t(u64, (u64)items_per_fragment,
 						seg_nums - start_item);
 	BUG_ON(items_per_fragment >= USHRT_MAX);
@@ -279,6 +285,12 @@ static int segbmap_prepare_fragment(struct ssdfs_volume_layout *layout,
 	hdr->clean_or_using_segs = cpu_to_le16(items_per_fragment);
 	hdr->used_or_dirty_segs = 0;
 	hdr->bad_segs = 0;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "start_item %llu, index %u, fragment_bytes %llu, "
+		  "items_per_fragment %u\n",
+		  start_item, index, fragment_bytes,
+		  items_per_fragment);
 
 	return 0;
 }
@@ -365,42 +377,77 @@ static int define_seg_id(struct ssdfs_volume_layout *layout,
 	size_t fragment_size = layout->segbmap.fragment_size;
 	u16 fragments_per_peb = layout->segbmap.fragments_per_peb;
 	u64 nsegs = layout->env.fs_size / layout->seg_size;
+	u16 lebs_per_portion = layout->maptbl.lebs_per_portion;
+	u16 pebs_per_seg = layout->segbmap.pebs_per_seg;
+	u16 segs_per_chain = layout->segbmap.segs_per_chain;
+	int buffers_count = (int)segs_per_chain * pebs_per_seg;
+	int array_index;
 	int fragment_index;
 	void *fragment;
 	u8 *bmap;
+	u64 start_seg;
+	u64 max_seg;
+	u64 start_item;
+	u64 upper_bound;
+	u32 items_per_fragment;
 	u64 found_seg = U64_MAX;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "layout %p, new_state %#x\n", layout, new_state);
 
+	array_index = 0;
 	fragment_index = 0;
+	start_seg = 0;
+	max_seg = lebs_per_portion / 2;
 
 try_fragment:
-	fragment = (u8 *)layout->segbmap.fragments_array[0] +
+	fragment = (u8 *)layout->segbmap.fragments_array[array_index] +
 			(fragment_index * fragment_size);
 	hdr = (struct ssdfs_segbmap_fragment_header *)fragment;
+	start_item = le64_to_cpu(hdr->start_item);
+	items_per_fragment = le16_to_cpu(hdr->total_segs);
+	upper_bound = start_item + items_per_fragment;
 
 	bmap = (u8 *)fragment + sizeof(struct ssdfs_segbmap_fragment_header);
 
-	err = SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(hdr, bmap, 0, nsegs,
+	err = SET_FIRST_CLEAN_ITEM_IN_FRAGMENT(hdr, bmap,
+						start_seg, max_seg,
 						PAGE_CACHE_SIZE,
 						new_state, &found_seg);
 	if (err == -ENODATA || found_seg == U64_MAX) {
+		start_seg += lebs_per_portion;
+		max_seg = start_seg + (lebs_per_portion / 2);
+
+		if (start_seg >= nsegs || max_seg >= nsegs) {
+			SSDFS_ERR("fail to find clean segment: "
+				  "start_seg %llu, max_seg %llu, nsegs %llu\n",
+				  start_seg, max_seg, nsegs);
+			return -ERANGE;
+		}
+
+		if (start_seg < upper_bound) {
+			max_seg = min_t(u64, max_seg, upper_bound);
+			goto try_fragment;
+		}
+
 		if ((fragment_index + 1) >= fragments_per_peb) {
-			/*
-			 * Amount of fragments_per_peb should be enough
-			 * for volume creation. Otherwise, it needs
-			 * to add implementation here.
-			 */
 			SSDFS_DBG(layout->env.show_debug,
 				  "index %d >= fragments_per_peb %u\n",
 				  fragment_index + 1,
 				  fragments_per_peb);
-			return -ERANGE;
-		}
 
-		fragment_index++;
+			array_index++;
+			fragment_index = 0;
+			if (array_index >= buffers_count) {
+				SSDFS_ERR("fail to find clean segment: "
+					  "array_index %d, buffers_count %d\n",
+					  array_index, buffers_count);
+				return -ERANGE;
+			}
+		} else
+			fragment_index++;
+
 		goto try_fragment;
 	} else if (err) {
 		SSDFS_ERR("fail to find clean segment: err %d\n", err);

@@ -66,7 +66,7 @@ u32 ssdfs_segbmap_items_per_fragment(size_t fragment_size)
 	BUG_ON(hdr_size >= fragment_size);
 
 	payload_bytes = fragment_size - hdr_size;
-	items = payload_bytes * SSDFS_ITEMS_PER_BYTE(SSDFS_SEG_STATE_BITS);
+	items = (u64)payload_bytes * SSDFS_ITEMS_PER_BYTE(SSDFS_SEG_STATE_BITS);
 
 	BUG_ON(items >= U32_MAX);
 
