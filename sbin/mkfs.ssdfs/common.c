@@ -375,6 +375,7 @@ int pre_commit_segment_header(struct ssdfs_volume_layout *layout,
 	struct ssdfs_extent_desc *extent;
 	struct ssdfs_segment_header *hdr;
 	char *begin_ptr;
+	u32 flags;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d\n",
@@ -420,6 +421,19 @@ int pre_commit_segment_header(struct ssdfs_volume_layout *layout,
 	hdr->leb_id = cpu_to_le64(peb_desc->leb_id);
 	hdr->peb_id = cpu_to_le64(peb_desc->peb_id);
 	hdr->relation_peb_id = cpu_to_le64(U64_MAX);
+
+	switch (seg_type) {
+	case SSDFS_SB_SEG_TYPE:
+	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
+		flags = le32_to_cpu(hdr->volume_hdr.flags);
+		flags |= SSDFS_VH_4KB_PAGE_SIZE_PEB;
+		hdr->volume_hdr.flags = cpu_to_le32(flags);
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
 
 	return 0;
 }
@@ -2279,11 +2293,13 @@ int define_log_footer_layout(struct ssdfs_volume_layout *layout,
 }
 
 int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
-			  int seg_index, int peb_index)
+			  int seg_type, int seg_index, int peb_index)
 {
 	struct ssdfs_segment_desc *seg_desc;
 	struct ssdfs_peb_content *peb_desc;
 	struct ssdfs_extent_desc *extent;
+	struct ssdfs_log_footer *footer;
+	u32 flags;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "seg_index %d, peb_index %d\n",
@@ -2307,6 +2323,21 @@ int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 	extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
 
 	BUG_ON(!extent->buf);
+
+	footer = (struct ssdfs_log_footer *)extent->buf;
+
+	switch (seg_type) {
+	case SSDFS_SUPERBLOCK:
+	case SSDFS_INITIAL_SNAPSHOT:
+		flags = le32_to_cpu(footer->volume_state.flags);
+		flags |= SSDFS_VS_4KB_PAGE_SIZE_PEB;
+		footer->volume_state.flags = cpu_to_le32(flags);
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
 
 	return 0;
 }

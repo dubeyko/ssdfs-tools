@@ -1245,7 +1245,8 @@ struct ssdfs_volume_header {
 	__le64 create_cno;
 #define SSDFS_VH_ZNS_BASED_VOLUME	(1 << 0)
 #define SSDFS_VH_UNALIGNED_ZONE		(1 << 1)
-#define SSDFS_VH_FLAGS_MASK		(0x3)
+#define SSDFS_VH_4KB_PAGE_SIZE_PEB	(1 << 2)
+#define SSDFS_VH_FLAGS_MASK		(0x7)
 	__le32 flags;
 	__le32 lebs_per_peb_index;
 
@@ -1338,7 +1339,8 @@ struct ssdfs_volume_state {
 
 /* 0x0030 */
 #define SSDFS_HAS_INLINE_INODES_TREE		(1 << 0)
-#define SSDFS_VOLUME_STATE_FLAGS_MASK		0x1
+#define SSDFS_VS_4KB_PAGE_SIZE_PEB		(1 << 1)
+#define SSDFS_VOLUME_STATE_FLAGS_MASK		0x3
 	__le32 flags;
 	__le16 state;
 	__le16 errors;

@@ -161,7 +161,9 @@ int snap_mkfs_commit(struct ssdfs_volume_layout *layout)
 
 	/* TODO: commit payload */
 
-	err = pre_commit_log_footer(layout, seg_index, peb_index);
+	err = pre_commit_log_footer(layout,
+				    SSDFS_INITIAL_SNAPSHOT_SEG_TYPE,
+				    seg_index, peb_index);
 	if (err)
 		return err;
 

@@ -1789,8 +1789,9 @@ int sb_mkfs_commit(struct ssdfs_volume_layout *layout)
 			if (err)
 				return err;
 
-			err = pre_commit_log_footer(layout, seg_index,
-						    peb_index);
+			err = pre_commit_log_footer(layout,
+						    SSDFS_SB_SEG_TYPE,
+						    seg_index, peb_index);
 			if (err)
 				return err;
 

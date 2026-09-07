@@ -579,7 +579,7 @@ void commit_block_descriptors(struct ssdfs_volume_layout *layout,
 int define_log_footer_layout(struct ssdfs_volume_layout *layout,
 			     int seg_index, int peb_index);
 int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
-			  int seg_index, int peb_index);
+			  int seg_type, int seg_index, int peb_index);
 void commit_log_footer(struct ssdfs_volume_layout *layout,
 		       int seg_index, int peb_index,
 		       u32 blks_count);

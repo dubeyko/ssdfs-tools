@@ -1239,8 +1239,9 @@ int segbmap_mkfs_commit(struct ssdfs_volume_layout *layout)
 
 			calculate_peb_fragments_checksum(layout, extent->buf);
 
-			err = pre_commit_log_footer(layout, seg_index,
-						    j);
+			err = pre_commit_log_footer(layout,
+						    SSDFS_SEGBMAP_SEG_TYPE,
+						    seg_index, j);
 			if (err)
 				return err;
 

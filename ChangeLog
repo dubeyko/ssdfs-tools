@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.74 [September 06, 2026]
+    (*) [mkfs] Correct logic of log pages calculation for superblock
+               segments.
+
 v.4.73 [August 30, 2026]
     (*) Fix multiple issues in mkfs.ssdfs and dump.ssdfs tools.
 

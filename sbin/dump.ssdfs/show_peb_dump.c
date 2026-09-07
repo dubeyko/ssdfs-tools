@@ -1843,6 +1843,9 @@ int __ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 	if (flags & SSDFS_HAS_INLINE_INODES_TREE)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_HAS_INLINE_INODES_TREE ");
 
+	if (flags & SSDFS_VS_4KB_PAGE_SIZE_PEB)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_VS_4KB_PAGE_SIZE_PEB ");
+
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -3136,6 +3139,9 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	if (vh_flags & SSDFS_VH_UNALIGNED_ZONE)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_VH_UNALIGNED_ZONE ");
 
+	if (vh_flags & SSDFS_VH_4KB_PAGE_SIZE_PEB)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_VH_4KB_PAGE_SIZE_PEB ");
+
 	if (vh_flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -3634,6 +3640,9 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 
 	if (flags & SSDFS_HAS_INLINE_INODES_TREE)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_HAS_INLINE_INODES_TREE ");
+
+	if (flags & SSDFS_VS_4KB_PAGE_SIZE_PEB)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_VS_4KB_PAGE_SIZE_PEB ");
 
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
