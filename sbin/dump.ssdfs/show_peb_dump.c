@@ -2481,8 +2481,8 @@ finish_parse_fragment:
 }
 
 static
-int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
-				    void *area_buf, u32 area_size)
+int ssdfs_dumpfs_parse_maptbl_cache_fragment(struct ssdfs_dumpfs_environment *env,
+					     void *area_buf, u32 area_size)
 {
 	struct ssdfs_maptbl_cache_header *cache_hdr = NULL;
 	struct ssdfs_maptbl_cache_peb_state *peb_state = NULL;
@@ -2501,15 +2501,13 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 	int err = 0;
 
 	SSDFS_DBG(env->base.show_debug,
-		  "parse mapping table cache\n");
+		  "parse mapping table cache fragment\n");
 
 	if (area_size < hdr_size) {
 		SSDFS_ERR("area_size %u < hdr_size %zu\n",
 			  area_size, hdr_size);
 		return -EINVAL;
 	}
-
-	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE CACHE:\n");
 
 	cache_hdr = (struct ssdfs_maptbl_cache_header *)((u8 *)area_buf);
 
@@ -2550,7 +2548,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 	end_leb = le16_to_cpu(cache_hdr->end_leb);
 	SSDFS_DUMPFS_DUMP(env, "END_LEB: %llu\n", end_leb);
 
-	compr_size = area_size;
+	compr_size = area_size - hdr_size;
 	uncompr_size = bytes_count;
 
 	if (flags & SSDFS_MAPTBL_CACHE_ZLIB_COMPR) {
@@ -2558,7 +2556,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		if (!uncompr_data) {
 			err = -ENOMEM;
 			SSDFS_ERR("fail to allocate memory\n");
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = (u8 *)area_buf + hdr_size;
@@ -2569,7 +2567,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		if (err) {
 			SSDFS_ERR("fail to decompress: err %d\n",
 				  err);
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = uncompr_data;
@@ -2577,7 +2575,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		uncompr_data = malloc(uncompr_size);
 		if (!uncompr_data) {
 			SSDFS_ERR("fail to allocate memory\n");
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = (u8 *)area_buf + hdr_size;
@@ -2588,7 +2586,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		if (err) {
 			SSDFS_ERR("fail to decompress: err %d\n",
 				  err);
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = uncompr_data;
@@ -2596,7 +2594,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		uncompr_data = malloc(uncompr_size);
 		if (!uncompr_data) {
 			SSDFS_ERR("fail to allocate memory\n");
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = (u8 *)area_buf + hdr_size;
@@ -2607,7 +2605,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		if (err) {
 			SSDFS_ERR("fail to decompress: err %d\n",
 				  err);
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = uncompr_data;
@@ -2615,7 +2613,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		uncompr_data = malloc(uncompr_size);
 		if (!uncompr_data) {
 			SSDFS_ERR("fail to allocate memory\n");
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = (u8 *)area_buf + hdr_size;
@@ -2626,7 +2624,7 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		if (err) {
 			SSDFS_ERR("fail to decompress: err %d\n",
 				  err);
-			goto finish_parse_maptbl_cache;
+			goto finish_parse_fragment;
 		}
 
 		data = uncompr_data;
@@ -2794,11 +2792,81 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 		SSDFS_DUMPFS_DUMP(env, "\n");
 	}
 
-finish_parse_maptbl_cache:
+finish_parse_fragment:
 	if (uncompr_data)
 		free(uncompr_data);
 
 	return err;
+}
+
+static
+int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
+				    void *area_buf, u32 area_size)
+{
+	size_t hdr_size = sizeof(struct ssdfs_maptbl_cache_header);
+	u32 parsed_bytes = 0;
+	int fragment_index = 0;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse mapping table cache\n");
+
+	if (area_size < hdr_size) {
+		SSDFS_ERR("area_size %u < hdr_size %zu\n",
+			  area_size, hdr_size);
+		return -EINVAL;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "MAPPING TABLE CACHE:\n");
+
+	/*
+	 * The mapping table cache area is a sequence of fragments.
+	 * Every fragment starts from its own struct ssdfs_maptbl_cache_header
+	 * and occupies the whole 4KB page of superblock segment (except
+	 * the inline case when the single fragment is smaller than a page).
+	 * Iterate over the whole area and parse every fragment.
+	 */
+	while (parsed_bytes + hdr_size <= area_size) {
+		struct ssdfs_maptbl_cache_header *cache_hdr;
+		u8 *fragment = (u8 *)area_buf + parsed_bytes;
+		u32 fragment_size;
+
+		cache_hdr = (struct ssdfs_maptbl_cache_header *)fragment;
+
+		if (le16_to_cpu(cache_hdr->magic.key) !=
+						SSDFS_MAPTBL_CACHE_MAGIC) {
+			/*
+			 * No more fragments: the rest of the area is padding.
+			 */
+			break;
+		}
+
+		fragment_size = SSDFS_4KB;
+		if (parsed_bytes + fragment_size > area_size)
+			fragment_size = area_size - parsed_bytes;
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+		SSDFS_DUMPFS_DUMP(env, "FRAGMENT #%d:\n", fragment_index);
+
+		err = ssdfs_dumpfs_parse_maptbl_cache_fragment(env, fragment,
+							      fragment_size);
+		if (err) {
+			SSDFS_ERR("fail to parse mapping table cache "
+				  "fragment #%d: err %d\n",
+				  fragment_index, err);
+			return err;
+		}
+
+		parsed_bytes += fragment_size;
+		fragment_index++;
+	}
+
+	if (fragment_index == 0) {
+		SSDFS_ERR("no valid mapping table cache fragment found\n");
+		return -EIO;
+	}
+
+	return 0;
 }
 
 static
