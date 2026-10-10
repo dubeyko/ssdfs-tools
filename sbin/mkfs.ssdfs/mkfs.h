@@ -51,6 +51,8 @@ enum {
 	SSDFS_BLOCK_BITMAP,
 	SSDFS_OFFSET_TABLE,
 	SSDFS_BLOCK_DESCRIPTORS,
+	SSDFS_SEGBMAP_META_EXTENTS,
+	SSDFS_MAPTBL_META_EXTENTS,
 	SSDFS_MAPTBL_CACHE,
 	SSDFS_LOG_PAYLOAD,
 	SSDFS_LOG_FOOTER,
@@ -166,6 +168,25 @@ struct ssdfs_blk2off_table_layout {
 };
 
 /*
+ * struct ssdfs_meta_extents_layout - metadata extents that don't fit into
+ *                                    the volume header
+ * @extents: array of extents
+ * @count: count of initialized items in the array
+ * @capacity: capacity of the array (in items)
+ *
+ * The volume header keeps only limited number of extents in
+ * the extents[N][M] array (N rows, M chains: main and copy).
+ * The rest of extents is kept in this array and is stored in
+ * the superblock segment. The array continues the volume header's one:
+ * the item (N + row) * M + chain is placed at index row * M + chain.
+ */
+struct ssdfs_meta_extents_layout {
+	struct ssdfs_meta_area_extent *extents;
+	u32 count;
+	u32 capacity;
+};
+
+/*
  * struct ssdfs_segbmap_layout - segment bitmap creation structure
  * @has_backup_copy: backup copy is present?
  * @segs_per_chain: count of reserved (or allocated) segment in chain
@@ -177,6 +198,7 @@ struct ssdfs_blk2off_table_layout {
  * @fragments_count: count of fragments in segment bitmap
  * @fragment_size: size of fragment in bytes
  * @bmap_bytes: bitmap payload size in bytes
+ * @overflow_extents: extents that don't fit into the volume header
  * @fragments_array: array of pointers on PEBs' buffers
  */
 struct ssdfs_segbmap_layout {
@@ -193,6 +215,7 @@ struct ssdfs_segbmap_layout {
 	u32 fragments_count;
 	size_t fragment_size;
 	u32 bmap_bytes;
+	struct ssdfs_meta_extents_layout overflow_extents;
 	void **fragments_array;
 };
 
@@ -214,6 +237,7 @@ struct ssdfs_segbmap_layout {
  * @pebs_per_portion: PEB descriptors in one portion
  * @portions_count: count of portions in mapping table
  * @portion_size: size of portion in bytes
+ * @overflow_extents: extents that don't fit into the volume header
  * @fragments_array: array of pointers on fragment's buffers
  */
 struct ssdfs_maptbl_layout {
@@ -237,6 +261,7 @@ struct ssdfs_maptbl_layout {
 	u64 pre_erased_pebs;
 	u32 portions_count;
 	size_t portion_size;
+	struct ssdfs_meta_extents_layout overflow_extents;
 	void **fragments_array;
 };
 
@@ -576,6 +601,15 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 				 u32 item_size);
 void commit_block_descriptors(struct ssdfs_volume_layout *layout,
 			      int seg_index, int peb_index);
+int set_meta_area_extent(struct ssdfs_meta_area_extent *embedded,
+			 u32 embedded_rows, u32 chains_count,
+			 struct ssdfs_meta_extents_layout *overflow,
+			 u32 row, u32 chain, u64 start_id, u32 len);
+void destroy_meta_extents_layout(struct ssdfs_meta_extents_layout *ptr);
+int define_meta_extents_area(struct ssdfs_volume_layout *layout,
+			     struct ssdfs_peb_content *peb_desc,
+			     int extent_index,
+			     struct ssdfs_meta_extents_layout *src);
 int define_log_footer_layout(struct ssdfs_volume_layout *layout,
 			     int seg_index, int peb_index);
 int pre_commit_log_footer(struct ssdfs_volume_layout *layout,

@@ -556,6 +556,7 @@ int define_segbmap_extents(struct ssdfs_volume_layout *layout,
 	u64 seg_id = U64_MAX;
 	u32 extent_len;
 	int i, j;
+	int err;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "layout %p, seg_chain_type %d, segs_per_chain %u\n",
@@ -575,6 +576,10 @@ int define_segbmap_extents(struct ssdfs_volume_layout *layout,
 		return 0;
 	}
 
+	/*
+	 * The volume header keeps the first SSDFS_SEGBMAP_RESERVED_EXTENTS
+	 * extents. The rest of extents is stored in the superblock segment.
+	 */
 	for (i = 0, j = 0, extent_len = 0; i < segs_per_chain; i++) {
 		int cur_seg_index = seg_index + (i * replication) +
 					seg_chain_type;
@@ -590,12 +595,18 @@ int define_segbmap_extents(struct ssdfs_volume_layout *layout,
 			seg_id = cur_seg_id;
 			extent_len = 1;
 		} else if ((seg_id + extent_len) != cur_seg_id) {
-			extent = &hdr->extents[j][seg_chain_type];
-
-			extent->start_id = cpu_to_le64(seg_id);
-			extent->len = cpu_to_le32(extent_len);
-			extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
-			extent->flags = 0;
+			err = set_meta_area_extent(&hdr->extents[0][0],
+					SSDFS_SEGBMAP_RESERVED_EXTENTS,
+					SSDFS_SEGBMAP_SEG_COPY_MAX,
+					&layout->segbmap.overflow_extents,
+					j, seg_chain_type,
+					seg_id, extent_len);
+			if (err) {
+				SSDFS_ERR("fail to set extent: "
+					  "index %d, seg_id %llu, err %d\n",
+					  j, seg_id, err);
+				return err;
+			}
 
 			SSDFS_DBG(layout->env.show_debug,
 				  "extent (index %d, seg_id %llu, "
@@ -605,20 +616,25 @@ int define_segbmap_extents(struct ssdfs_volume_layout *layout,
 			seg_id = cur_seg_id;
 			extent_len = 1;
 			j++;
-			BUG_ON(j >= SSDFS_SEGBMAP_RESERVED_EXTENTS);
 		} else
 			extent_len++;
 	}
 
 	if (extent_len != 0) {
 		BUG_ON(seg_id == U64_MAX);
-		BUG_ON(j >= SSDFS_SEGBMAP_RESERVED_EXTENTS);
 
-		extent = &hdr->extents[j][seg_chain_type];
-		extent->start_id = cpu_to_le64(seg_id);
-		extent->len = cpu_to_le32(extent_len);
-		extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
-		extent->flags = 0;
+		err = set_meta_area_extent(&hdr->extents[0][0],
+					SSDFS_SEGBMAP_RESERVED_EXTENTS,
+					SSDFS_SEGBMAP_SEG_COPY_MAX,
+					&layout->segbmap.overflow_extents,
+					j, seg_chain_type,
+					seg_id, extent_len);
+		if (err) {
+			SSDFS_ERR("fail to set extent: "
+				  "index %d, seg_id %llu, err %d\n",
+				  j, seg_id, err);
+			return err;
+		}
 
 		SSDFS_DBG(layout->env.show_debug,
 			  "extent (index %d, seg_id %llu, "

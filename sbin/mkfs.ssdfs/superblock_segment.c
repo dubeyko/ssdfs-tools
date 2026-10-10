@@ -1576,6 +1576,34 @@ static void sb_set_log_pages(struct ssdfs_volume_layout *layout,
 	layout->sb.vh.sb_seg_log_pages = cpu_to_le16(blks);
 }
 
+static
+int sb_check_log_fits_into_peb(struct ssdfs_volume_layout *layout,
+				struct ssdfs_peb_content *peb_desc)
+{
+	struct ssdfs_extent_desc *cache;
+	struct ssdfs_extent_desc *segbmap_ext;
+	struct ssdfs_extent_desc *maptbl_ext;
+	struct ssdfs_extent_desc *footer;
+	u32 erasesize = layout->env.erase_size;
+
+	cache = &peb_desc->extents[SSDFS_MAPTBL_CACHE];
+	segbmap_ext = &peb_desc->extents[SSDFS_SEGBMAP_META_EXTENTS];
+	maptbl_ext = &peb_desc->extents[SSDFS_MAPTBL_META_EXTENTS];
+	footer = &peb_desc->extents[SSDFS_LOG_FOOTER];
+
+	if (((u64)footer->offset + footer->bytes_count) > erasesize) {
+		SSDFS_ERR("log footer (offset %u, size %u) is outside "
+			  "of erasesize %u: maptbl cache %u bytes, "
+			  "segbmap extents %u bytes, maptbl extents %u bytes\n",
+			  footer->offset, footer->bytes_count, erasesize,
+			  cache->bytes_count, segbmap_ext->bytes_count,
+			  maptbl_ext->bytes_count);
+		return -E2BIG;
+	}
+
+	return 0;
+}
+
 int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 {
 	struct ssdfs_metadata_desc *desc;
@@ -1585,8 +1613,6 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	int peb_index = 0;
 	u32 fragments;
 	u32 log_pages = 0;
-	size_t hdr_size = sizeof(struct ssdfs_segment_header);
-	u32 inline_capacity = PAGE_CACHE_SIZE - hdr_size;
 	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
@@ -1657,13 +1683,27 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				return err;
 			}
 
-			err = set_extent_start_offset(layout,
-							SSDFS_SB_SEG_TYPE,
-							peb_desc,
-							SSDFS_MAPTBL_CACHE);
+			/*
+			 * STEP 1: prepare the areas that follow
+			 * the segment header and define their sizes.
+			 */
+			err = define_meta_extents_area(layout,
+					peb_desc,
+					SSDFS_SEGBMAP_META_EXTENTS,
+					&layout->segbmap.overflow_extents);
 			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
+				SSDFS_ERR("fail to define segbmap extents "
+					  "area: err %d\n", err);
+				return err;
+			}
+
+			err = define_meta_extents_area(layout,
+					peb_desc,
+					SSDFS_MAPTBL_META_EXTENTS,
+					&layout->maptbl.overflow_extents);
+			if (err) {
+				SSDFS_ERR("fail to define maptbl extents "
+					  "area: err %d\n", err);
 				return err;
 			}
 
@@ -1698,15 +1738,43 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 
 			extent->bytes_count = layout->maptbl_cache.bytes_count;
 
-			if (extent->bytes_count <= inline_capacity) {
-				struct ssdfs_extent_desc *sh_extent;
-
-				sh_extent =
-					&peb_desc->extents[SSDFS_SEG_HEADER];
-
-				extent->offset = sh_extent->offset +
-							sh_extent->bytes_count;
+			/*
+			 * STEP 2: define the offsets of the areas. The areas
+			 * are placed in the order: segbmap's extents, maptbl's
+			 * extents, maptbl cache. The offset of an area depends
+			 * on the sizes of the previous ones.
+			 */
+			err = set_extent_start_offset(layout,
+						SSDFS_SB_SEG_TYPE,
+						peb_desc,
+						SSDFS_SEGBMAP_META_EXTENTS);
+			if (err) {
+				SSDFS_ERR("fail to define extent's offset: "
+					  "err %d\n", err);
+				return err;
 			}
+
+			err = set_extent_start_offset(layout,
+						SSDFS_SB_SEG_TYPE,
+						peb_desc,
+						SSDFS_MAPTBL_META_EXTENTS);
+			if (err) {
+				SSDFS_ERR("fail to define extent's offset: "
+					  "err %d\n", err);
+				return err;
+			}
+
+			err = set_extent_start_offset(layout,
+						SSDFS_SB_SEG_TYPE,
+						peb_desc,
+						SSDFS_MAPTBL_CACHE);
+			if (err) {
+				SSDFS_ERR("fail to define extent's offset: "
+					  "err %d\n", err);
+				return err;
+			}
+
+			/* STEP 3: the log footer follows the areas */
 
 			err = set_extent_start_offset(layout,
 							SSDFS_SB_SEG_TYPE,
@@ -1723,6 +1791,13 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err) {
 				SSDFS_ERR("fail to define seg footer's layout: "
 					  "err %d\n", err);
+				return err;
+			}
+
+			err = sb_check_log_fits_into_peb(layout, peb_desc);
+			if (err) {
+				SSDFS_ERR("superblock segment's log doesn't "
+					  "fit into PEB: err %d\n", err);
 				return err;
 			}
 

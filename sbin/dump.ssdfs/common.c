@@ -28,12 +28,54 @@
 
 #define SSDFS_DUMPFS_PEB_SEARCH_SHIFT	(1)
 
+/*
+ * Make sure that the output folder exists and can be written before
+ * the dumping starts. Otherwise, every dumped log would fail separately.
+ */
+int ssdfs_dumpfs_prepare_output_folder(struct ssdfs_dumpfs_environment *env)
+{
+	struct stat st = {0};
+	int err;
+
+	if (!env->dump_into_files)
+		return 0;
+
+	if (stat(env->output_folder, &st) == -1) {
+		if (errno != ENOENT ||
+		    mkdir(env->output_folder,
+			  S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
+			err = errno;
+			SSDFS_ERR("unable to create output folder %s: %s\n",
+				  env->output_folder, strerror(err));
+			return -err;
+		}
+
+		return 0;
+	}
+
+	if (!S_ISDIR(st.st_mode)) {
+		SSDFS_ERR("output folder %s isn't a directory\n",
+			  env->output_folder);
+		return -ENOTDIR;
+	}
+
+	if (access(env->output_folder, W_OK | X_OK) == -1) {
+		err = errno;
+		SSDFS_ERR("output folder %s isn't writable: %s\n",
+			  env->output_folder, strerror(err));
+		return -err;
+	}
+
+	return 0;
+}
+
 int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env,
 			   char *file_name)
 {
 #define SSDFS_DUMPFS_PATH_LEN		(256)
 	char buf[SSDFS_DUMPFS_PATH_LEN];
 	struct stat st = {0};
+	int err;
 
 	if (!env->dump_into_files)
 		return 0;
@@ -73,16 +115,20 @@ int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env,
 			     S_IRGRP | S_IWGRP |
 			     S_IROTH | S_IWOTH);
 	if (env->fd == -1) {
+		err = errno;
 		SSDFS_ERR("unable to create %s: %s\n",
-			  buf, strerror(errno));
-		return errno;
+			  buf, strerror(err));
+		return -err;
 	}
 
 	env->stream = fdopen(env->fd, "w");
 	if (env->stream == NULL) {
+		err = errno;
 		SSDFS_ERR("fail to open file's stream: %s\n",
-			  strerror(errno));
-		return errno;
+			  strerror(err));
+		close(env->fd);
+		env->fd = -1;
+		return -err;
 	}
 
 	return 0;
@@ -93,8 +139,15 @@ void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env)
 	if (!env->dump_into_files)
 		return;
 
-	fclose(env->stream);
-	close(env->fd);
+	if (env->stream) {
+		/* fclose() closes the underlying file descriptor too */
+		fclose(env->stream);
+		env->stream = NULL;
+	} else if (env->fd >= 0) {
+		close(env->fd);
+	}
+
+	env->fd = -1;
 }
 
 int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
@@ -201,6 +254,34 @@ int ssdfs_dumpfs_read_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 				      buf, env->base.show_debug);
 	if (err) {
 		SSDFS_ERR("fail to read mapping table cache: "
+			  "offset %llu, err %d\n",
+			  offset, err);
+		return err;
+	}
+
+	return 0;
+}
+
+int ssdfs_dumpfs_read_meta_extents(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   u32 log_offset, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf)
+{
+	u64 offset;
+	int err;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "peb_id: %llu, peb_size %u\n",
+		  peb_id, peb_size);
+
+	offset = peb_id * peb_size;
+	offset += area_offset;
+
+	err = env->base.dev_ops->read(env->base.fd, offset, size,
+				      buf, env->base.show_debug);
+	if (err) {
+		SSDFS_ERR("fail to read metadata extents: "
 			  "offset %llu, err %d\n",
 			  offset, err);
 		return err;

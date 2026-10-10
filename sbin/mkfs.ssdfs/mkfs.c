@@ -727,6 +727,8 @@ static void free_segs_array(struct ssdfs_volume_layout *layout)
 	segbmap_destroy_fragments_array(layout);
 	maptbl_destroy_fragments_array(layout);
 	maptbl_cache_destroy_fragments_array(layout);
+	destroy_meta_extents_layout(&layout->segbmap.overflow_extents);
+	destroy_meta_extents_layout(&layout->maptbl.overflow_extents);
 
 	if (layout->segs_capacity != layout->segs_count)
 		SSDFS_WARN("segments capacity is not equal to segments count\n");

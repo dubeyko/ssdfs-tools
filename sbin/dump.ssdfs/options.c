@@ -20,6 +20,8 @@
  */
 
 #include <sys/types.h>
+#include <ctype.h>
+#include <errno.h>
 #include <getopt.h>
 
 #include "dumpfs.h"
@@ -46,7 +48,8 @@ void print_usage(void)
 		   "log_index=value,log_count=value,log_size=value,"
 		   "parse_header,parse_log_footer,parse_block_bitmap,"
 		   "parse_blk2off_table,parse_block_state_area,"
-		   "parse_maptbl_cache,parse_maptbl,parse_segbmap,"
+		   "parse_maptbl_cache,parse_meta_extents,parse_maptbl,"
+		   "parse_segbmap,"
 		   "parse_all,raw_dump]\t  show PEB dump.\n");
 	SSDFS_INFO("\t [-q|--quiet]\t\t  quiet execution (useful for scripts).\n");
 	SSDFS_INFO("\t [-r|--raw-dump show,offset=value,size=value]\t  "
@@ -63,6 +66,56 @@ static void ssdfs_check_log_index(u32 value)
 		print_usage();
 		exit(EXIT_FAILURE);
 	}
+}
+
+/*
+ * Parse the numeric value of a sub-option. The value must be
+ * a non-negative decimal number in the range [min, max].
+ */
+static u64 ssdfs_parse_value(const char *opt, const char *value,
+			     u64 min, u64 max)
+{
+	char *end = NULL;
+	u64 res;
+
+	if (!value || !isdigit((unsigned char)*value)) {
+		SSDFS_ERR("option %s requires a numeric value: %s\n",
+			  opt, value ? value : "(missing)");
+		goto fail;
+	}
+
+	errno = 0;
+	res = strtoull(value, &end, 10);
+	if (errno || *end != '\0') {
+		SSDFS_ERR("invalid value of option %s: %s\n", opt, value);
+		goto fail;
+	}
+
+	if (res < min || res > max) {
+		SSDFS_ERR("value of option %s is out of range "
+			  "[%llu, %llu]: %s\n",
+			  opt, min, max, value);
+		goto fail;
+	}
+
+	return res;
+
+fail:
+	print_usage();
+	exit(EXIT_FAILURE);
+}
+
+static u32 ssdfs_parse_peb_size(const char *value)
+{
+	u64 size = ssdfs_parse_value("size", value, SSDFS_4KB, 1ULL << 31);
+
+	if (size & (size - 1)) {
+		SSDFS_ERR("PEB size must be a power of two: %s\n", value);
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+
+	return (u32)size;
 }
 
 void parse_options(int argc, char *argv[],
@@ -96,6 +149,7 @@ void parse_options(int argc, char *argv[],
 		PEB_PARSE_BLK2OFF_TBL_OPT,
 		PEB_PARSE_BLOCK_STATE_OPT,
 		PEB_PARSE_MAPTBL_CACHE_OPT,
+		PEB_PARSE_META_EXTENTS_OPT,
 		PEB_PARSE_MAPTBL_OPT,
 		PEB_PARSE_SEGBMAP_OPT,
 		PEB_PARSE_ALL_OPT,
@@ -114,6 +168,7 @@ void parse_options(int argc, char *argv[],
 		[PEB_PARSE_BLK2OFF_TBL_OPT]	= "parse_blk2off_table",
 		[PEB_PARSE_BLOCK_STATE_OPT]	= "parse_block_state_area",
 		[PEB_PARSE_MAPTBL_CACHE_OPT]	= "parse_maptbl_cache",
+		[PEB_PARSE_META_EXTENTS_OPT]	= "parse_meta_extents",
 		[PEB_PARSE_MAPTBL_OPT]		= "parse_maptbl",
 		[PEB_PARSE_SEGBMAP_OPT]		= "parse_segbmap",
 		[PEB_PARSE_ALL_OPT]		= "parse_all",
@@ -176,24 +231,30 @@ void parse_options(int argc, char *argv[],
 				peb = &env->peb;
 				switch (getsubopt(&p, peb_dump_tokens, &value)) {
 				case PEB_ID_OPT:
-					count = atoll(value);
-					peb->id = count;
+					peb->id = ssdfs_parse_value("id", value,
+								0, U64_MAX - 1);
 					break;
 				case PEB_COUNT_OPT:
-					count = atoll(value);
-					peb->pebs_count = count;
+					peb->pebs_count =
+						ssdfs_parse_value("peb_count",
+								  value, 1,
+								  U64_MAX - 1);
 					break;
 				case PEB_SIZE_OPT:
-					count = atol(value);
-					peb->peb_size = (u32)count;
+					peb->peb_size =
+						ssdfs_parse_peb_size(value);
 					break;
 				case PEB_LOG_INDEX_OPT:
-					count = atol(value);
+					count = ssdfs_parse_value("log_index",
+								  value, 0,
+								  U32_MAX - 1);
 					ssdfs_check_log_index((u32)count);
 					peb->log_index = (u32)count;
 					break;
 				case PEB_LOG_COUNT_OPT:
-					count = atol(value);
+					count = ssdfs_parse_value("log_count",
+								  value, 0,
+								  U32_MAX - 1);
 					peb->logs_count = (u32)count;
 					if (peb->logs_count > 1)
 						peb->show_all_logs = SSDFS_TRUE;
@@ -201,7 +262,9 @@ void parse_options(int argc, char *argv[],
 						peb->show_all_logs = SSDFS_FALSE;
 					break;
 				case PEB_LOG_SIZE_OPT:
-					count = atol(value);
+					count = ssdfs_parse_value("log_size",
+								  value, 1,
+								  U32_MAX - 1);
 					peb->log_size = (u32)count;
 					break;
 				case PEB_PARSE_HEADER_OPT:
@@ -221,6 +284,9 @@ void parse_options(int argc, char *argv[],
 					break;
 				case PEB_PARSE_MAPTBL_CACHE_OPT:
 					peb->parse_flags |= SSDFS_PARSE_MAPTBL_CACHE_AREA;
+					break;
+				case PEB_PARSE_META_EXTENTS_OPT:
+					peb->parse_flags |= SSDFS_PARSE_META_EXTENTS_AREA;
 					break;
 				case PEB_PARSE_MAPTBL_OPT:
 					peb->parse_flags |= SSDFS_PARSE_MAPPING_TABLE;
@@ -264,7 +330,6 @@ void parse_options(int argc, char *argv[],
 			while (*p != '\0') {
 				struct ssdfs_dumpfs_raw_dump_environment *raw_dump;
 				char *value;
-				u64 count;
 
 				raw_dump = &env->raw_dump;
 				switch (getsubopt(&p, raw_dump_tokens, &value)) {
@@ -272,12 +337,16 @@ void parse_options(int argc, char *argv[],
 					/* do nothing */
 					break;
 				case RAW_DUMP_OFFSET_OPT:
-					count = atoll(value);
-					raw_dump->offset = count;
+					raw_dump->offset =
+						ssdfs_parse_value("offset",
+								  value, 0,
+								  U64_MAX - 1);
 					break;
 				case RAW_DUMP_SIZE_OPT:
-					count = atol(value);
-					raw_dump->size = (u32)count;
+					raw_dump->size =
+						(u32)ssdfs_parse_value("size",
+								value, 1,
+								U32_MAX);
 					break;
 				default:
 					print_usage();
@@ -295,6 +364,13 @@ void parse_options(int argc, char *argv[],
 	}
 
 	if (optind != argc - 1) {
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+
+	if (env->command == SSDFS_RAW_DUMP_COMMAND &&
+	    (env->raw_dump.offset == U64_MAX || env->raw_dump.size == 0)) {
+		SSDFS_ERR("PLEASE, DEFINE RAW DUMP OFFSET AND SIZE\n");
 		print_usage();
 		exit(EXIT_FAILURE);
 	}

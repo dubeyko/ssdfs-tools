@@ -1316,8 +1316,8 @@ define_next_peb_id:
 }
 
 static
-void define_maptbl_extents(struct ssdfs_volume_layout *layout,
-			   int seg_chain_type)
+int define_maptbl_extents(struct ssdfs_volume_layout *layout,
+			  int seg_chain_type)
 {
 	struct ssdfs_maptbl_sb_header *hdr = &layout->sb.vh.maptbl;
 	struct ssdfs_meta_area_extent *extent;
@@ -1330,6 +1330,7 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 	u64 seg_id = U64_MAX;
 	u32 extent_len;
 	int i, j;
+	int err;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "layout %p, pebs_per_seg %u, portions_per_seg %u, "
@@ -1361,6 +1362,10 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 		extent->type = cpu_to_le16(SSDFS_EMPTY_EXTENT_TYPE);
 	}
 
+	/*
+	 * The volume header keeps the first SSDFS_MAPTBL_RESERVED_EXTENTS
+	 * extents. The rest of extents is stored in the superblock segment.
+	 */
 	for (i = 0, j = 0, extent_len = 0; i < segs_per_copy; i++) {
 		u64 cur_seg_id = layout->segs[seg_index + i].seg_id;
 
@@ -1368,12 +1373,18 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 			seg_id = cur_seg_id;
 			extent_len++;
 		} else if ((seg_id + extent_len) != cur_seg_id) {
-			extent = &hdr->extents[j][seg_chain_type];
-
-			extent->start_id = cpu_to_le64(seg_id);
-			extent->len = cpu_to_le32(extent_len);
-			extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
-			extent->flags = 0;
+			err = set_meta_area_extent(&hdr->extents[0][0],
+					SSDFS_MAPTBL_RESERVED_EXTENTS,
+					SSDFS_MAPTBL_SEG_COPY_MAX,
+					&layout->maptbl.overflow_extents,
+					j, seg_chain_type,
+					seg_id, extent_len);
+			if (err) {
+				SSDFS_ERR("fail to set extent: "
+					  "index %d, seg_id %llu, err %d\n",
+					  j, seg_id, err);
+				return err;
+			}
 
 			SSDFS_DBG(layout->env.show_debug,
 				  "extent (index %d, seg_id %llu, "
@@ -1383,26 +1394,33 @@ void define_maptbl_extents(struct ssdfs_volume_layout *layout,
 			seg_id = cur_seg_id;
 			extent_len = 1;
 			j++;
-			BUG_ON(j >= SSDFS_MAPTBL_RESERVED_EXTENTS);
 		} else
 			extent_len++;
 	}
 
 	if (extent_len != 0) {
 		BUG_ON(seg_id == U64_MAX);
-		BUG_ON(j >= SSDFS_MAPTBL_RESERVED_EXTENTS);
 
-		extent = &hdr->extents[j][seg_chain_type];
-		extent->start_id = cpu_to_le64(seg_id);
-		extent->len = cpu_to_le32(extent_len);
-		extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
-		extent->flags = 0;
+		err = set_meta_area_extent(&hdr->extents[0][0],
+					SSDFS_MAPTBL_RESERVED_EXTENTS,
+					SSDFS_MAPTBL_SEG_COPY_MAX,
+					&layout->maptbl.overflow_extents,
+					j, seg_chain_type,
+					seg_id, extent_len);
+		if (err) {
+			SSDFS_ERR("fail to set extent: "
+				  "index %d, seg_id %llu, err %d\n",
+				  j, seg_id, err);
+			return err;
+		}
 
 		SSDFS_DBG(layout->env.show_debug,
 			  "extent (index %d, seg_id %llu, "
 			  "extent_len %u)\n",
 			  j, seg_id, extent_len);
 	}
+
+	return 0;
 }
 
 static
@@ -1420,6 +1438,7 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 	u32 segs_per_copy;
 	size_t extent_size = sizeof(struct ssdfs_meta_area_extent);
 	int segs_count;
+	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
@@ -1519,10 +1538,21 @@ int init_maptbl_sb_header(struct ssdfs_volume_layout *layout)
 		return -ERANGE;
 	}
 
-	define_maptbl_extents(layout, SSDFS_MAIN_MAPTBL_SEG);
+	err = define_maptbl_extents(layout, SSDFS_MAIN_MAPTBL_SEG);
+	if (err) {
+		SSDFS_ERR("fail to define main maptbl extents: err %d\n",
+			  err);
+		return err;
+	}
 
-	if (maptbl->has_backup_copy)
-		define_maptbl_extents(layout, SSDFS_COPY_MAPTBL_SEG);
+	if (maptbl->has_backup_copy) {
+		err = define_maptbl_extents(layout, SSDFS_COPY_MAPTBL_SEG);
+		if (err) {
+			SSDFS_ERR("fail to define copy maptbl extents: "
+				  "err %d\n", err);
+			return err;
+		}
+	}
 
 	return 0;
 }

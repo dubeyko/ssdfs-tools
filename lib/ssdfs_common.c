@@ -178,6 +178,13 @@ int ssdfs_pread(int fd, u64 offset, size_t size, void *buf)
 			return errno;
 		}
 
+		if (ret == 0) {
+			SSDFS_ERR("unexpected end of file: offset %llu, "
+				  "size %zu, rest %zu\n",
+				  offset, size, rest);
+			return -EIO;
+		}
+
 		rest -= ret;
 		offset += ret;
 		buf += ret;

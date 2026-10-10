@@ -26,17 +26,58 @@
  *                     Show PEB dump command                            *
  ************************************************************************/
 
+#define SSDFS_DUMPFS_MIN_LOG_PAGESIZE	(12)	/* 4KB */
+#define SSDFS_DUMPFS_MAX_LOG_ERASESIZE	(31)
+
+/*
+ * Use the page size of the log's header only if it is sane. The page size
+ * is a divisor in the further calculations.
+ */
+static inline
+void ssdfs_dumpfs_set_page_size(struct ssdfs_dumpfs_environment *env,
+				u8 log_pagesize)
+{
+	if (log_pagesize >= SSDFS_DUMPFS_MIN_LOG_PAGESIZE &&
+	    log_pagesize <= SSDFS_DUMPFS_MAX_LOG_ERASESIZE)
+		env->base.page_size = 1U << log_pagesize;
+}
+
+/*
+ * An empty descriptor means an absent area. A descriptor that points
+ * outside of the PEB is a garbage (corrupted header or a header
+ * of another layout). It is treated as an absent area. Otherwise,
+ * the size of the area is used for memory allocation and device reading.
+ */
+/* a shift by 32 or more bits is undefined; garbage headers have them */
+static inline
+u32 ssdfs_dumpfs_pow2(u8 log)
+{
+	return log < 32 ? 1U << log : 0;
+}
+
 static
-int is_ssdfs_dumpfs_area_valid(struct ssdfs_metadata_descriptor *desc)
+int is_ssdfs_dumpfs_area_valid(struct ssdfs_dumpfs_environment *env,
+			       struct ssdfs_metadata_descriptor *desc)
 {
 	u32 area_offset = le32_to_cpu(desc->offset);
 	u32 area_size = le32_to_cpu(desc->size);
+	u32 peb_size = env->peb.peb_size;
 
 	if (area_size == 0 || area_size >= U32_MAX)
 		return SSDFS_FALSE;
 
 	if (area_offset == 0 || area_offset >= U32_MAX)
 		return SSDFS_FALSE;
+
+	if (area_offset >= peb_size || area_size > (peb_size - area_offset)) {
+		SSDFS_DUMPFS_INFO(env->base.show_info,
+				  "PEB %llu: AREA IS OUT OF PEB "
+				  "(offset %u, size %u, PEB size %u): "
+				  "SKIP IT\n",
+				  env->peb.id, area_offset, area_size,
+				  peb_size);
+		return SSDFS_FALSE;
+	}
 
 	return SSDFS_TRUE;
 }
@@ -144,6 +185,31 @@ ssdfs_dumpfs_parse_fragments_chain_hdr(struct ssdfs_dumpfs_environment *env,
 	case SSDFS_BLK_BMAP_CHAIN_HDR:
 		SSDFS_DUMPFS_DUMP(env,
 			"CHAIN TYPE: SSDFS_BLK_BMAP_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_META_EXT_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_META_EXT_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_META_EXT_ZLIB_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_META_EXT_ZLIB_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_META_EXT_LZO_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_META_EXT_LZO_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_META_EXT_LZ4_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_META_EXT_LZ4_CHAIN_HDR\n");
+		break;
+
+	case SSDFS_META_EXT_ZSTD_CHAIN_HDR:
+		SSDFS_DUMPFS_DUMP(env,
+			"CHAIN TYPE: SSDFS_META_EXT_ZSTD_CHAIN_HDR\n");
 		break;
 
 	default:
@@ -286,6 +352,31 @@ void ssdfs_dumpfs_parse_fragment_header(struct ssdfs_dumpfs_environment *env,
 			"FRAGMENT TYPE: SSDFS_BLK2OFF_DESC_ZSTD\n");
 		break;
 
+	case SSDFS_META_EXT_BLOB:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_META_EXT_BLOB\n");
+		break;
+
+	case SSDFS_META_EXT_ZLIB:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_META_EXT_ZLIB\n");
+		break;
+
+	case SSDFS_META_EXT_LZO:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_META_EXT_LZO\n");
+		break;
+
+	case SSDFS_META_EXT_LZ4:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_META_EXT_LZ4\n");
+		break;
+
+	case SSDFS_META_EXT_ZSTD:
+		SSDFS_DUMPFS_DUMP(env,
+			"FRAGMENT TYPE: SSDFS_META_EXT_ZSTD\n");
+		break;
+
 	case SSDFS_NEXT_TABLE_DESC:
 		SSDFS_DUMPFS_DUMP(env,
 			"FRAGMENT TYPE: SSDFS_NEXT_TABLE_DESC\n");
@@ -313,7 +404,7 @@ void ssdfs_dumpfs_parse_btree_descriptor(struct ssdfs_dumpfs_environment *env,
 {
 	u8 *magic = (u8 *)&desc->magic;
 	u16 flags = le16_to_cpu(desc->flags);
-	u32 node_size = 1 << desc->log_node_size;
+	u32 node_size = ssdfs_dumpfs_pow2(desc->log_node_size);
 	u16 index_size = le16_to_cpu(desc->index_size);
 	u16 item_size = le16_to_cpu(desc->item_size);
 	u16 index_area_min_size = le16_to_cpu(desc->index_area_min_size);
@@ -868,14 +959,25 @@ int ssdfs_dumpfs_parse_block_bitmap(struct ssdfs_dumpfs_environment *env,
 {
 	struct ssdfs_block_bitmap_header *hdr =
 			(struct ssdfs_block_bitmap_header *)area_buf;
-	u16 fragments_count = le16_to_cpu(hdr->fragments_count);
-	u32 bytes_count = le32_to_cpu(hdr->bytes_count);
-	u8 flags = hdr->flags;
-	u8 type = hdr->type;
+	u16 fragments_count;
+	u32 bytes_count;
+	u8 flags;
+	u8 type;
 	u32 offset;
 	u32 size;
 	int i;
 	int err;
+
+	if (area_size < sizeof(struct ssdfs_block_bitmap_header)) {
+		SSDFS_ERR("area_size %u < block bitmap header %zu\n",
+			  area_size, sizeof(struct ssdfs_block_bitmap_header));
+		return -EINVAL;
+	}
+
+	fragments_count = le16_to_cpu(hdr->fragments_count);
+	bytes_count = le32_to_cpu(hdr->bytes_count);
+	flags = hdr->flags;
+	type = hdr->type;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "area_size %u, bytes_count %u\n",
@@ -993,7 +1095,7 @@ int ssdfs_dumpfs_parse_block_bitmap_area(struct ssdfs_dumpfs_environment *env,
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -1364,6 +1466,14 @@ int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
 	compr_size = le16_to_cpu(frag_desc->compr_size);
 	uncompr_size = le16_to_cpu(frag_desc->uncompr_size);
 
+	if (*parsed_bytes > area_size ||
+	    compr_size > (area_size - *parsed_bytes)) {
+		SSDFS_ERR("fragment is out of area: parsed_bytes %u, "
+			  "compr_size %u, area_size %u\n",
+			  *parsed_bytes, compr_size, area_size);
+		return -ERANGE;
+	}
+
 	switch (frag_desc->type) {
 	case SSDFS_BLK2OFF_EXTENT_DESC:
 		fragment = (u8 *)area_buf + *parsed_bytes;
@@ -1403,7 +1513,7 @@ int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
 			goto finish_parse_extent_fragment;
 		}
 
-		fragment = area_buf;
+		fragment = (u8 *)area_buf + *parsed_bytes;
 
 		err = ssdfs_lzo_decompress(fragment, uncompr_data,
 					   compr_size, uncompr_size,
@@ -1428,7 +1538,7 @@ int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
 			goto finish_parse_extent_fragment;
 		}
 
-		fragment = area_buf;
+		fragment = (u8 *)area_buf + *parsed_bytes;
 
 		err = ssdfs_lz4_decompress(fragment, uncompr_data,
 					   compr_size, uncompr_size,
@@ -1453,7 +1563,7 @@ int ssdfs_dumpfs_parse_extents_fragment(struct ssdfs_dumpfs_environment *env,
 			goto finish_parse_extent_fragment;
 		}
 
-		fragment = area_buf;
+		fragment = (u8 *)area_buf + *parsed_bytes;
 
 		err = ssdfs_zstd_decompress(fragment, uncompr_data,
 					    compr_size, uncompr_size,
@@ -1554,8 +1664,10 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 	do {
 		next_fragment_exist = SSDFS_FALSE;
 
-		if (parsed_bytes > area_size) {
-			SSDFS_ERR("parsed_bytes %u > area_size %u\n",
+		if (parsed_bytes > area_size ||
+		    (area_size - parsed_bytes) < hdr_size) {
+			SSDFS_ERR("table doesn't fit into the area: "
+				  "parsed_bytes %u, area_size %u\n",
 				  parsed_bytes, area_size);
 			return -E2BIG;
 		}
@@ -1606,6 +1718,12 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 		ssdfs_dumpfs_parse_fragments_chain_hdr(env, &hdr->chain_hdr);
 
 		fragments_count = le16_to_cpu(hdr->chain_hdr.fragments_count);
+
+		if (fragments_count > SSDFS_BLK2OFF_TBL_MAX) {
+			SSDFS_ERR("fragments_count %u > MAX %u\n",
+				  fragments_count, SSDFS_BLK2OFF_TBL_MAX);
+			return -ERANGE;
+		}
 
 		for (i = 0; i < fragments_count; i++) {
 			SSDFS_DUMPFS_DUMP(env, "\n");
@@ -1673,6 +1791,20 @@ int ssdfs_dumpfs_parse_blk2off_table(struct ssdfs_dumpfs_environment *env,
 				break;
 
 			case SSDFS_NEXT_TABLE_DESC:
+				/*
+				 * The next table has to follow the current one.
+				 * Otherwise, the chain is corrupted and
+				 * the parsing can loop forever.
+				 */
+				if (le32_to_cpu(frag_desc->offset) <
+								parsed_bytes) {
+					SSDFS_ERR("next table's offset %u "
+						  "is behind parsed_bytes %u\n",
+						  le32_to_cpu(frag_desc->offset),
+						  parsed_bytes);
+					return -ERANGE;
+				}
+
 				parsed_bytes = le32_to_cpu(frag_desc->offset);
 				next_fragment_exist = SSDFS_TRUE;
 				break;
@@ -1712,7 +1844,7 @@ int ssdfs_dumpfs_parse_blk2off_area(struct ssdfs_dumpfs_environment *env,
 		  "area_offset %u, area_size %u\n",
 		  area_offset, area_size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -2421,9 +2553,11 @@ parse_next_area:
 
 		SSDFS_DUMPFS_DUMP(env, "\n");
 
+		/* the buffer has uncompr_size bytes only if it was unpacked */
 		err = ssdfs_dumpfs_parse_blk_states(env, data,
-					le16_to_cpu(frag->compr_size),
-					le16_to_cpu(frag->uncompr_size));
+				le16_to_cpu(frag->compr_size),
+				uncompr_data ? uncompr_size :
+					min_t(u32, compr_size, uncompr_size));
 		if (err) {
 			SSDFS_ERR("fail to parse block descriptors: "
 				  "err %d\n", err);
@@ -2495,6 +2629,8 @@ int ssdfs_dumpfs_parse_maptbl_cache_fragment(struct ssdfs_dumpfs_environment *en
 	u8 *data = NULL;
 	u8 *uncompr_data = NULL;
 	u32 compr_size, uncompr_size;
+	u32 data_bytes;
+	u64 required_bytes;
 	__le64 *cur_id = NULL;
 	u8 *magic = NULL;
 	int i;
@@ -2630,6 +2766,25 @@ int ssdfs_dumpfs_parse_maptbl_cache_fragment(struct ssdfs_dumpfs_environment *en
 		data = uncompr_data;
 	} else {
 		data = (u8 *)area_buf + hdr_size;
+	}
+
+	/* the counter comes from the disk: check it against the real data */
+	if (uncompr_data)
+		data_bytes = uncompr_size;
+	else
+		data_bytes = area_size - hdr_size;
+
+	required_bytes = (u64)items_count *
+			 (sizeof(__le64) * 2 +
+			  sizeof(struct ssdfs_maptbl_cache_peb_state));
+	required_bytes += sizeof(__le32);
+
+	if (required_bytes > data_bytes) {
+		err = -ERANGE;
+		SSDFS_ERR("cache fragment is corrupted: items_count %u "
+			  "needs %llu bytes but only %u are available\n",
+			  items_count, required_bytes, data_bytes);
+		goto finish_parse_fragment;
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "\n");
@@ -2867,6 +3022,349 @@ int ssdfs_dumpfs_parse_maptbl_cache(struct ssdfs_dumpfs_environment *env,
 	}
 
 	return 0;
+}
+
+#define SSDFS_DUMPFS_META_CHAINS_COUNT	(SSDFS_SEGBMAP_SEG_COPY_MAX)
+
+static
+void ssdfs_dumpfs_show_meta_extent(struct ssdfs_dumpfs_environment *env,
+				   u32 row, u32 chain,
+				   struct ssdfs_meta_area_extent *extent)
+{
+	SSDFS_DUMPFS_DUMP(env,
+		   "extent[%u][%s]: start_id %llu, len %u, ",
+		   row, chain == 0 ? "MAIN" : "COPY",
+		   le64_to_cpu(extent->start_id),
+		   le32_to_cpu(extent->len));
+
+	switch (le16_to_cpu(extent->type)) {
+	case SSDFS_EMPTY_EXTENT_TYPE:
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_EMPTY_EXTENT_TYPE, ");
+		break;
+
+	case SSDFS_SEG_EXTENT_TYPE:
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_SEG_EXTENT_TYPE, ");
+		break;
+
+	case SSDFS_PEB_EXTENT_TYPE:
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_PEB_EXTENT_TYPE, ");
+		break;
+
+	case SSDFS_BLK_EXTENT_TYPE:
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK_EXTENT_TYPE, ");
+		break;
+
+	default:
+		SSDFS_DUMPFS_DUMP(env, "UNKNOWN_EXTENT_TYPE, ");
+		break;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "flags %#x\n", le16_to_cpu(extent->flags));
+}
+
+/*
+ * The area is the sequence of struct ssdfs_metadata_extents_table tables.
+ * Every table is followed by its fragments. Every fragment is an array of
+ * struct ssdfs_meta_area_extent. The area continues the extents[N][M]
+ * array of the volume header: the extents are the pairs of
+ * (main, copy) for the rows starting from @first_row.
+ */
+static
+int ssdfs_dumpfs_parse_meta_extents(struct ssdfs_dumpfs_environment *env,
+				    void *area_buf, u32 area_size,
+				    const char *name, u32 first_row)
+{
+	struct ssdfs_metadata_extents_table *table;
+	size_t hdr_size = sizeof(struct ssdfs_metadata_extents_table);
+	size_t item_size = sizeof(struct ssdfs_meta_area_extent);
+	struct ssdfs_fragment_desc *frag;
+	u32 table_offset = 0;
+	u32 extents_count = 0;
+	int table_index = 0;
+	int i;
+	int err = 0;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "parse %s extents area\n", name);
+
+	SSDFS_DUMPFS_DUMP(env, "%s OVERFLOW EXTENTS:\n", name);
+
+parse_next_table:
+	if (area_size < hdr_size || table_offset > (area_size - hdr_size)) {
+		SSDFS_ERR("table is out of area: "
+			  "table_offset %u, area_size %u\n",
+			  table_offset, area_size);
+		return -ERANGE;
+	}
+
+	table = (struct ssdfs_metadata_extents_table *)((u8 *)area_buf +
+							table_offset);
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+	SSDFS_DUMPFS_DUMP(env, "TABLE_INDEX: #%d, offset %u\n",
+			  table_index, table_offset);
+
+	ssdfs_dumpfs_parse_fragments_chain_hdr(env, &table->chain_hdr);
+
+	if (table->chain_hdr.magic != SSDFS_CHAIN_HDR_MAGIC) {
+		SSDFS_ERR("invalid chain header's magic %#x\n",
+			  table->chain_hdr.magic);
+		return -ERANGE;
+	}
+
+	switch (table->chain_hdr.type) {
+	case SSDFS_META_EXT_CHAIN_HDR:
+	case SSDFS_META_EXT_ZLIB_CHAIN_HDR:
+	case SSDFS_META_EXT_LZO_CHAIN_HDR:
+	case SSDFS_META_EXT_LZ4_CHAIN_HDR:
+	case SSDFS_META_EXT_ZSTD_CHAIN_HDR:
+		/* expected type */
+		break;
+
+	default:
+		SSDFS_ERR("invalid chain header's type %#x\n",
+			  table->chain_hdr.type);
+		return -ERANGE;
+	}
+
+	if (le16_to_cpu(table->chain_hdr.fragments_count) >
+					SSDFS_NEXT_META_EXT_TABLE_INDEX) {
+		SSDFS_ERR("fragments_count %u > MAX %u\n",
+			  le16_to_cpu(table->chain_hdr.fragments_count),
+			  SSDFS_NEXT_META_EXT_TABLE_INDEX);
+		return -ERANGE;
+	}
+
+	for (i = 0; i < le16_to_cpu(table->chain_hdr.fragments_count); i++) {
+		u8 *data = NULL;
+		u8 *uncompr_data = NULL;
+		u32 frag_offset;
+		u32 compr_size, uncompr_size;
+		u32 items;
+		u32 k;
+
+		frag = &table->blk[i];
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+		SSDFS_DUMPFS_DUMP(env, "FRAGMENT_INDEX: #%d\n", i);
+
+		ssdfs_dumpfs_parse_fragment_header(env, frag);
+
+		frag_offset = le32_to_cpu(frag->offset);
+		compr_size = le16_to_cpu(frag->compr_size);
+		uncompr_size = le16_to_cpu(frag->uncompr_size);
+
+		if (frag_offset < hdr_size ||
+		    frag_offset > (area_size - table_offset) ||
+		    compr_size > (area_size - table_offset - frag_offset)) {
+			SSDFS_ERR("fragment is out of area: "
+				  "table_offset %u, frag_offset %u, "
+				  "compr_size %u, area_size %u\n",
+				  table_offset, frag_offset,
+				  compr_size, area_size);
+			return -ERANGE;
+		}
+
+		if (uncompr_size % item_size) {
+			SSDFS_ERR("invalid uncompr_size %u: "
+				  "item_size %zu\n",
+				  uncompr_size, item_size);
+			return -ERANGE;
+		}
+
+		data = (u8 *)area_buf + table_offset + frag_offset;
+
+		if (frag->flags & SSDFS_FRAGMENT_HAS_CSUM) {
+			__le32 csum = ssdfs_crc32_le(data, compr_size);
+
+			if (csum != frag->checksum) {
+				SSDFS_DUMPFS_DUMP(env,
+					"CHECKSUM MISMATCH: calculated %#x\n",
+					le32_to_cpu(csum));
+			} else {
+				SSDFS_DUMPFS_DUMP(env, "CHECKSUM: VALID\n");
+			}
+		}
+
+		switch (frag->type) {
+		case SSDFS_META_EXT_BLOB:
+			if (uncompr_size > compr_size) {
+				SSDFS_ERR("uncompressed fragment claims "
+					  "%u bytes but stores %u\n",
+					  uncompr_size, compr_size);
+				return -ERANGE;
+			}
+
+			/* use data as it is */
+			break;
+
+		case SSDFS_META_EXT_ZLIB:
+		case SSDFS_META_EXT_LZO:
+		case SSDFS_META_EXT_LZ4:
+		case SSDFS_META_EXT_ZSTD:
+			uncompr_data = malloc(uncompr_size);
+			if (!uncompr_data) {
+				SSDFS_ERR("fail to allocate memory\n");
+				return -ENOMEM;
+			}
+
+			if (frag->type == SSDFS_META_EXT_ZLIB) {
+				err = ssdfs_zlib_decompress(data, uncompr_data,
+						compr_size, uncompr_size,
+						env->base.show_debug);
+			} else if (frag->type == SSDFS_META_EXT_LZO) {
+				err = ssdfs_lzo_decompress(data, uncompr_data,
+						compr_size, uncompr_size,
+						env->base.show_debug);
+			} else if (frag->type == SSDFS_META_EXT_LZ4) {
+				err = ssdfs_lz4_decompress(data, uncompr_data,
+						compr_size, uncompr_size,
+						env->base.show_debug);
+			} else {
+				err = ssdfs_zstd_decompress(data, uncompr_data,
+						compr_size, uncompr_size,
+						env->base.show_debug);
+			}
+
+			if (err) {
+				SSDFS_ERR("fail to decompress: err %d\n",
+					  err);
+				free(uncompr_data);
+				return err;
+			}
+
+			data = uncompr_data;
+			break;
+
+		default:
+			SSDFS_ERR("invalid fragment type %#x\n", frag->type);
+			return -ERANGE;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+
+		items = uncompr_size / item_size;
+
+		for (k = 0; k < items; k++) {
+			u32 chain;
+			u32 row;
+
+			chain = extents_count % SSDFS_DUMPFS_META_CHAINS_COUNT;
+			row = first_row +
+				(extents_count / SSDFS_DUMPFS_META_CHAINS_COUNT);
+
+			ssdfs_dumpfs_show_meta_extent(env, row, chain,
+				(struct ssdfs_meta_area_extent *)(data +
+							(k * item_size)));
+			extents_count++;
+		}
+
+		if (uncompr_data)
+			free(uncompr_data);
+	}
+
+	if (le16_to_cpu(table->chain_hdr.flags) & SSDFS_MULTIPLE_HDR_CHAIN) {
+		u32 next_offset;
+
+		frag = &table->blk[SSDFS_NEXT_META_EXT_TABLE_INDEX];
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+		SSDFS_DUMPFS_DUMP(env, "NEXT TABLE:\n");
+		ssdfs_dumpfs_parse_fragment_header(env, frag);
+
+		if (le8_to_cpu(frag->type) != SSDFS_NEXT_TABLE_DESC) {
+			SSDFS_ERR("type %#x is invalid\n",
+				  le8_to_cpu(frag->type));
+			return -ERANGE;
+		}
+
+		next_offset = le32_to_cpu(frag->offset);
+
+		if (next_offset <= table_offset) {
+			SSDFS_ERR("next_offset %u <= table_offset %u\n",
+				  next_offset, table_offset);
+			return -ERANGE;
+		}
+
+		table_offset = next_offset;
+		table_index++;
+		goto parse_next_table;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+	SSDFS_DUMPFS_DUMP(env, "EXTENTS_COUNT: %u\n", extents_count);
+
+	return 0;
+}
+
+static
+int ssdfs_dumpfs_show_meta_extents_area(struct ssdfs_dumpfs_environment *env,
+					struct ssdfs_metadata_descriptor *desc,
+					const char *name, u32 first_row)
+{
+	void *area_buf = NULL;
+	u64 offset = env->peb.id * env->peb.peb_size;
+	u32 area_offset = le32_to_cpu(desc->offset);
+	u32 area_size = le32_to_cpu(desc->size);
+	int err = 0;
+
+	if (!is_ssdfs_dumpfs_area_valid(env, desc))
+		return 0;
+
+	area_buf = malloc(area_size);
+	if (!area_buf) {
+		SSDFS_ERR("fail to allocate memory: size %u\n", area_size);
+		return -ENOMEM;
+	}
+
+	memset(area_buf, 0, area_size);
+
+	err = ssdfs_dumpfs_read_meta_extents(env, env->peb.id,
+					     env->peb.peb_size,
+					     env->peb.log_offset,
+					     env->peb.log_size,
+					     area_offset, area_size,
+					     area_buf);
+	if (err) {
+		SSDFS_ERR("fail to read %s extents: "
+			  "peb_id %llu, peb_size %u, "
+			  "log_index %u, log_offset %u, err %d\n",
+			  name, env->peb.id, env->peb.peb_size,
+			  env->peb.log_index, env->peb.log_offset, err);
+		goto free_area_buf;
+	}
+
+	err = ssdfs_dumpfs_parse_meta_extents(env, area_buf, area_size,
+					      name, first_row);
+	if (err) {
+		SSDFS_ERR("fail to parse %s extents: "
+			  "peb_id %llu, log_index %u, "
+			  "log_offset %u, err %d\n",
+			  name, env->peb.id, env->peb.log_index,
+			  env->peb.log_offset, err);
+		err = 0;
+	}
+
+	SSDFS_DUMPFS_DUMP(env, "\n");
+
+	if (env->is_raw_dump_requested) {
+		env->raw_dump.offset = offset + area_offset;
+		env->raw_dump.size = area_size;
+
+		err = ssdfs_dumpfs_show_raw_dump(env);
+		if (err) {
+			SSDFS_ERR("fail to make %s extents raw dump: "
+				  "peb_id %llu, err %d\n",
+				  name, env->peb.id, err);
+			goto free_area_buf;
+		}
+
+		SSDFS_DUMPFS_DUMP(env, "\n");
+	}
+
+free_area_buf:
+	free(area_buf);
+	return err;
 }
 
 static
@@ -3162,10 +3660,10 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	peb_id = le64_to_cpu(hdr->peb_id);
 	relation_peb_id = le64_to_cpu(hdr->relation_peb_id);
 
-	page_size = 1 << vh->log_pagesize;
-	erase_size = 1 << vh->log_erasesize;
+	page_size = ssdfs_dumpfs_pow2(vh->log_pagesize);
+	erase_size = ssdfs_dumpfs_pow2(vh->log_erasesize);
 	megabytes_per_peb = le16_to_cpu(vh->megabytes_per_peb);
-	seg_size = 1 << vh->log_segsize;
+	seg_size = ssdfs_dumpfs_pow2(vh->log_segsize);
 	lebs_per_peb_index = le32_to_cpu(vh->lebs_per_peb_index);
 	create_time = le64_to_cpu(vh->create_time);
 	create_cno = le64_to_cpu(vh->create_cno);
@@ -3185,7 +3683,7 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes, %u MB\n",
 			  erase_size, megabytes_per_peb);
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
-			  1 << vh->log_pebs_per_seg);
+			  ssdfs_dumpfs_pow2(vh->log_pebs_per_seg));
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
 	SSDFS_DUMPFS_DUMP(env, "LEBS_PER_PEB_INDEX: %u\n", lebs_per_peb_index);
 	SSDFS_DUMPFS_DUMP(env, "CREATION_THREADS_PER_SEG: %u\n",
@@ -3306,7 +3804,8 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 		seg_type_str = "SSDFS_USER_DATA_SEG_TYPE";
 		break;
 	default:
-		BUG();
+		seg_type_str = "UNKNOWN_SEG_TYPE";
+		break;
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "SEG_TYPE: %s\n", seg_type_str);
@@ -3346,6 +3845,12 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 	if (seg_flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER)
 		SSDFS_DUMPFS_DUMP(env, "PARTIAL_HEADER_INSTEAD_FOOTER ");
 
+	if (seg_flags & SSDFS_LOG_HAS_SEGBMAP_EXT_CHAIN)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_SEGBMAP_EXT_CHAIN ");
+
+	if (seg_flags & SSDFS_LOG_HAS_MAPTBL_EXT_CHAIN)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_MAPTBL_EXT_CHAIN ");
+
 	SSDFS_DUMPFS_DUMP(env, "\n");
 
 	desc = &hdr->desc_array[SSDFS_BLK_BMAP_INDEX];
@@ -3380,6 +3885,16 @@ void ssdfs_dumpfs_parse_segment_header(struct ssdfs_dumpfs_environment *env,
 
 	desc = &hdr->desc_array[SSDFS_MAPTBL_CACHE_INDEX];
 	SSDFS_DUMPFS_DUMP(env, "MAPTBL_CACHE_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &hdr->desc_array[SSDFS_SEGBMAP_META_EXTENTS_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "SEGBMAP_META_EXTENTS_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &hdr->desc_array[SSDFS_MAPTBL_META_EXTENTS_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "MAPTBL_META_EXTENTS_AREA: offset %u, size %u\n",
 			  le32_to_cpu(desc->offset),
 			  le32_to_cpu(desc->size));
 
@@ -3437,7 +3952,7 @@ int ssdfs_dumpfs_read_footer_log_bytes(struct ssdfs_dumpfs_environment *env,
 	area_size = le32_to_cpu(desc->size);
 	seg_flags = le32_to_cpu(buf->seg_hdr.seg_flags);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			SSDFS_ERR("fail to allocate memory: "
@@ -3467,6 +3982,13 @@ int ssdfs_dumpfs_read_footer_log_bytes(struct ssdfs_dumpfs_environment *env,
 				goto finish_read_log_size;
 			}
 
+			if (area_size < sizeof(*pl_hdr)) {
+				err = -EIO;
+				SSDFS_ERR("partial log header is truncated: "
+					  "area_size %u\n", area_size);
+				goto finish_read_log_size;
+			}
+
 			pl_hdr = (struct ssdfs_partial_log_header *)area_buf;
 			env->peb.log_size = le32_to_cpu(pl_hdr->log_bytes);
 		} else if (seg_flags & SSDFS_LOG_HAS_FOOTER) {
@@ -3487,6 +4009,13 @@ int ssdfs_dumpfs_read_footer_log_bytes(struct ssdfs_dumpfs_environment *env,
 				goto finish_read_log_size;
 			}
 
+			if (area_size < sizeof(struct ssdfs_log_footer)) {
+				err = -EIO;
+				SSDFS_ERR("log footer is truncated: "
+					  "area_size %u\n", area_size);
+				goto finish_read_log_size;
+			}
+
 			footer = (struct ssdfs_log_footer *)area_buf;
 			env->peb.log_size = le32_to_cpu(footer->log_bytes);
 		} else {
@@ -3500,6 +4029,37 @@ finish_read_log_size:
 	}
 
 	return err;
+}
+
+/*
+ * The first valid PEB defines the volume: its geometry (page size, erase
+ * size) and its creation timestamp. A log with another creation timestamp
+ * belongs to a previous volume that was created on the same device
+ * (stale data). It is reported and skipped. The geometry of the volume
+ * is never changed: the PEBs are iterated by the known erase size.
+ */
+static
+int ssdfs_dumpfs_check_volume(struct ssdfs_dumpfs_environment *env,
+			      union ssdfs_metadata_header *buf)
+{
+	u64 create_time;
+
+	if (le16_to_cpu(buf->magic.key) == SSDFS_SEGMENT_HDR_MAGIC)
+		create_time = le64_to_cpu(buf->seg_hdr.volume_hdr.create_time);
+	else
+		create_time = le64_to_cpu(buf->pl_hdr.volume_create_time);
+
+	if (env->peb.create_time == 0 || create_time == env->peb.create_time)
+		return 0;
+
+	SSDFS_DUMPFS_INFO(env->base.show_info,
+			  "PEB %llu, log offset %u: OLD VOLUME STATE "
+			  "(create_time %llu, volume's create_time %llu): "
+			  "SKIP IT\n",
+			  env->peb.id, env->peb.log_offset,
+			  create_time, env->peb.create_time);
+
+	return -ESTALE;
 }
 
 static
@@ -3529,6 +4089,13 @@ int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
 	if (le32_to_cpu(buf->magic.common) == SSDFS_SUPER_MAGIC) {
 		key = le16_to_cpu(buf->magic.key);
 
+		if (key == SSDFS_SEGMENT_HDR_MAGIC ||
+		    key == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
+			err = ssdfs_dumpfs_check_volume(env, buf);
+			if (err)
+				return err;
+		}
+
 		if (key == SSDFS_SEGMENT_HDR_MAGIC) {
 			err = ssdfs_dumpfs_read_footer_log_bytes(env, buf);
 			if (err) {
@@ -3550,11 +4117,11 @@ int ssdfs_dumpfs_read_log_bytes(struct ssdfs_dumpfs_environment *env,
 			return -EIO;
 		}
 	} else {
-		if (env->peb.log_size == U32_MAX) {
-			SSDFS_INFO("PLEASE, DEFINE LOG SIZE\n");
-			print_usage();
-			return -EINVAL;
-		}
+		/*
+		 * Empty (erased or never written) PEB or
+		 * data that is not an SSDFS log.
+		 */
+		return -ENODATA;
 	}
 
 	return 0;
@@ -3602,9 +4169,9 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	peb_id = le64_to_cpu(pl_hdr->peb_id);
 	relation_peb_id = le64_to_cpu(pl_hdr->relation_peb_id);
 
-	page_size = 1 << pl_hdr->log_pagesize;
-	erase_size = 1 << pl_hdr->log_erasesize;
-	seg_size = 1 << pl_hdr->log_segsize;
+	page_size = ssdfs_dumpfs_pow2(pl_hdr->log_pagesize);
+	erase_size = ssdfs_dumpfs_pow2(pl_hdr->log_erasesize);
+	seg_size = ssdfs_dumpfs_pow2(pl_hdr->log_segsize);
 	seg_type = le16_to_cpu(pl_hdr->seg_type);
 	lebs_per_peb_index = le32_to_cpu(pl_hdr->lebs_per_peb_index);
 	create_threads_per_seg = le16_to_cpu(pl_hdr->create_threads_per_seg);
@@ -3647,7 +4214,7 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DUMPFS_DUMP(env, "PAGE: %u bytes\n", page_size);
 	SSDFS_DUMPFS_DUMP(env, "PEB: %u bytes\n", erase_size);
 	SSDFS_DUMPFS_DUMP(env, "PEBS_PER_SEGMENT: %u\n",
-			  1 << pl_hdr->log_pebs_per_seg);
+			  ssdfs_dumpfs_pow2(pl_hdr->log_pebs_per_seg));
 	SSDFS_DUMPFS_DUMP(env, "SEGMENT: %u bytes\n", seg_size);
 	SSDFS_DUMPFS_DUMP(env, "LEBS_PER_PEB_INDEX: %u\n",
 			  lebs_per_peb_index);
@@ -3697,7 +4264,8 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 		seg_type_str = "SSDFS_USER_DATA_SEG_TYPE";
 		break;
 	default:
-		BUG();
+		seg_type_str = "UNKNOWN_SEG_TYPE";
+		break;
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "SEG_TYPE: %s\n", seg_type_str);
@@ -3757,6 +4325,12 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	if (flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER)
 		SSDFS_DUMPFS_DUMP(env, "PARTIAL_HEADER_INSTEAD_FOOTER ");
 
+	if (flags & SSDFS_LOG_HAS_SEGBMAP_EXT_CHAIN)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_SEGBMAP_EXT_CHAIN ");
+
+	if (flags & SSDFS_LOG_HAS_MAPTBL_EXT_CHAIN)
+		SSDFS_DUMPFS_DUMP(env, "LOG_HAS_MAPTBL_EXT_CHAIN ");
+
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -3794,6 +4368,16 @@ __ssdfs_dumpfs_parse_partial_log_header(struct ssdfs_dumpfs_environment *env,
 
 	desc = &pl_hdr->desc_array[SSDFS_MAPTBL_CACHE_INDEX];
 	SSDFS_DUMPFS_DUMP(env, "MAPTBL_CACHE_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_SEGBMAP_META_EXTENTS_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "SEGBMAP_META_EXTENTS_AREA: offset %u, size %u\n",
+			  le32_to_cpu(desc->offset),
+			  le32_to_cpu(desc->size));
+
+	desc = &pl_hdr->desc_array[SSDFS_MAPTBL_META_EXTENTS_INDEX];
+	SSDFS_DUMPFS_DUMP(env, "MAPTBL_META_EXTENTS_AREA: offset %u, size %u\n",
 			  le32_to_cpu(desc->offset),
 			  le32_to_cpu(desc->size));
 
@@ -3886,7 +4470,7 @@ int ssdfs_dumpfs_parse_log_footer(struct ssdfs_dumpfs_environment *env,
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -3988,6 +4572,12 @@ int ssdfs_dumpfs_parse_leb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 	int i;
 	int err = 0;
 
+	if (frag_size < hdr_size) {
+		SSDFS_ERR("fragment is too small: frag_size %u, hdr_size %zu\n",
+			  frag_size, hdr_size);
+		return -ERANGE;
+	}
+
 	hdr = (struct ssdfs_leb_table_fragment_header *)frag_buf;
 
 	SSDFS_DUMPFS_DUMP(env, "LEB TABLE HEADER:\n");
@@ -4016,6 +4606,13 @@ int ssdfs_dumpfs_parse_leb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 
 	lebs_count = le16_to_cpu(hdr->lebs_count);
 	SSDFS_DUMPFS_DUMP(env, "LEBs COUNT: %u\n", lebs_count);
+
+	if ((u64)lebs_count * sizeof(struct ssdfs_leb_descriptor) >
+						frag_size - hdr_size) {
+		SSDFS_ERR("corrupted LEB table fragment: lebs_count %u, "
+			  "frag_size %u\n", lebs_count, frag_size);
+		return -ERANGE;
+	}
 	SSDFS_DUMPFS_DUMP(env, "MAPPED LEBs: %u\n", le16_to_cpu(hdr->mapped_lebs));
 	SSDFS_DUMPFS_DUMP(env, "MIGRATING LEBs: %u\n", le16_to_cpu(hdr->migrating_lebs));
 
@@ -4075,6 +4672,12 @@ int ssdfs_dumpfs_parse_peb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 	int i;
 	int err = 0;
 
+	if (frag_size < hdr_size) {
+		SSDFS_ERR("fragment is too small: frag_size %u, hdr_size %zu\n",
+			  frag_size, hdr_size);
+		return -ERANGE;
+	}
+
 	hdr = (struct ssdfs_peb_table_fragment_header *)frag_buf;
 
 	SSDFS_DUMPFS_DUMP(env, "PEB TABLE HEADER:\n");
@@ -4115,6 +4718,13 @@ int ssdfs_dumpfs_parse_peb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 
 	pebs_count = le16_to_cpu(hdr->pebs_count);
 	SSDFS_DUMPFS_DUMP(env, "PEBs COUNT: %u\n", pebs_count);
+
+	if ((u64)pebs_count * sizeof(struct ssdfs_peb_descriptor) >
+						frag_size - hdr_size) {
+		SSDFS_ERR("corrupted PEB table fragment: pebs_count %u, "
+			  "frag_size %u\n", pebs_count, frag_size);
+		return -ERANGE;
+	}
 
 	last_selected_peb = le16_to_cpu(hdr->last_selected_peb);
 	SSDFS_DUMPFS_DUMP(env, "LAST SELECTED PEB[%u]: %llu\n",
@@ -4452,6 +5062,12 @@ int ssdfs_dumpfs_parse_segbmap_fragment(struct ssdfs_dumpfs_environment *env,
 	int err = 0;
 
 	frag_size = min_t(u32, frag_size, env->base.page_size);
+
+	if (frag_size < hdr_size) {
+		SSDFS_ERR("fragment is too small: frag_size %u, hdr_size %zu\n",
+			  frag_size, hdr_size);
+		return -ERANGE;
+	}
 
 	hdr = (struct ssdfs_segbmap_fragment_header *)frag_buf;
 
@@ -5254,7 +5870,7 @@ int __ssdfs_dumpfs_parse_metadata(struct ssdfs_dumpfs_environment *env,
 		  "area_offset %u, area_size %u\n",
 		  area_offset, area_size);
 
-	if (!is_ssdfs_dumpfs_area_valid(desc)) {
+	if (!is_ssdfs_dumpfs_area_valid(env, desc)) {
 		SSDFS_DBG(env->base.show_debug,
 			  "metadata of block descriptor area is invalid\n");
 		return 0;
@@ -5382,10 +5998,12 @@ parse_next_area:
 			break;
 		}
 
+		/* the buffer has uncompr_size bytes only if it was unpacked */
 		err = ssdfs_dumpfs_parse_metadata_blocks(env, desc_array, data,
-						le16_to_cpu(frag->compr_size),
-						le16_to_cpu(frag->uncompr_size),
-						do_parsing);
+				le16_to_cpu(frag->compr_size),
+				uncompr_data ? uncompr_size :
+					min_t(u32, compr_size, uncompr_size),
+				do_parsing);
 		if (err) {
 			SSDFS_ERR("fail to parse metadata structure's blocks: "
 				  "err %d\n", err);
@@ -5463,7 +6081,8 @@ int ssdfs_dumpfs_parse_maptbl_in_full_log(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DBG(env->base.show_debug,
 		  "parse mapping table in full log\n");
 
-	env->base.page_size = 1 << seg_hdr->volume_hdr.log_pagesize;
+	ssdfs_dumpfs_set_page_size(env,
+				  seg_hdr->volume_hdr.log_pagesize);
 
 	desc_array = seg_hdr->desc_array;
 	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
@@ -5482,7 +6101,8 @@ int ssdfs_dumpfs_parse_segbmap_in_full_log(struct ssdfs_dumpfs_environment *env,
 	SSDFS_DBG(env->base.show_debug,
 		  "parse segment bitmap in full log\n");
 
-	env->base.page_size = 1 << seg_hdr->volume_hdr.log_pagesize;
+	ssdfs_dumpfs_set_page_size(env,
+				  seg_hdr->volume_hdr.log_pagesize);
 
 	desc_array = seg_hdr->desc_array;
 	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
@@ -5580,7 +6200,7 @@ parse_block_state_area:
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -5649,13 +6269,13 @@ finish_parse_blk_desc_array:
 
 parse_maptbl_cache_area:
 	if (!(env->peb.parse_flags & SSDFS_PARSE_MAPTBL_CACHE_AREA))
-		goto parse_mapping_table;
+		goto parse_meta_extents_areas;
 
 	desc = &buf->seg_hdr.desc_array[SSDFS_MAPTBL_CACHE_INDEX];
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -5720,6 +6340,37 @@ finish_parse_maptbl_cache:
 
 			SSDFS_DUMPFS_DUMP(env, "\n");
 		}
+	}
+
+parse_meta_extents_areas:
+	if (!(env->peb.parse_flags & SSDFS_PARSE_META_EXTENTS_AREA))
+		goto parse_mapping_table;
+
+	/*
+	 * A descriptor is meaningful only if the log declares its area.
+	 * Otherwise, the descriptor's slot can belong to another layout
+	 * of the segment header (for example, of an older volume).
+	 */
+	if (le32_to_cpu(buf->seg_hdr.seg_flags) &
+					SSDFS_LOG_HAS_SEGBMAP_EXT_CHAIN) {
+		desc = &buf->seg_hdr.desc_array[
+					SSDFS_SEGBMAP_META_EXTENTS_INDEX];
+		err = ssdfs_dumpfs_show_meta_extents_area(env, desc,
+					"SEGMENT BITMAP",
+					SSDFS_SEGBMAP_RESERVED_EXTENTS);
+		if (err)
+			goto close_opened_file;
+	}
+
+	if (le32_to_cpu(buf->seg_hdr.seg_flags) &
+					SSDFS_LOG_HAS_MAPTBL_EXT_CHAIN) {
+		desc = &buf->seg_hdr.desc_array[
+					SSDFS_MAPTBL_META_EXTENTS_INDEX];
+		err = ssdfs_dumpfs_show_meta_extents_area(env, desc,
+					"MAPPING TABLE",
+					SSDFS_MAPTBL_RESERVED_EXTENTS);
+		if (err)
+			goto close_opened_file;
 	}
 
 parse_mapping_table:
@@ -5794,7 +6445,7 @@ int ssdfs_dumpfs_parse_maptbl_in_partial_log(struct ssdfs_dumpfs_environment *en
 	SSDFS_DBG(env->base.show_debug,
 		  "parse mapping table in partial log\n");
 
-	env->base.page_size = 1 << pl_hdr->log_pagesize;
+	ssdfs_dumpfs_set_page_size(env, pl_hdr->log_pagesize);
 
 	desc_array = pl_hdr->desc_array;
 	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
@@ -5813,7 +6464,7 @@ int ssdfs_dumpfs_parse_segbmap_in_partial_log(struct ssdfs_dumpfs_environment *e
 	SSDFS_DBG(env->base.show_debug,
 		  "parse segment bitmap in partial log\n");
 
-	env->base.page_size = 1 << pl_hdr->log_pagesize;
+	ssdfs_dumpfs_set_page_size(env, pl_hdr->log_pagesize);
 
 	desc_array = pl_hdr->desc_array;
 	return __ssdfs_dumpfs_parse_metadata(env, desc_array,
@@ -5902,7 +6553,7 @@ parse_block_state_area:
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -6000,7 +6651,7 @@ parse_log_footer:
 	area_offset = le32_to_cpu(desc->offset);
 	area_size = le32_to_cpu(desc->size);
 
-	if (is_ssdfs_dumpfs_area_valid(desc)) {
+	if (is_ssdfs_dumpfs_area_valid(env, desc)) {
 		area_buf = malloc(area_size);
 		if (!area_buf) {
 			err = -ENOMEM;
@@ -6082,27 +6733,6 @@ finish_parse_partial_log:
 	return err;
 }
 
-static
-void ssdfs_dumpfs_check_peb_geometry(struct ssdfs_dumpfs_environment *env,
-				     u64 create_time, u8 log_pagesize,
-				     u8 log_erasesize)
-{
-	if (env->peb.create_time == 0)
-		return;
-
-	if (create_time == env->peb.create_time)
-		return;
-
-	env->base.page_size = 1u << log_pagesize;
-	env->peb.peb_size = 1u << log_erasesize;
-
-	SSDFS_DUMPFS_INFO(env->base.show_info,
-			  "PEB %llu: create_time %llu differs from the "
-			  "volume baseline %llu; page_size %u, erase_size %u\n",
-			  env->peb.id, create_time, env->peb.create_time,
-			  env->base.page_size, env->peb.peb_size);
-}
-
 int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 {
 	union ssdfs_metadata_header buf;
@@ -6110,11 +6740,13 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 	u64 pebs_count;
 	u32 volume_page_size;
 	u32 volume_erase_size;
-	int log_index;
+	u32 log_index;
 	u32 logs_count;
 	u32 max_logs;
 	int step = 2;
-	int i;
+	int volume_is_known = SSDFS_FALSE;
+	u32 i;
+	int result = 0;
 	int err = 0;
 
 	SSDFS_DBG(env->base.show_debug,
@@ -6128,24 +6760,52 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		goto finish_peb_dump;
 	}
 
-	if (env->peb.peb_size == U32_MAX) {
-		SSDFS_DUMPFS_INFO(env->base.show_info,
-				  "[00%d]\tFIND FIRST VALID PEB...\n",
-				  step);
+	/*
+	 * The first valid PEB defines the volume: page size, erase size, and
+	 * the creation timestamp. The dumping works by these values.
+	 * PEBs with another creation timestamp are stale (previous volumes).
+	 */
+	SSDFS_DUMPFS_INFO(env->base.show_info,
+			  "[00%d]\tFIND FIRST VALID PEB...\n",
+			  step);
 
-		err = ssdfs_dumpfs_find_any_valid_peb(env, &buf.seg_hdr);
-		if (err) {
-			SSDFS_INFO("PLEASE, DEFINE PEB SIZE\n");
-			print_usage();
-			goto finish_peb_dump;
-		}
+	err = ssdfs_dumpfs_find_any_valid_peb(env, &buf.seg_hdr);
+	if (!err) {
+		struct ssdfs_volume_header *vh = &buf.seg_hdr.volume_hdr;
 
 		SSDFS_DUMPFS_INFO(env->base.show_info,
 				  "[00%d]\t[SUCCESS]\n",
 				  step);
 		step++;
 
-		env->peb.peb_size = 1 << buf.seg_hdr.volume_hdr.log_erasesize;
+		if (vh->log_pagesize < SSDFS_DUMPFS_MIN_LOG_PAGESIZE ||
+		    vh->log_erasesize > SSDFS_DUMPFS_MAX_LOG_ERASESIZE ||
+		    vh->log_erasesize < vh->log_pagesize) {
+			SSDFS_ERR("invalid geometry of the volume: "
+				  "log_pagesize %u, log_erasesize %u\n",
+				  vh->log_pagesize, vh->log_erasesize);
+			err = -EINVAL;
+			goto finish_peb_dump;
+		}
+
+		env->base.page_size = 1U << vh->log_pagesize;
+		env->peb.create_time = le64_to_cpu(vh->create_time);
+		volume_is_known = SSDFS_TRUE;
+
+		if (env->peb.peb_size == U32_MAX) {
+			env->peb.peb_size = 1U << vh->log_erasesize;
+		} else if (env->peb.peb_size != (1U << vh->log_erasesize)) {
+			SSDFS_DUMPFS_INFO(env->base.show_info,
+					  "PEB size %u from the command line "
+					  "differs from the volume's one %u; "
+					  "the command line value is used\n",
+					  env->peb.peb_size,
+					  1U << vh->log_erasesize);
+		}
+	} else if (env->peb.peb_size == U32_MAX) {
+		SSDFS_INFO("PLEASE, DEFINE PEB SIZE\n");
+		print_usage();
+		goto finish_peb_dump;
 	}
 
 	if (env->peb.logs_count >= U32_MAX) {
@@ -6154,6 +6814,16 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 
 	if (env->peb.pebs_count == U64_MAX) {
 		env->peb.pebs_count = env->base.fs_size / env->peb.peb_size;
+	}
+
+	if (env->peb.id >= (env->base.fs_size / env->peb.peb_size)) {
+		SSDFS_ERR("PEB %llu is out of the volume: "
+			  "PEBs count %llu, PEB size %u\n",
+			  env->peb.id,
+			  env->base.fs_size / env->peb.peb_size,
+			  env->peb.peb_size);
+		err = -EINVAL;
+		goto finish_peb_dump;
 	}
 
 	SSDFS_DUMPFS_INFO(env->base.show_info,
@@ -6178,7 +6848,20 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		goto finish_peb_dump;
 	}
 
-	env->peb.create_time = le64_to_cpu(buf.seg_hdr.volume_hdr.create_time);
+	if (!volume_is_known) {
+		/*
+		 * There is no valid PEB to define the volume. Use
+		 * the requested PEB if it is a valid one. Otherwise,
+		 * there is nothing to compare with.
+		 */
+		if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
+		    le16_to_cpu(buf.magic.key) == SSDFS_SEGMENT_HDR_MAGIC) {
+			env->peb.create_time =
+				le64_to_cpu(buf.seg_hdr.volume_hdr.create_time);
+		} else {
+			env->peb.create_time = 0;
+		}
+	}
 
 	peb_id = env->peb.id;
 	pebs_count = env->peb.pebs_count;
@@ -6194,17 +6877,15 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 		  env->peb.id, env->peb.pebs_count,
 		  env->peb.log_index, env->peb.logs_count);
 
-	if (env->peb.show_all_logs) {
-		max_logs = env->peb.log_index + env->peb.logs_count;
-	} else {
-		max_logs = 1;
-	}
+	/*
+	 * Show logs [log_index, log_index + logs_count). A count of zero
+	 * means one log.
+	 */
+	max_logs = (u32)min_t(u64, (u64)log_index +
+					max_t(u32, logs_count, 1),
+				   (u64)U32_MAX);
 
 	while (env->peb.pebs_count > 0) {
-		u64 create_time;
-		u8 log_pagesize;
-		u8 log_erasesize;
-
 		if (env->peb.id < (env->base.fs_size / env->peb.peb_size)) {
 			env->peb.log_index = 0;
 			env->peb.logs_count = max_logs;
@@ -6246,19 +6927,34 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 			}
 
 			err = ssdfs_dumpfs_read_log_bytes(env, &buf);
-			if (err == -ENODATA) {
+			if (err == -ESTALE) {
+				/* stale log of a previous volume */
+				err = 0;
+				goto try_next_peb;
+			} else if (err == -ENODATA) {
 				SSDFS_DBG(env->base.show_debug,
 					  "LOG ABSENT: peb_id: %llu, log_index %u, "
 					  "log_offset %u\n",
 					  env->peb.id, env->peb.log_index,
 					  env->peb.log_offset);
-					goto try_next_peb;
+
+				if (env->peb.log_offset == 0) {
+					SSDFS_DUMPFS_INFO(env->base.show_info,
+						"PEB %llu HAS NO VALID LOG "
+						"HEADER (EMPTY OR NOT SSDFS)\n",
+						env->peb.id);
+				}
+
+				err = 0;
+				goto try_next_peb;
 			} else if (err) {
 				SSDFS_ERR("fail to read log's size in bytes: "
 					  "peb_id %llu, peb_size %u, "
 					  "log_offset %u, err %d\n",
 					  env->peb.id, env->peb.peb_size,
 					  env->peb.log_offset, err);
+				if (!result)
+					result = err;
 				goto try_next_peb;
 			}
 
@@ -6266,39 +6962,24 @@ int ssdfs_dumpfs_show_peb_dump(struct ssdfs_dumpfs_environment *env)
 				goto try_next_log;
 			}
 
-			create_time =
-				le64_to_cpu(buf.seg_hdr.volume_hdr.create_time);
-			log_pagesize = buf.seg_hdr.volume_hdr.log_pagesize;
-			log_erasesize = buf.seg_hdr.volume_hdr.log_erasesize;
-
 			if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
 			    le16_to_cpu(buf.magic.key) == SSDFS_SEGMENT_HDR_MAGIC) {
-				if (env->peb.log_index == 0) {
-					ssdfs_dumpfs_check_peb_geometry(env,
-								create_time,
-								log_pagesize,
-								log_erasesize);
-				}
-
 				err = ssdfs_dumpfs_parse_full_log(env, &buf);
 				if (err) {
 					SSDFS_ERR("fail to parse the full log: "
 						  "err %d\n", err);
+					if (!result)
+						result = err;
 					goto try_next_peb;
 				}
 			} else if (le32_to_cpu(buf.magic.common) == SSDFS_SUPER_MAGIC &&
 				   le16_to_cpu(buf.magic.key) == SSDFS_PARTIAL_LOG_HDR_MAGIC) {
-				if (env->peb.log_index == 0) {
-					ssdfs_dumpfs_check_peb_geometry(env,
-								create_time,
-								log_pagesize,
-								log_erasesize);
-				}
-
 				err = ssdfs_dumpfs_parse_partial_log(env, &buf);
 				if (err) {
 					SSDFS_ERR("fail to parse the partial log: "
 						  "err %d\n", err);
+					if (!result)
+						result = err;
 					goto try_next_peb;
 				}
 			} else {
@@ -6342,6 +7023,9 @@ try_next_peb:
 	}
 
 stop_peb_dumping:
+	/* report the first real failure (absent logs are not failures) */
+	err = result;
+
 	env->peb.id = peb_id;
 	env->peb.pebs_count = pebs_count;
 	env->peb.log_index = log_index;

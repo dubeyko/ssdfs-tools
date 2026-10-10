@@ -118,6 +118,19 @@ int main(int argc, char *argv[])
 	SSDFS_DUMPFS_INFO(env_ptr->base.show_info,
 			  "[001]\t[SUCCESS]\n");
 
+	switch (env_ptr->command) {
+	case SSDFS_DUMP_PEB_COMMAND:
+	case SSDFS_RAW_DUMP_COMMAND:
+		err = ssdfs_dumpfs_prepare_output_folder(env_ptr);
+		if (err)
+			goto destroy_buffers;
+		break;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
 	if (env_ptr->peb.id >= U64_MAX)
 		env_ptr->peb.id = 0;
 

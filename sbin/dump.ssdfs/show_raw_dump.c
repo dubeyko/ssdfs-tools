@@ -138,6 +138,9 @@ int ssdfs_dumpfs_show_raw_dump(struct ssdfs_dumpfs_environment *env)
 	offset = env->raw_dump.offset;
 	len = env->raw_dump.size;
 
+	if (len == 0)
+		return 0;
+
 	if (!env->raw_dump.buf) {
 		SSDFS_ERR("empty buffer\n");
 		return -ENOSPC;

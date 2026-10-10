@@ -2,6 +2,10 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.75 [October 09, 2026]
+    (*) Introduce overflow metadata extents support in
+        segment bitmap and PEB mapping table.
+
 v.4.74 [September 06, 2026]
     (*) [mkfs] Correct logic of log pages calculation for superblock
                segments.

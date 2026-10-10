@@ -55,14 +55,16 @@ enum SSDFS_DUMPFS_PARSE_FLAGS {
 	SSDFS_PARSE_MAPTBL_CACHE_AREA	= 1 << 5,
 	SSDFS_PARSE_MAPPING_TABLE	= 1 << 6,
 	SSDFS_PARSE_SEGMENT_BITMAP	= 1 << 7,
-	SSDFS_PARSE_FLAGS_MAX		= 0xFF
+	SSDFS_PARSE_META_EXTENTS_AREA	= 1 << 8,
+	SSDFS_PARSE_FLAGS_MAX		= 0x1FF
 };
 
 #define SSDFS_PARSE_ALL_MASK \
 	(SSDFS_PARSE_HEADER | SSDFS_PARSE_LOG_FOOTER | \
 	 SSDFS_PARSE_BLOCK_BITMAP | SSDFS_PARSE_BLK2OFF_TABLE | \
 	 SSDFS_PARSE_BLOCK_STATE_AREA | SSDFS_PARSE_MAPTBL_CACHE_AREA | \
-	 SSDFS_PARSE_MAPPING_TABLE | SSDFS_PARSE_SEGMENT_BITMAP)
+	 SSDFS_PARSE_MAPPING_TABLE | SSDFS_PARSE_SEGMENT_BITMAP | \
+	 SSDFS_PARSE_META_EXTENTS_AREA)
 
 /*
  * struct ssdfs_peb_dump_environment - PEB dump environment
@@ -144,6 +146,7 @@ struct ssdfs_dumpfs_environment {
 })
 
 /* common.c */
+int ssdfs_dumpfs_prepare_output_folder(struct ssdfs_dumpfs_environment *env);
 int ssdfs_dumpfs_open_file(struct ssdfs_dumpfs_environment *env,
 			   char *file_name);
 void ssdfs_dumpfs_close_file(struct ssdfs_dumpfs_environment *env);
@@ -167,6 +170,11 @@ int ssdfs_dumpfs_read_blk_desc_array(struct ssdfs_dumpfs_environment *env,
 				   u32 area_offset, u32 size,
 				   void *buf);
 int ssdfs_dumpfs_read_maptbl_cache(struct ssdfs_dumpfs_environment *env,
+				   u64 peb_id, u32 peb_size,
+				   u32 log_offset, u32 log_size,
+				   u32 area_offset, u32 size,
+				   void *buf);
+int ssdfs_dumpfs_read_meta_extents(struct ssdfs_dumpfs_environment *env,
 				   u64 peb_id, u32 peb_size,
 				   u32 log_offset, u32 log_size,
 				   u32 area_offset, u32 size,

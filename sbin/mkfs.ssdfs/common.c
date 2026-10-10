@@ -68,16 +68,63 @@ int reserve_segments(struct ssdfs_volume_layout *layout,
 	return 0;
 }
 
+/*
+ * The following areas follow the block descriptors (exactly in this order):
+ * segment bitmap's extents, PEB mapping table's extents, PEB mapping
+ * table cache. An area is placed inline (right after the previous one)
+ * while it fits into the page of the segment header. Otherwise, the area
+ * starts from the page boundary. After the first area that is placed
+ * outside of the header's page, all the next areas start from
+ * the page boundary too.
+ *
+ * The function returns the offset of the @target area. If @target is
+ * SSDFS_LOG_PAYLOAD then the function returns the (page aligned) offset
+ * that follows the last area.
+ */
+static
+u32 define_areas_offset(struct ssdfs_peb_content *desc,
+			u32 page_size, u32 inline_end,
+			u32 start, int target)
+{
+	static const int areas[] = {
+		SSDFS_SEGBMAP_META_EXTENTS,
+		SSDFS_MAPTBL_META_EXTENTS,
+		SSDFS_MAPTBL_CACHE,
+	};
+	u32 cursor = start;
+	int is_inline = SSDFS_TRUE;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(areas); i++) {
+		u32 bytes = desc->extents[areas[i]].bytes_count;
+		u32 offset = cursor;
+
+		if (bytes > 0) {
+			if (!is_inline || (cursor + bytes) > inline_end) {
+				is_inline = SSDFS_FALSE;
+				offset = ALIGN(cursor, page_size);
+			}
+
+			cursor = offset + bytes;
+		}
+
+		if (areas[i] == target)
+			return offset;
+	}
+
+	BUG_ON(target != SSDFS_LOG_PAYLOAD);
+
+	return ALIGN(cursor, page_size);
+}
+
 int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 			    int seg_type,
 			    struct ssdfs_peb_content *desc,
 			    int extent_index)
 {
-	size_t hdr_size = sizeof(struct ssdfs_segment_header);
-	u32 inline_capacity = layout->page_size - hdr_size;
-	u32 bytes_count;
 	u32 offset = desc->extents[SSDFS_SEG_HEADER].offset;
 	u32 page_size = layout->page_size;
+	u32 inline_end;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "extent_index %d\n", extent_index);
@@ -86,7 +133,6 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	case SSDFS_SB_SEG_TYPE:
 	case SSDFS_INITIAL_SNAPSHOT_SEG_TYPE:
 		page_size = PAGE_CACHE_SIZE;
-		inline_capacity = page_size - hdr_size;
 		break;
 
 	default:
@@ -95,6 +141,8 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	}
 
 	switch (extent_index) {
+	case SSDFS_SEGBMAP_META_EXTENTS:
+	case SSDFS_MAPTBL_META_EXTENTS:
 	case SSDFS_MAPTBL_CACHE:
 	case SSDFS_LOG_PAYLOAD:
 	case SSDFS_LOG_FOOTER:
@@ -128,42 +176,41 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 	SSDFS_DBG(layout->env.show_debug,
 		  "STEP 1: offset %u\n", offset);
 
-	if (extent_index < SSDFS_MAPTBL_CACHE)
+	if (extent_index < SSDFS_SEGBMAP_META_EXTENTS)
 		goto set_extent_offset;
 
-	offset += page_size - 1;
-	offset = (offset / page_size) * page_size;
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "STEP 2: offset %u\n", offset);
+	inline_end = ((desc->extents[SSDFS_SEG_HEADER].offset / page_size) + 1) *
+			page_size;
 
 	switch (extent_index) {
-	case SSDFS_OFFSET_TABLE_BACKUP:
-	case SSDFS_BLOCK_BITMAP_BACKUP:
-		/* do nothing */
-		/* pass through */
-
-	case SSDFS_LOG_FOOTER:
-		offset += desc->extents[SSDFS_LOG_PAYLOAD].bytes_count;
-		offset += page_size - 1;
-		offset = (offset / page_size) * page_size;
-		/* pass through */
+	case SSDFS_SEGBMAP_META_EXTENTS:
+	case SSDFS_MAPTBL_META_EXTENTS:
+	case SSDFS_MAPTBL_CACHE:
+		offset = define_areas_offset(desc, page_size, inline_end,
+					     offset, extent_index);
+		goto set_extent_offset;
 
 	case SSDFS_LOG_PAYLOAD:
-		bytes_count = desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
-		if (bytes_count > inline_capacity)
-			offset += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
-		offset += page_size - 1;
-		offset = (offset / page_size) * page_size;
-		break;
-
-	case SSDFS_MAPTBL_CACHE:
-		/* do nothing */
+	case SSDFS_LOG_FOOTER:
+	case SSDFS_BLOCK_BITMAP_BACKUP:
+	case SSDFS_OFFSET_TABLE_BACKUP:
+		offset = define_areas_offset(desc, page_size, inline_end,
+					     offset, SSDFS_LOG_PAYLOAD);
 		break;
 
 	default:
 		BUG();
 	}
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "STEP 2: offset %u\n", offset);
+
+	if (extent_index == SSDFS_LOG_PAYLOAD)
+		goto set_extent_offset;
+
+	offset += desc->extents[SSDFS_LOG_PAYLOAD].bytes_count;
+	offset += page_size - 1;
+	offset = (offset / page_size) * page_size;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "STEP 3: offset %u\n", offset);
@@ -200,9 +247,7 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 			int seg_type,
 			struct ssdfs_peb_content *desc)
 {
-	size_t hdr_size = sizeof(struct ssdfs_segment_header);
 	u32 page_size = layout->page_size;
-	u32 inline_capacity;
 	u32 bytes_count = 0;
 	u32 pages_count;
 
@@ -217,31 +262,25 @@ u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 		break;
 	}
 
-	inline_capacity = page_size - hdr_size;
-
 	bytes_count += desc->extents[SSDFS_SEG_HEADER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_DESCRIPTORS].bytes_count;
 
-	if (desc->extents[SSDFS_MAPTBL_CACHE].bytes_count > inline_capacity) {
-		bytes_count += page_size - 1;
-		bytes_count = (bytes_count / page_size) * page_size;
-	}
-
-	bytes_count += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
-
-	bytes_count += page_size - 1;
-	bytes_count = (bytes_count / page_size) * page_size;
+	bytes_count = define_areas_offset(desc, page_size, page_size,
+					  bytes_count, SSDFS_LOG_PAYLOAD);
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "bytes_count: SEG_HDR %u, BLK_BMAP %u, "
-		  "OFFSET_TBL %u, BLK_DESC %u, MAPTBL_CACHE %u, "
-		  "total %u\n",
+		  "OFFSET_TBL %u, BLK_DESC %u, "
+		  "SEGBMAP_EXTENTS %u, MAPTBL_EXTENTS %u, "
+		  "MAPTBL_CACHE %u, total %u\n",
 		  desc->extents[SSDFS_SEG_HEADER].bytes_count,
 		  desc->extents[SSDFS_BLOCK_BITMAP].bytes_count,
 		  desc->extents[SSDFS_OFFSET_TABLE].bytes_count,
 		  desc->extents[SSDFS_BLOCK_DESCRIPTORS].bytes_count,
+		  desc->extents[SSDFS_SEGBMAP_META_EXTENTS].bytes_count,
+		  desc->extents[SSDFS_MAPTBL_META_EXTENTS].bytes_count,
 		  desc->extents[SSDFS_MAPTBL_CACHE].bytes_count,
 		  bytes_count);
 
@@ -303,13 +342,8 @@ u32 calculate_metadata_blks(struct ssdfs_volume_layout *layout,
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP].bytes_count;
 	bytes_count += desc->extents[SSDFS_OFFSET_TABLE].bytes_count;
 
-	bytes_count += page_size - 1;
-	bytes_count = (bytes_count / page_size) * page_size;
-
-	bytes_count += desc->extents[SSDFS_MAPTBL_CACHE].bytes_count;
-
-	bytes_count += page_size - 1;
-	bytes_count = (bytes_count / page_size) * page_size;
+	bytes_count = define_areas_offset(desc, page_size, page_size,
+					  bytes_count, SSDFS_LOG_PAYLOAD);
 
 	bytes_count += desc->extents[SSDFS_LOG_FOOTER].bytes_count;
 	bytes_count += desc->extents[SSDFS_BLOCK_BITMAP_BACKUP].bytes_count;
@@ -574,6 +608,30 @@ prepare_maptbl_cache_metadata_descriptor(struct ssdfs_volume_layout *layout,
 	desc->check.csum = cpu_to_le32(~csum);
 }
 
+static void
+prepare_meta_extents_metadata_descriptor(struct ssdfs_volume_layout *layout,
+					 struct ssdfs_extent_desc *extent,
+					 struct ssdfs_metadata_descriptor *desc)
+{
+	size_t hdr_size = sizeof(struct ssdfs_metadata_extents_table);
+
+	BUG_ON(!layout || !extent || !desc);
+	BUG_ON(extent->bytes_count < hdr_size ||
+		extent->bytes_count >= layout->env.erase_size);
+	BUG_ON(extent->offset == 0 ||
+		extent->offset >= layout->env.erase_size);
+	BUG_ON(!extent->buf);
+
+	desc->offset = cpu_to_le32(extent->offset);
+	desc->size = cpu_to_le32(extent->bytes_count);
+
+	/* the first table's checksum; fragments have their own ones */
+	desc->check.bytes = cpu_to_le16(hdr_size);
+	desc->check.flags = cpu_to_le16(SSDFS_CRC32);
+	desc->check.csum = 0;
+	desc->check.csum = ssdfs_crc32_le(extent->buf, hdr_size);
+}
+
 static
 void prepare_footer_metadata_descriptor(struct ssdfs_volume_layout *layout,
 					struct ssdfs_extent_desc *extent,
@@ -690,6 +748,34 @@ void commit_segment_header(struct ssdfs_volume_layout *layout,
 		prepare_blk_desc_table_metadata_descriptor(layout, extent,
 							    meta_desc);
 		seg_flags |= SSDFS_LOG_HAS_BLK_DESC_CHAIN;
+	}
+
+	if (peb_desc->extents[SSDFS_MAPTBL_META_EXTENTS].bytes_count > 0) {
+
+		if (seg_desc->seg_type != SSDFS_SUPERBLOCK) {
+			SSDFS_ERR("sb segment should have maptbl extents\n");
+			BUG();
+		}
+
+		extent = &peb_desc->extents[SSDFS_MAPTBL_META_EXTENTS];
+		meta_desc = &hdr->desc_array[SSDFS_MAPTBL_META_EXTENTS_INDEX];
+		prepare_meta_extents_metadata_descriptor(layout, extent,
+							 meta_desc);
+		seg_flags |= SSDFS_LOG_HAS_MAPTBL_EXT_CHAIN;
+	}
+
+	if (peb_desc->extents[SSDFS_SEGBMAP_META_EXTENTS].bytes_count > 0) {
+
+		if (seg_desc->seg_type != SSDFS_SUPERBLOCK) {
+			SSDFS_ERR("sb segment should have segbmap extents\n");
+			BUG();
+		}
+
+		extent = &peb_desc->extents[SSDFS_SEGBMAP_META_EXTENTS];
+		meta_desc = &hdr->desc_array[SSDFS_SEGBMAP_META_EXTENTS_INDEX];
+		prepare_meta_extents_metadata_descriptor(layout, extent,
+							 meta_desc);
+		seg_flags |= SSDFS_LOG_HAS_SEGBMAP_EXT_CHAIN;
 	}
 
 	if (peb_desc->extents[SSDFS_MAPTBL_CACHE].bytes_count > 0) {
@@ -2244,6 +2330,247 @@ void commit_block_descriptors(struct ssdfs_volume_layout *layout,
 			      int seg_index, int peb_index)
 {
 	/* do nothing */
+}
+
+/************************************************************************
+ *              Metadata extents area creation functionality            *
+ ************************************************************************/
+
+/*
+ * The volume header keeps only SSDFS_SEGBMAP_RESERVED_EXTENTS (or
+ * SSDFS_MAPTBL_RESERVED_EXTENTS) rows of extents for every chain
+ * (main and copy). If a metadata structure needs more extents then
+ * the rest of them is stored in the superblock segment as a separate
+ * area. The area continues the volume header's array: it is the sequence
+ * of pairs (main extent, copy extent) for the rows that follow
+ * the last row of the volume header. An absent extent has
+ * SSDFS_EMPTY_EXTENT_TYPE type.
+ *
+ * The area has the structure that is described in ssdfs_abi.h:
+ * the sequence of struct ssdfs_metadata_extents_table tables. Every table
+ * describes up to SSDFS_FRAGMENTS_CHAIN_MAX fragments. Every fragment is
+ * an array of extents (up to PAGE_CACHE_SIZE bytes). The last fragment
+ * descriptor of the table (if the chain has SSDFS_MULTIPLE_HDR_CHAIN flag)
+ * has SSDFS_NEXT_TABLE_DESC type and keeps the offset (from the area's
+ * beginning) of the next table. The offset of fragment descriptor is
+ * counted from the beginning of the table.
+ */
+
+#define SSDFS_META_EXTENTS_PER_FRAGMENT \
+	(PAGE_CACHE_SIZE / sizeof(struct ssdfs_meta_area_extent))
+
+/* fragment's sequence ID is 8 bits wide */
+#define SSDFS_META_EXTENTS_MAX_FRAGMENTS	(U8_MAX)
+
+#define SSDFS_META_EXTENTS_MAX_COUNT \
+	(SSDFS_META_EXTENTS_MAX_FRAGMENTS * SSDFS_META_EXTENTS_PER_FRAGMENT)
+
+int set_meta_area_extent(struct ssdfs_meta_area_extent *embedded,
+			 u32 embedded_rows, u32 chains_count,
+			 struct ssdfs_meta_extents_layout *overflow,
+			 u32 row, u32 chain, u64 start_id, u32 len)
+{
+	struct ssdfs_meta_area_extent *extent;
+	size_t extent_size = sizeof(struct ssdfs_meta_area_extent);
+	u32 needed;
+	u32 i;
+
+	BUG_ON(!embedded || !overflow);
+	BUG_ON(chain >= chains_count);
+
+	if (row < embedded_rows) {
+		extent = &embedded[(row * chains_count) + chain];
+		goto init_extent;
+	}
+
+	needed = (row - embedded_rows + 1) * chains_count;
+
+	if (needed > SSDFS_META_EXTENTS_MAX_COUNT) {
+		SSDFS_ERR("too many metadata extents: "
+			  "row %u, embedded_rows %u, max_count %lu\n",
+			  row, embedded_rows,
+			  (unsigned long)SSDFS_META_EXTENTS_MAX_COUNT);
+		return -E2BIG;
+	}
+
+	if (needed > overflow->capacity) {
+		struct ssdfs_meta_area_extent *ptr;
+		u32 capacity = max_t(u32, needed, overflow->capacity * 2);
+
+		ptr = realloc(overflow->extents, capacity * extent_size);
+		if (!ptr) {
+			SSDFS_ERR("fail to allocate memory: "
+				  "capacity %u, item size %zu\n",
+				  capacity, extent_size);
+			return -ENOMEM;
+		}
+
+		overflow->extents = ptr;
+		overflow->capacity = capacity;
+	}
+
+	if (needed > overflow->count) {
+		memset(&overflow->extents[overflow->count], 0xFF,
+			(needed - overflow->count) * extent_size);
+
+		for (i = overflow->count; i < needed; i++) {
+			overflow->extents[i].type =
+				cpu_to_le16(SSDFS_EMPTY_EXTENT_TYPE);
+		}
+
+		overflow->count = needed;
+	}
+
+	extent = &overflow->extents[((row - embedded_rows) * chains_count) +
+				    chain];
+
+init_extent:
+	extent->start_id = cpu_to_le64(start_id);
+	extent->len = cpu_to_le32(len);
+	extent->type = cpu_to_le16(SSDFS_SEG_EXTENT_TYPE);
+	extent->flags = 0;
+
+	return 0;
+}
+
+void destroy_meta_extents_layout(struct ssdfs_meta_extents_layout *ptr)
+{
+	free(ptr->extents);
+	ptr->extents = NULL;
+	ptr->count = 0;
+	ptr->capacity = 0;
+}
+
+/*
+ * The function prepares the buffer of the metadata extents area and
+ * defines its size (extent->bytes_count). If there is nothing to store
+ * then the area stays empty (bytes_count is zero).
+ */
+int define_meta_extents_area(struct ssdfs_volume_layout *layout,
+			     struct ssdfs_peb_content *peb_desc,
+			     int extent_index,
+			     struct ssdfs_meta_extents_layout *src)
+{
+	struct ssdfs_extent_desc *extent;
+	struct ssdfs_metadata_extents_table *table;
+	struct ssdfs_fragment_desc *fdesc;
+	size_t hdr_size = sizeof(struct ssdfs_metadata_extents_table);
+	size_t desc_size = sizeof(struct ssdfs_fragment_desc);
+	size_t item_size = sizeof(struct ssdfs_meta_area_extent);
+	u32 per_fragment = SSDFS_META_EXTENTS_PER_FRAGMENT;
+	u32 fragments_count;
+	u32 tables_count;
+	u32 allocation_size;
+	u32 fragment_index = 0;
+	u32 items_left;
+	u32 table_offset;
+	u32 cur_offset = 0;
+	u8 *src_ptr;
+	u32 i, j;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "extent_index %d, count %u\n",
+		  extent_index, src->count);
+
+	BUG_ON(extent_index != SSDFS_SEGBMAP_META_EXTENTS &&
+		extent_index != SSDFS_MAPTBL_META_EXTENTS);
+
+	extent = &peb_desc->extents[extent_index];
+	BUG_ON(extent->buf);
+
+	if (src->count == 0) {
+		/* the volume header keeps all extents */
+		return 0;
+	}
+
+	if (src->count > SSDFS_META_EXTENTS_MAX_COUNT) {
+		SSDFS_ERR("too many metadata extents: count %u\n",
+			  src->count);
+		return -E2BIG;
+	}
+
+	fragments_count = (src->count + per_fragment - 1) / per_fragment;
+	tables_count = (fragments_count + SSDFS_FRAGMENTS_CHAIN_MAX - 1) /
+				SSDFS_FRAGMENTS_CHAIN_MAX;
+	allocation_size = (tables_count * hdr_size) + (src->count * item_size);
+
+	extent->buf = calloc(1, allocation_size);
+	if (!extent->buf) {
+		SSDFS_ERR("unable to allocate memory of size %u\n",
+			  allocation_size);
+		return -ENOMEM;
+	}
+
+	items_left = src->count;
+	src_ptr = (u8 *)src->extents;
+
+	for (i = 0; i < tables_count; i++) {
+		u32 fragments_in_table = min_t(u32,
+					fragments_count - fragment_index,
+					SSDFS_FRAGMENTS_CHAIN_MAX);
+		int has_next_table = (i + 1) < tables_count;
+
+		table_offset = cur_offset;
+		table = (struct ssdfs_metadata_extents_table *)
+					((u8 *)extent->buf + table_offset);
+		cur_offset += hdr_size;
+
+		for (j = 0; j < fragments_in_table; j++, fragment_index++) {
+			u32 items = min_t(u32, items_left, per_fragment);
+			u32 bytes = items * item_size;
+			u8 *fragment = (u8 *)extent->buf + cur_offset;
+
+			memcpy(fragment, src_ptr, bytes);
+
+			fdesc = &table->blk[j];
+			fdesc->magic = cpu_to_le8(SSDFS_FRAGMENT_DESC_MAGIC);
+			fdesc->type = cpu_to_le8(SSDFS_META_EXT_BLOB);
+			fdesc->flags = cpu_to_le8(SSDFS_FRAGMENT_HAS_CSUM);
+			fdesc->sequence_id = cpu_to_le8((u8)fragment_index);
+			fdesc->offset = cpu_to_le32(cur_offset - table_offset);
+			fdesc->compr_size = cpu_to_le16((u16)bytes);
+			fdesc->uncompr_size = cpu_to_le16((u16)bytes);
+			fdesc->checksum = ssdfs_crc32_le(fragment, bytes);
+
+			src_ptr += bytes;
+			items_left -= items;
+			cur_offset += bytes;
+		}
+
+		table->chain_hdr.compr_bytes =
+				cpu_to_le32(cur_offset - table_offset);
+		table->chain_hdr.uncompr_bytes =
+				cpu_to_le32(cur_offset - table_offset);
+		table->chain_hdr.fragments_count =
+				cpu_to_le16((u16)fragments_in_table);
+		table->chain_hdr.desc_size = cpu_to_le16((u16)desc_size);
+		table->chain_hdr.magic = cpu_to_le8(SSDFS_CHAIN_HDR_MAGIC);
+		table->chain_hdr.type = cpu_to_le8(SSDFS_META_EXT_CHAIN_HDR);
+
+		if (has_next_table) {
+			table->chain_hdr.flags =
+				cpu_to_le16(SSDFS_MULTIPLE_HDR_CHAIN);
+
+			fdesc = &table->blk[SSDFS_NEXT_META_EXT_TABLE_INDEX];
+			fdesc->magic = cpu_to_le8(SSDFS_FRAGMENT_DESC_MAGIC);
+			fdesc->type = cpu_to_le8(SSDFS_NEXT_TABLE_DESC);
+			fdesc->flags = cpu_to_le8(0);
+			fdesc->sequence_id = cpu_to_le8((u8)fragment_index);
+			fdesc->offset = cpu_to_le32(cur_offset);
+			fdesc->compr_size = cpu_to_le16((u16)hdr_size);
+			fdesc->uncompr_size = cpu_to_le16((u16)hdr_size);
+			fdesc->checksum = cpu_to_le32(0);
+		} else {
+			table->chain_hdr.flags = cpu_to_le16(0);
+		}
+	}
+
+	BUG_ON(items_left != 0);
+	BUG_ON(cur_offset != allocation_size);
+
+	extent->bytes_count = allocation_size;
+
+	return 0;
 }
 
 int define_log_footer_layout(struct ssdfs_volume_layout *layout,
