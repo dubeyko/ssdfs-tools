@@ -65,7 +65,7 @@
 
 /* SSDFS revision */
 #define SSDFS_MAJOR_REVISION		1
-#define SSDFS_MINOR_REVISION		22
+#define SSDFS_MINOR_REVISION		23
 
 /* SSDFS constants */
 #define SSDFS_MAX_NAME_LEN		255
@@ -1814,26 +1814,31 @@ struct ssdfs_fragments_chain_header {
 } __attribute__((packed));
 
 /* Fragments chain types */
-#define SSDFS_UNKNOWN_CHAIN_HDR		0x0
-#define SSDFS_LOG_AREA_CHAIN_HDR	0x1
-#define SSDFS_BLK_STATE_CHAIN_HDR	0x2
-#define SSDFS_BLK_DESC_CHAIN_HDR	0x3
-#define SSDFS_BLK_DESC_ZLIB_CHAIN_HDR	0x4
-#define SSDFS_BLK_DESC_LZO_CHAIN_HDR	0x5
-#define SSDFS_BLK2OFF_CHAIN_HDR		0x6
-#define SSDFS_BLK2OFF_ZLIB_CHAIN_HDR	0x7
-#define SSDFS_BLK2OFF_LZO_CHAIN_HDR	0x8
-#define SSDFS_BLK_BMAP_CHAIN_HDR	0x9
-#define SSDFS_BLK_DESC_LZ4_CHAIN_HDR	0xA
-#define SSDFS_BLK2OFF_LZ4_CHAIN_HDR	0xB
-#define SSDFS_BLK_DESC_ZSTD_CHAIN_HDR	0xC
-#define SSDFS_BLK2OFF_ZSTD_CHAIN_HDR	0xD
-#define SSDFS_META_EXT_CHAIN_HDR	0xE
-#define SSDFS_META_EXT_ZLIB_CHAIN_HDR	0xF
-#define SSDFS_META_EXT_LZO_CHAIN_HDR	0x10
-#define SSDFS_META_EXT_LZ4_CHAIN_HDR	0x11
-#define SSDFS_META_EXT_ZSTD_CHAIN_HDR	0x12
-#define SSDFS_CHAIN_HDR_TYPE_MAX	(SSDFS_META_EXT_ZSTD_CHAIN_HDR + 1)
+#define SSDFS_UNKNOWN_CHAIN_HDR			0x0
+#define SSDFS_LOG_AREA_CHAIN_HDR		0x1
+#define SSDFS_BLK_STATE_CHAIN_HDR		0x2
+#define SSDFS_BLK_DESC_CHAIN_HDR		0x3
+#define SSDFS_BLK_DESC_ZLIB_CHAIN_HDR		0x4
+#define SSDFS_BLK_DESC_LZO_CHAIN_HDR		0x5
+#define SSDFS_BLK2OFF_CHAIN_HDR			0x6
+#define SSDFS_BLK2OFF_ZLIB_CHAIN_HDR		0x7
+#define SSDFS_BLK2OFF_LZO_CHAIN_HDR		0x8
+#define SSDFS_BLK_BMAP_CHAIN_HDR		0x9
+#define SSDFS_BLK_DESC_LZ4_CHAIN_HDR		0xA
+#define SSDFS_BLK2OFF_LZ4_CHAIN_HDR		0xB
+#define SSDFS_BLK_DESC_ZSTD_CHAIN_HDR		0xC
+#define SSDFS_BLK2OFF_ZSTD_CHAIN_HDR		0xD
+#define SSDFS_META_EXT_CHAIN_HDR		0xE
+#define SSDFS_META_EXT_ZLIB_CHAIN_HDR		0xF
+#define SSDFS_META_EXT_LZO_CHAIN_HDR		0x10
+#define SSDFS_META_EXT_LZ4_CHAIN_HDR		0x11
+#define SSDFS_META_EXT_ZSTD_CHAIN_HDR		0x12
+#define SSDFS_MAPTBL_CACHE_CHAIN_HDR		0x13
+#define SSDFS_MAPTBL_CACHE_ZLIB_CHAIN_HDR	0x14
+#define SSDFS_MAPTBL_CACHE_LZO_CHAIN_HDR	0x15
+#define SSDFS_MAPTBL_CACHE_LZ4_CHAIN_HDR	0x16
+#define SSDFS_MAPTBL_CACHE_ZSTD_CHAIN_HDR	0x17
+#define SSDFS_CHAIN_HDR_TYPE_MAX	(SSDFS_MAPTBL_CACHE_ZSTD_CHAIN_HDR + 1)
 
 /* Fragments chain flags */
 #define SSDFS_MULTIPLE_HDR_CHAIN	(1 << 0)
@@ -1871,35 +1876,40 @@ struct ssdfs_fragment_desc {
 } __attribute__((packed));
 
 /* Fragment descriptor types */
-#define SSDFS_UNKNOWN_FRAGMENT_TYPE	0
-#define SSDFS_FRAGMENT_UNCOMPR_BLOB	1
-#define SSDFS_FRAGMENT_ZLIB_BLOB	2
-#define SSDFS_FRAGMENT_LZO_BLOB		3
-#define SSDFS_DATA_BLK_STATE_DESC	4
-#define SSDFS_DATA_BLK_DESC		5
-#define SSDFS_DATA_BLK_DESC_ZLIB	6
-#define SSDFS_DATA_BLK_DESC_LZO		7
-#define SSDFS_BLK2OFF_EXTENT_DESC	8
-#define SSDFS_BLK2OFF_EXTENT_DESC_ZLIB	9
-#define SSDFS_BLK2OFF_EXTENT_DESC_LZO	10
-#define SSDFS_BLK2OFF_DESC		11
-#define SSDFS_BLK2OFF_DESC_ZLIB		12
-#define SSDFS_BLK2OFF_DESC_LZO		13
-#define SSDFS_NEXT_TABLE_DESC		14
-#define SSDFS_FRAGMENT_LZ4_BLOB		15
-#define SSDFS_DATA_BLK_DESC_LZ4		16
-#define SSDFS_BLK2OFF_EXTENT_DESC_LZ4	17
-#define SSDFS_BLK2OFF_DESC_LZ4		18
-#define SSDFS_FRAGMENT_ZSTD_BLOB	19
-#define SSDFS_DATA_BLK_DESC_ZSTD	20
-#define SSDFS_BLK2OFF_EXTENT_DESC_ZSTD	21
-#define SSDFS_BLK2OFF_DESC_ZSTD		22
-#define SSDFS_META_EXT_BLOB		23
-#define SSDFS_META_EXT_ZLIB		24
-#define SSDFS_META_EXT_LZO		25
-#define SSDFS_META_EXT_LZ4		26
-#define SSDFS_META_EXT_ZSTD		27
-#define SSDFS_FRAGMENT_DESC_MAX_TYPE	(SSDFS_META_EXT_ZSTD + 1)
+#define SSDFS_UNKNOWN_FRAGMENT_TYPE	0x0
+#define SSDFS_FRAGMENT_UNCOMPR_BLOB	0x1
+#define SSDFS_FRAGMENT_ZLIB_BLOB	0x2
+#define SSDFS_FRAGMENT_LZO_BLOB		0x3
+#define SSDFS_DATA_BLK_STATE_DESC	0x4
+#define SSDFS_DATA_BLK_DESC		0x5
+#define SSDFS_DATA_BLK_DESC_ZLIB	0x6
+#define SSDFS_DATA_BLK_DESC_LZO		0x7
+#define SSDFS_BLK2OFF_EXTENT_DESC	0x8
+#define SSDFS_BLK2OFF_EXTENT_DESC_ZLIB	0x9
+#define SSDFS_BLK2OFF_EXTENT_DESC_LZO	0xA
+#define SSDFS_BLK2OFF_DESC		0xB
+#define SSDFS_BLK2OFF_DESC_ZLIB		0xC
+#define SSDFS_BLK2OFF_DESC_LZO		0xD
+#define SSDFS_NEXT_TABLE_DESC		0xE
+#define SSDFS_FRAGMENT_LZ4_BLOB		0xF
+#define SSDFS_DATA_BLK_DESC_LZ4		0x10
+#define SSDFS_BLK2OFF_EXTENT_DESC_LZ4	0x11
+#define SSDFS_BLK2OFF_DESC_LZ4		0x12
+#define SSDFS_FRAGMENT_ZSTD_BLOB	0x13
+#define SSDFS_DATA_BLK_DESC_ZSTD	0x14
+#define SSDFS_BLK2OFF_EXTENT_DESC_ZSTD	0x15
+#define SSDFS_BLK2OFF_DESC_ZSTD		0x16
+#define SSDFS_META_EXT_BLOB		0x17
+#define SSDFS_META_EXT_ZLIB		0x18
+#define SSDFS_META_EXT_LZO		0x19
+#define SSDFS_META_EXT_LZ4		0x1A
+#define SSDFS_META_EXT_ZSTD		0x1B
+#define SSDFS_MAPTBL_CACHE_BLOB		0x1C
+#define SSDFS_MAPTBL_CACHE_ZLIB		0x1D
+#define SSDFS_MAPTBL_CACHE_LZO		0x1E
+#define SSDFS_MAPTBL_CACHE_LZ4		0x1F
+#define SSDFS_MAPTBL_CACHE_ZSTD		0x20
+#define SSDFS_FRAGMENT_DESC_MAX_TYPE	(SSDFS_MAPTBL_CACHE_ZSTD + 1)
 
 /* Fragment descriptor flags */
 #define SSDFS_FRAGMENT_HAS_CSUM		(1 << 0)
@@ -2334,7 +2344,6 @@ struct ssdfs_block_state_descriptor {
 /* 0x0020 */
 } __attribute__((packed));
 
-
 /*
  * The metadata extents area has structure:
  *
@@ -2376,8 +2385,8 @@ struct ssdfs_block_state_descriptor {
  * @chain_hdr: descriptor of metadata extents' chain
  * @blk: table of fragment descriptors
  *
- * This table describes metadata extents sequence in PEB's area.
- * This table can consists from several parts. Every part can describe
+ * The table describes metadata extents sequence in PEB's area.
+ * Table can consists from several parts. Every part can describe
  * 14 fragments in partial sequence. If sequence contains more fragments
  * then last fragment descriptor describes placement of next part of
  * metadata extents sequence and so on.
@@ -2387,7 +2396,7 @@ struct ssdfs_metadata_extents_table {
 	struct ssdfs_fragments_chain_header chain_hdr;
 
 /* 0x0010 */
-#define SSDFS_NEXT_META_EXT_TABLE_INDEX	SSDFS_FRAGMENTS_CHAIN_MAX
+#define SSDFS_NEXT_META_EXT_TABLE_INDEX		SSDFS_FRAGMENTS_CHAIN_MAX
 #define SSDFS_META_EXT_TABLE_MAX		(SSDFS_FRAGMENTS_CHAIN_MAX + 1)
 	struct ssdfs_fragment_desc blk[SSDFS_META_EXT_TABLE_MAX];
 
@@ -2675,6 +2684,48 @@ struct ssdfs_leb_table_fragment_header {
  * |    PEB state records     |
  * |                          |
  * ----------------------------
+ *
+ * The mapping table cache area in compressed state has structure:
+ *
+ * -----------------------------
+ * |                           |
+ * | Area descriptor #0        |
+ * |  Fragment descriptor #0   |
+ * |          ***              |
+ * |  Fragment descriptor #N   |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * |       Fragment #0         |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * |          ***              |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * |       Fragment #N         |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * | Area descriptor #N        |
+ * |  Fragment descriptor #0   |
+ * |          ***              |
+ * |  Fragment descriptor #N   |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * |       Fragment #0         |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * |          ***              |
+ * |                           |
+ * -----------------------------
+ * |                           |
+ * |       Fragment #N         |
+ * |                           |
+ * -----------------------------
  */
 
 /*
@@ -2753,6 +2804,29 @@ enum {
 	((fragment_size - SSDFS_MAPTBL_CACHE_HDR_SIZE - \
 				SSDFS_PEB_STATE_SIZE) / \
 	 (SSDFS_LEB2PEB_PAIR_SIZE + SSDFS_PEB_STATE_SIZE))
+
+/*
+ * struct ssdfs_maptbl_cache_table - descriptor of mapping table's fragments
+ * @chain_hdr: descriptor of mapping table's fragments' chain
+ * @blk: table of fragment descriptors
+ *
+ * This table describes mapping table's fragments in PEB's area.
+ * This table can consists from several parts. Every part can describe
+ * 14 fragments in partial sequence. If sequence contains more fragments
+ * then last fragment descriptor describes placement of next part of
+ * metadata extents sequence and so on.
+ */
+struct ssdfs_maptbl_cache_table {
+/* 0x0000 */
+	struct ssdfs_fragments_chain_header chain_hdr;
+
+/* 0x0010 */
+#define SSDFS_NEXT_MAPTBL_CACHE_TABLE_INDEX	SSDFS_FRAGMENTS_CHAIN_MAX
+#define SSDFS_MAPTBL_CACHE_TABLE_MAX		(SSDFS_FRAGMENTS_CHAIN_MAX + 1)
+	struct ssdfs_fragment_desc blk[SSDFS_MAPTBL_CACHE_TABLE_MAX];
+
+/* 0x0100 */
+} __attribute__((packed));
 
 /*
  * struct ssdfs_btree_node_header - btree's node header

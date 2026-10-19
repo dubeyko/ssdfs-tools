@@ -1647,8 +1647,7 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	for (i = 0; i <= SSDFS_RESERVED_SB_SEG; i++) {
 		for (j = 0; j < SSDFS_SB_SEG_COPY_MAX; j++) {
 			struct ssdfs_peb_content *peb_desc;
-			struct ssdfs_extent_desc *extent;
-			size_t peb_buffer_size;
+			u32 inline_capacity;
 			u32 blks;
 
 			if (i != SSDFS_CUR_SB_SEG)
@@ -1707,37 +1706,6 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 				return err;
 			}
 
-			extent = &peb_desc->extents[SSDFS_MAPTBL_CACHE];
-
-			BUG_ON(extent->buf);
-			BUG_ON(layout->maptbl_cache.fragment_size !=
-				PAGE_CACHE_SIZE);
-
-			peb_buffer_size = fragments * PAGE_CACHE_SIZE;
-
-			extent->buf = malloc(peb_buffer_size);
-			if (!extent->buf) {
-				SSDFS_ERR("fail to allocate memory: "
-					  "size %zu\n",
-					  peb_buffer_size);
-				return -ENOMEM;
-			}
-
-			for (k = 0; k < fragments; k++) {
-				void *sptr;
-				u8 *dptr;
-
-				sptr = layout->maptbl_cache.fragments_array[k];
-				dptr = (u8 *)extent->buf +
-						(k * PAGE_CACHE_SIZE);
-
-				BUG_ON(!sptr || !dptr);
-
-				memcpy(dptr, sptr, PAGE_CACHE_SIZE);
-			}
-
-			extent->bytes_count = layout->maptbl_cache.bytes_count;
-
 			/*
 			 * STEP 2: define the offsets of the areas. The areas
 			 * are placed in the order: segbmap's extents, maptbl's
@@ -1761,6 +1729,25 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (err) {
 				SSDFS_ERR("fail to define extent's offset: "
 					  "err %d\n", err);
+				return err;
+			}
+
+			/*
+			 * The maptbl cache is stored uncompressed if it fits
+			 * into the inline area. Otherwise, it is stored as
+			 * the sequence of compressed fragments.
+			 */
+			inline_capacity =
+				define_inline_area_capacity(layout,
+							    SSDFS_SB_SEG_TYPE,
+							    peb_desc,
+							    SSDFS_MAPTBL_CACHE);
+
+			err = maptbl_cache_define_area(layout, peb_desc,
+							inline_capacity);
+			if (err) {
+				SSDFS_ERR("fail to define maptbl cache "
+					  "area: err %d\n", err);
 				return err;
 			}
 

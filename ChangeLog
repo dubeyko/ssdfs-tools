@@ -2,6 +2,13 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.76 [October 18, 2026]
+    (*) [mkfs] Store PEB mapping table cache as the sequence of
+               compressed fragments if the cache cannot fit into
+               the inline area.
+    (*) [dumpfs] Parse compressed PEB mapping table cache.
+    (*) Fix LZO, LZ4, and ZSTD compression support.
+
 v.4.75 [October 09, 2026]
     (*) Introduce overflow metadata extents support in
         segment bitmap and PEB mapping table.

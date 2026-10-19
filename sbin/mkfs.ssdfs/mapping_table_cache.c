@@ -559,3 +559,429 @@ int cache_leb2peb_pair(struct ssdfs_volume_layout *layout,
 
 	return 0;
 }
+
+/************************************************************************
+ *             PEB mapping table cache area creation                    *
+ ************************************************************************/
+
+/*
+ * The mapping table cache area has two possible structures. The flags
+ * of the area's metadata descriptor (struct ssdfs_metadata_check)
+ * show which one is used: SSDFS_<ALGORITHM>_COMPRESSED flag means
+ * compressed area.
+ *
+ * (1) Uncompressed area is the sequence of fragments of mapping table
+ * cache. Every fragment starts from struct ssdfs_maptbl_cache_header.
+ * Every fragment (except the last one) occupies PAGE_CACHE_SIZE bytes.
+ * This structure is used if the mapping table cache fits into
+ * the inline area (the rest of the segment header's page).
+ *
+ * (2) Otherwise, the area is the sequence of portions. Every portion
+ * starts from struct ssdfs_maptbl_cache_table that describes up to
+ * SSDFS_FRAGMENTS_CHAIN_MAX fragments. Every fragment (the whole
+ * fragment of mapping table cache, including its header) is compressed
+ * in accordance with the compression type of mapping table (ZLIB is
+ * used by default if the compression of mapping table is disabled). If the
+ * fragment cannot be compressed then it is stored uncompressed
+ * (SSDFS_MAPTBL_CACHE_BLOB type). The last fragment descriptor of
+ * the table (if the chain has SSDFS_MULTIPLE_HDR_CHAIN flag) has
+ * SSDFS_NEXT_TABLE_DESC type and keeps the offset of the next table.
+ * The offsets of fragments and of the next table are counted from
+ * the area's beginning. The sequence ID of a fragment descriptor is
+ * the index of the descriptor in the table. The checksum of fragment
+ * is calculated for the uncompressed state of the fragment.
+ */
+
+/*
+ * maptbl_cache_compression() - compression type of maptbl cache
+ * @layout: volume layout
+ *
+ * The mapping table cache that doesn't fit into the inline area is
+ * compressed by the compression type of mapping table. If the compression
+ * of mapping table is disabled, then ZLIB is used by default.
+ */
+static inline
+int maptbl_cache_compression(struct ssdfs_volume_layout *layout)
+{
+	if (layout->maptbl.compression == SSDFS_UNCOMPRESSED_BLOB)
+		return SSDFS_ZLIB_BLOB;
+
+	return layout->maptbl.compression;
+}
+
+static
+u32 maptbl_cache_used_fragments(struct ssdfs_volume_layout *layout)
+{
+	struct ssdfs_maptbl_cache_header *hdr;
+	u32 i;
+
+	for (i = 0; i < layout->maptbl_cache.fragments_count; i++) {
+		hdr = (struct ssdfs_maptbl_cache_header *)
+				layout->maptbl_cache.fragments_array[i];
+
+		BUG_ON(!hdr);
+
+		/* fragments are filled in sequence */
+		if (le16_to_cpu(hdr->items_count) == 0)
+			break;
+	}
+
+	return i;
+}
+
+static
+int maptbl_cache_compress_fragment(struct ssdfs_volume_layout *layout,
+				   u8 *fragment, u32 fragment_size,
+				   u8 *compr_buf, u32 *compr_size,
+				   int *type)
+{
+	int compression = maptbl_cache_compression(layout);
+	u32 srclen = fragment_size;
+	u32 destlen = *compr_size;
+	int err;
+
+	if (fragment_size < SSDFS_MIN_SIZE_COMPRESSION_THRESHOLD)
+		goto make_uncompressed_blob;
+
+	switch (compression) {
+	case SSDFS_UNCOMPRESSED_BLOB:
+		goto make_uncompressed_blob;
+
+	case SSDFS_ZLIB_BLOB:
+		*type = SSDFS_MAPTBL_CACHE_ZLIB;
+		err = ssdfs_zlib_compress(fragment, compr_buf,
+					  &srclen, &destlen,
+					  layout->env.show_debug);
+		break;
+
+	case SSDFS_LZO_BLOB:
+		*type = SSDFS_MAPTBL_CACHE_LZO;
+		err = ssdfs_lzo_compress(fragment, compr_buf,
+					 &srclen, &destlen,
+					 layout->env.show_debug);
+		break;
+
+	case SSDFS_LZ4_BLOB:
+		*type = SSDFS_MAPTBL_CACHE_LZ4;
+		err = ssdfs_lz4_compress(fragment, compr_buf,
+					 &srclen, &destlen,
+					 layout->env.show_debug);
+		break;
+
+	case SSDFS_ZSTD_BLOB:
+		*type = SSDFS_MAPTBL_CACHE_ZSTD;
+		err = ssdfs_zstd_compress(fragment, compr_buf,
+					  &srclen, &destlen,
+					  layout->env.show_debug);
+		break;
+
+	default:
+		SSDFS_ERR("unexpected compression type %#x\n",
+			  compression);
+		return -ERANGE;
+	}
+
+	if (err == -E2BIG) {
+		SSDFS_DBG(layout->env.show_debug,
+			  "fragment cannot be compressed: size %u\n",
+			  fragment_size);
+		goto make_uncompressed_blob;
+	} else if (err) {
+		SSDFS_ERR("fail to compress fragment: "
+			  "size %u, err %d\n",
+			  fragment_size, err);
+		return err;
+	}
+
+	*compr_size = destlen;
+	return 0;
+
+make_uncompressed_blob:
+	*type = SSDFS_MAPTBL_CACHE_BLOB;
+	memcpy(compr_buf, fragment, fragment_size);
+	*compr_size = fragment_size;
+	return 0;
+}
+
+static
+int maptbl_cache_chain_type(int compression)
+{
+	switch (compression) {
+	case SSDFS_ZLIB_BLOB:
+		return SSDFS_MAPTBL_CACHE_ZLIB_CHAIN_HDR;
+
+	case SSDFS_LZO_BLOB:
+		return SSDFS_MAPTBL_CACHE_LZO_CHAIN_HDR;
+
+	case SSDFS_LZ4_BLOB:
+		return SSDFS_MAPTBL_CACHE_LZ4_CHAIN_HDR;
+
+	case SSDFS_ZSTD_BLOB:
+		return SSDFS_MAPTBL_CACHE_ZSTD_CHAIN_HDR;
+
+	default:
+		/* do nothing */
+		break;
+	}
+
+	return SSDFS_MAPTBL_CACHE_CHAIN_HDR;
+}
+
+static
+int maptbl_cache_define_uncompr_area(struct ssdfs_volume_layout *layout,
+				     struct ssdfs_extent_desc *extent,
+				     u32 fragments_count)
+{
+	struct ssdfs_maptbl_cache_header *hdr;
+	u32 bytes_count = layout->maptbl_cache.bytes_count;
+	u32 offset = 0;
+	u32 i;
+
+	/* the area's checksum covers the whole area */
+	if (bytes_count >= U16_MAX) {
+		SSDFS_ERR("uncompressed maptbl cache is too big: "
+			  "bytes_count %u\n",
+			  bytes_count);
+		return -E2BIG;
+	}
+
+	extent->buf = malloc(bytes_count);
+	if (!extent->buf) {
+		SSDFS_ERR("fail to allocate memory: size %u\n",
+			  bytes_count);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < fragments_count; i++) {
+		u16 fragment_size;
+
+		hdr = (struct ssdfs_maptbl_cache_header *)
+				layout->maptbl_cache.fragments_array[i];
+		fragment_size = le16_to_cpu(hdr->bytes_count);
+
+		/* fragments are filled in sequence: only the last isn't full */
+		BUG_ON((i + 1) < fragments_count &&
+			fragment_size != PAGE_CACHE_SIZE);
+		BUG_ON((offset + fragment_size) > bytes_count);
+
+		memcpy((u8 *)extent->buf + offset, hdr, fragment_size);
+		offset += fragment_size;
+	}
+
+	BUG_ON(offset != bytes_count);
+
+	extent->state = SSDFS_UNCOMPRESSED_BLOB;
+	extent->bytes_count = bytes_count;
+
+	return 0;
+}
+
+static
+int maptbl_cache_define_compressed_area(struct ssdfs_volume_layout *layout,
+					struct ssdfs_extent_desc *extent,
+					u32 fragments_count)
+{
+	struct ssdfs_maptbl_cache_header *hdr;
+	struct ssdfs_maptbl_cache_table *table;
+	struct ssdfs_fragment_desc *fdesc;
+	size_t tbl_size = sizeof(struct ssdfs_maptbl_cache_table);
+	size_t desc_size = sizeof(struct ssdfs_fragment_desc);
+	u32 compr_buf_size;
+	u32 tables_count;
+	u32 allocation_size;
+	u32 fragment_index = 0;
+	u32 table_offset;
+	u32 cur_offset = 0;
+	u8 *buf;
+	u32 i, j;
+	int err;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "fragments_count %u\n", fragments_count);
+
+	compr_buf_size = SSDFS_LZO_WORST_COMPRESS(PAGE_CACHE_SIZE);
+	tables_count = (fragments_count + SSDFS_FRAGMENTS_CHAIN_MAX - 1) /
+				SSDFS_FRAGMENTS_CHAIN_MAX;
+
+	/* the compressed fragment is never bigger than the uncompressed one */
+	allocation_size = (tables_count * tbl_size) +
+			  ((fragments_count - 1) * PAGE_CACHE_SIZE) +
+			  compr_buf_size;
+
+	buf = calloc(1, allocation_size);
+	if (!buf) {
+		SSDFS_ERR("unable to allocate memory of size %u\n",
+			  allocation_size);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < tables_count; i++) {
+		u32 fragments_in_table = min_t(u32,
+					fragments_count - fragment_index,
+					SSDFS_FRAGMENTS_CHAIN_MAX);
+		int has_next_table = (i + 1) < tables_count;
+		u32 compr_bytes = 0;
+		u32 uncompr_bytes = 0;
+
+		table_offset = cur_offset;
+		table = (struct ssdfs_maptbl_cache_table *)(buf + table_offset);
+		cur_offset += tbl_size;
+
+		for (j = 0; j < fragments_in_table; j++, fragment_index++) {
+			u8 *fragment;
+			u32 fragment_size;
+			u32 compr_size = compr_buf_size;
+			int type;
+
+			fragment =
+			    layout->maptbl_cache.fragments_array[fragment_index];
+			hdr = (struct ssdfs_maptbl_cache_header *)fragment;
+			fragment_size = le16_to_cpu(hdr->bytes_count);
+
+			BUG_ON(fragment_size > PAGE_CACHE_SIZE);
+			BUG_ON((cur_offset + compr_buf_size) > allocation_size);
+
+			err = maptbl_cache_compress_fragment(layout,
+							     fragment,
+							     fragment_size,
+							     buf + cur_offset,
+							     &compr_size,
+							     &type);
+			if (err) {
+				SSDFS_ERR("fail to compress fragment: "
+					  "index %u, err %d\n",
+					  fragment_index, err);
+				goto free_buffer;
+			}
+
+			BUG_ON(compr_size > fragment_size);
+
+			fdesc = &table->blk[j];
+			fdesc->magic = cpu_to_le8(SSDFS_FRAGMENT_DESC_MAGIC);
+			fdesc->type = cpu_to_le8((u8)type);
+			fdesc->flags = cpu_to_le8(SSDFS_FRAGMENT_HAS_CSUM);
+			fdesc->sequence_id = cpu_to_le8((u8)j);
+			fdesc->offset = cpu_to_le32(cur_offset);
+			fdesc->compr_size = cpu_to_le16((u16)compr_size);
+			fdesc->uncompr_size = cpu_to_le16((u16)fragment_size);
+			fdesc->checksum = ssdfs_crc32_le(fragment,
+							 fragment_size);
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "fragment %u: type %#x, offset %u, "
+				  "compr_size %u, uncompr_size %u\n",
+				  fragment_index, type, cur_offset,
+				  compr_size, fragment_size);
+
+			cur_offset += compr_size;
+			compr_bytes += compr_size;
+			uncompr_bytes += fragment_size;
+		}
+
+		table->chain_hdr.compr_bytes = cpu_to_le32(compr_bytes);
+		table->chain_hdr.uncompr_bytes = cpu_to_le32(uncompr_bytes);
+		table->chain_hdr.fragments_count =
+				cpu_to_le16((u16)fragments_in_table);
+		table->chain_hdr.desc_size = cpu_to_le16((u16)desc_size);
+		table->chain_hdr.magic = cpu_to_le8(SSDFS_CHAIN_HDR_MAGIC);
+		table->chain_hdr.type =
+			cpu_to_le8(maptbl_cache_chain_type(
+					maptbl_cache_compression(layout)));
+
+		if (has_next_table) {
+			table->chain_hdr.flags =
+				cpu_to_le16(SSDFS_MULTIPLE_HDR_CHAIN);
+
+			fdesc = &table->blk[SSDFS_NEXT_MAPTBL_CACHE_TABLE_INDEX];
+			fdesc->magic = cpu_to_le8(SSDFS_FRAGMENT_DESC_MAGIC);
+			fdesc->type = cpu_to_le8(SSDFS_NEXT_TABLE_DESC);
+			fdesc->flags = cpu_to_le8(0);
+			fdesc->sequence_id =
+				cpu_to_le8(SSDFS_NEXT_MAPTBL_CACHE_TABLE_INDEX);
+			fdesc->offset = cpu_to_le32(cur_offset);
+			fdesc->compr_size = cpu_to_le16((u16)tbl_size);
+			fdesc->uncompr_size = cpu_to_le16((u16)tbl_size);
+			fdesc->checksum = cpu_to_le32(0);
+		} else {
+			table->chain_hdr.flags = cpu_to_le16(0);
+		}
+	}
+
+	BUG_ON(fragment_index != fragments_count);
+
+	extent->buf = (char *)buf;
+	extent->state = maptbl_cache_compression(layout);
+	extent->bytes_count = cur_offset;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "tables_count %u, fragments_count %u, "
+		  "uncompressed %u bytes, area %u bytes\n",
+		  tables_count, fragments_count,
+		  layout->maptbl_cache.bytes_count, cur_offset);
+
+	return 0;
+
+free_buffer:
+	free(buf);
+	return err;
+}
+
+/*
+ * maptbl_cache_define_area() - prepare the PEB mapping table cache area
+ * @layout: volume layout
+ * @peb_desc: PEB's content descriptor
+ * @inline_capacity: free space (in bytes) of the inline area
+ *
+ * The function prepares the buffer of the mapping table cache area and
+ * defines its size (extent->bytes_count). If the cache fits into
+ * @inline_capacity then it is stored uncompressed. Otherwise, it is
+ * stored as the sequence of compressed fragments (ZLIB is used by default
+ * if the compression of mapping table is disabled). The extent->state
+ * keeps the compression type of the area.
+ */
+int maptbl_cache_define_area(struct ssdfs_volume_layout *layout,
+			     struct ssdfs_peb_content *peb_desc,
+			     u32 inline_capacity)
+{
+	struct ssdfs_extent_desc *extent;
+	u32 fragments_count;
+	int err;
+
+	extent = &peb_desc->extents[SSDFS_MAPTBL_CACHE];
+
+	BUG_ON(extent->buf);
+	BUG_ON(layout->maptbl_cache.fragment_size != PAGE_CACHE_SIZE);
+
+	fragments_count = maptbl_cache_used_fragments(layout);
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "fragments_count %u, bytes_count %u, "
+		  "inline_capacity %u, compression %#x\n",
+		  fragments_count, layout->maptbl_cache.bytes_count,
+		  inline_capacity, layout->maptbl.compression);
+
+	extent->state = SSDFS_UNCOMPRESSED_BLOB;
+	extent->bytes_count = 0;
+
+	if (fragments_count == 0) {
+		/* nothing to store */
+		return 0;
+	}
+
+	if (fragments_count == 1 &&
+	    layout->maptbl_cache.bytes_count <= inline_capacity) {
+		err = maptbl_cache_define_uncompr_area(layout, extent,
+							fragments_count);
+	} else {
+		err = maptbl_cache_define_compressed_area(layout, extent,
+							  fragments_count);
+	}
+
+	if (err) {
+		SSDFS_ERR("fail to define maptbl cache area: err %d\n",
+			  err);
+		return err;
+	}
+
+	return 0;
+}

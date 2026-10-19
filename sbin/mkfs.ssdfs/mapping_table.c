@@ -227,6 +227,19 @@ define_stripes_per_portion:
 	maptbl_pebs = maptbl_segs * pebs_per_seg;
 	fragments = maptbl_pebs * portions_per_fragment;
 
+	/* portion_id is 16 bits wide in LEB/PEB table's fragment header */
+	if (fragments >= U16_MAX) {
+		SSDFS_ERR("maptbl is huge: "
+			  "portions %llu >= max %u, pebs_per_volume %llu, "
+			  "pebs_per_portion %u: "
+			  "please, use bigger erase block size or "
+			  "more maptbl stripes per fragment\n",
+			  (unsigned long long)fragments, U16_MAX,
+			  (unsigned long long)pebs_per_volume,
+			  peb_desc_per_portion);
+		return -E2BIG;
+	}
+
 	if (layout->maptbl.has_backup_copy)
 		*segs = maptbl_segs * 2;
 	else
@@ -370,7 +383,10 @@ void maptbl_prepare_leb_table(struct ssdfs_volume_layout *layout,
 		lebs_count = 0;
 	else {
 		lebs_count = pebs_per_volume - start_fragment_leb;
-		lebs_count = min_t(u64, lebs_count, lebs_per_portion);
+		/* LEBs of the portion that follow the fragment's start */
+		lebs_count = min_t(u64, lebs_count,
+				   (start_portion_leb + lebs_per_portion) -
+							start_fragment_leb);
 		lebs_count = min_t(u64, lebs_count, leb_desc_per_mempage);
 	}
 
@@ -449,14 +465,9 @@ void maptbl_prepare_peb_table(struct ssdfs_volume_layout *layout,
 	if (pebs_per_volume <= start_peb)
 		pebs_count = 0;
 	else {
-		pebs_count = pebs_per_volume -
-			(pebs_per_portion * portion_index);
-		pebs_count = min_t(u64, pebs_count, pebs_per_portion);
-		pebs_count += pebs_count % stripes_per_portion;
-		pebs_count /= stripes_per_portion;
-
-		if ((start_peb + pebs_count) > pebs_per_volume)
-			pebs_count = pebs_per_volume - start_peb;
+		/* stripes have to cover the portion's PEBs without gaps */
+		pebs_count = min_t(u64, peb_desc_per_stripe,
+				   pebs_per_volume - start_peb);
 	}
 
 	SSDFS_DBG(layout->env.show_debug,

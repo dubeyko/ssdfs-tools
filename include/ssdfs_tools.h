@@ -1261,6 +1261,17 @@ int ssdfs_find_any_valid_peb(struct ssdfs_environment *env,
 			     struct ssdfs_segment_header *hdr);
 
 /* lib/compression.c */
+
+/*
+ * Worst case of LZO1X compressed size (see LZO.FAQ of liblzo2).
+ * lzo1x_1_compress() doesn't check the capacity of output buffer,
+ * so the buffer has to be at least of this size. The extra 2 bytes
+ * match lzo1x_worst_compress() of the kernel. LZO is the most
+ * demanding among the supported compression types.
+ */
+#define SSDFS_LZO_WORST_COMPRESS(size) \
+	((size) + ((size) / 16) + 64 + 3 + 2)
+
 int ssdfs_zlib_compress(unsigned char *data_in,
 			unsigned char *cdata_out,
 			u32 *srclen, u32 *destlen,

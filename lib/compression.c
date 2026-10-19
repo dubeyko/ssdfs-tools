@@ -12,17 +12,24 @@
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <linux/fs.h>
 
-#ifdef HAVE_LIBLZO2
+#if defined(HAVE_LIBLZO2) && defined(HAVE_LZO_LZO1X_H)
+#define SSDFS_LZO_SUPPORTED
 #include <lzo/lzo1x.h>
 #endif
 
-#ifdef HAVE_LIBLZ4
+#if defined(HAVE_LIBLZ4) && defined(HAVE_LZ4_H)
+#define SSDFS_LZ4_SUPPORTED
 #include <lz4.h>
 #endif
 
-#ifdef HAVE_LIBZSTD
+#if defined(HAVE_LIBZSTD) && defined(HAVE_ZSTD_H)
+#define SSDFS_ZSTD_SUPPORTED
 #include <zstd.h>
 #endif
 
@@ -174,7 +181,7 @@ int ssdfs_zlib_decompress(unsigned char *cdata_in,
 	return 0;
 }
 
-#ifdef HAVE_LIBLZO2
+#ifdef SSDFS_LZO_SUPPORTED
 int ssdfs_lzo_compress(unsigned char *data_in,
 		       unsigned char *cdata_out,
 		       u32 *srclen, u32 *destlen,
@@ -286,7 +293,7 @@ int ssdfs_lzo_decompress(unsigned char *cdata_in,
 }
 #endif
 
-#ifdef HAVE_LIBLZ4
+#ifdef SSDFS_LZ4_SUPPORTED
 int ssdfs_lz4_compress(unsigned char *data_in,
 		       unsigned char *cdata_out,
 		       u32 *srclen, u32 *destlen,
@@ -381,7 +388,7 @@ int ssdfs_lz4_decompress(unsigned char *cdata_in,
 }
 #endif
 
-#ifdef HAVE_LIBZSTD
+#ifdef SSDFS_ZSTD_SUPPORTED
 int ssdfs_zstd_compress(unsigned char *data_in,
 			unsigned char *cdata_out,
 			u32 *srclen, u32 *destlen,

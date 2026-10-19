@@ -547,6 +547,10 @@ int set_extent_start_offset(struct ssdfs_volume_layout *layout,
 			    int seg_type,
 			    struct ssdfs_peb_content *desc,
 			    int extent_index);
+u32 define_inline_area_capacity(struct ssdfs_volume_layout *layout,
+				int seg_type,
+				struct ssdfs_peb_content *desc,
+				int extent_index);
 u32 calculate_log_pages(struct ssdfs_volume_layout *layout,
 			int seg_type,
 			struct ssdfs_peb_content *desc);
@@ -656,5 +660,8 @@ int maptbl_cache_mkfs_prepare(struct ssdfs_volume_layout *layout);
 int cache_leb2peb_pair(struct ssdfs_volume_layout *layout,
 			u64 leb_id, u64 peb_id);
 void maptbl_cache_destroy_fragments_array(struct ssdfs_volume_layout *layout);
+int maptbl_cache_define_area(struct ssdfs_volume_layout *layout,
+			     struct ssdfs_peb_content *peb_desc,
+			     u32 inline_capacity);
 
 #endif /* _SSDFS_UTILS_MKFS_H */
