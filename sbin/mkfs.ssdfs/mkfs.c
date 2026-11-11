@@ -571,6 +571,34 @@ static void init_meta_array_item(struct ssdfs_volume_layout *layout,
 	};
 }
 
+static void free_segment_pebs(struct ssdfs_segment_desc *seg)
+{
+	struct ssdfs_extent_desc *desc;
+	int i, k;
+
+	if (!seg->pebs)
+		return;
+
+	for (i = 0; i < seg->pebs_capacity; i++) {
+		for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
+			desc = &seg->pebs[i].extents[k];
+
+			if (desc->buf) {
+				free(desc->buf);
+				desc->buf = NULL;
+			}
+
+			if (desc->compr_buf) {
+				free(desc->compr_buf);
+				desc->compr_buf = NULL;
+			}
+		}
+	}
+
+	free(seg->pebs);
+	seg->pebs = NULL;
+}
+
 static int alloc_segs_array(struct ssdfs_volume_layout *layout)
 {
 	int segs[SSDFS_ALLOC_POLICY_MAX] = {0};
@@ -703,7 +731,7 @@ static int alloc_segs_array(struct ssdfs_volume_layout *layout)
 
 free_memory:
 	for (; i >= 0; i--)
-		free(layout->segs[i].pebs);
+		free_segment_pebs(&layout->segs[i]);
 	free(layout->segs);
 	layout->segs = NULL;
 	return err;
@@ -711,7 +739,7 @@ free_memory:
 
 static void free_segs_array(struct ssdfs_volume_layout *layout)
 {
-	int i, j, k;
+	int i;
 
 	SSDFS_DBG(layout->env.show_debug,
 		  "segs %p, segs_capacity %d, segs_count %d\n",
@@ -736,37 +764,65 @@ static void free_segs_array(struct ssdfs_volume_layout *layout)
 	if (!layout->segs)
 		return;
 
-	for (i = 0; i < layout->segs_count; i++) {
-		for (j = 0; j < layout->segs[i].pebs_capacity; j++) {
-			for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
-				struct ssdfs_extent_desc *desc;
-
-				desc = &layout->segs[i].pebs[j].extents[k];
-				if (desc->buf) {
-					free(desc->buf);
-					desc->buf = NULL;
-				}
-				if (desc->compr_buf) {
-					free(desc->compr_buf);
-					desc->compr_buf = NULL;
-				}
-			}
-		}
-
-		free(layout->segs[i].pebs);
-		layout->segs[i].pebs = NULL;
-	}
+	for (i = 0; i < layout->segs_capacity; i++)
+		free_segment_pebs(&layout->segs[i]);
 
 	free(layout->segs);
 	layout->segs = NULL;
 }
 
-static int mkfs_create(struct ssdfs_volume_layout *layout)
+/*
+ * mkfs_show_layout() - show the content of volume layout (debug output)
+ * @layout: pointer on volume layout
+ * @step: name of the finished step of volume creation
+ */
+static void mkfs_show_layout(struct ssdfs_volume_layout *layout,
+			     const char *step)
 {
 	struct ssdfs_segment_desc *seg;
 	struct ssdfs_peb_content *peb;
 	struct ssdfs_extent_desc *extent;
 	int i, j, k;
+
+	if (!layout->env.show_debug)
+		return;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "LAYOUT after %s step: segs_capacity %d\n",
+		  step, layout->segs_capacity);
+
+	for (i = 0; i < layout->segs_capacity; i++) {
+		seg = &layout->segs[i];
+		SSDFS_DBG(layout->env.show_debug,
+			  "seg_type %#x, seg_state %#x, seg_id %llu, "
+			  "pebs_count %u, pebs_capacity %u\n",
+			  seg->seg_type, seg->seg_state,
+			  seg->seg_id, seg->pebs_count,
+			  seg->pebs_capacity);
+
+		for (j = 0; j < seg->pebs_capacity; j++) {
+			peb = &seg->pebs[j];
+			SSDFS_DBG(layout->env.show_debug,
+				  "leb_id %llu, peb_id %llu\n",
+				  peb->leb_id, peb->peb_id);
+
+			for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
+				extent = &peb->extents[k];
+				SSDFS_DBG(layout->env.show_debug,
+					  "index %d, state %#x, offset %u, "
+					  "bytes_count %u, buf %p, "
+					  "compr_buf %p\n",
+					  k, extent->state, extent->offset,
+					  extent->bytes_count,
+					  extent->buf, extent->compr_buf);
+			}
+		}
+	}
+}
+
+static int mkfs_create(struct ssdfs_volume_layout *layout)
+{
+	int i;
 	int err;
 
 	for (i = 0; i < SSDFS_METADATA_ITEMS_MAX; i++) {
@@ -777,33 +833,7 @@ static int mkfs_create(struct ssdfs_volume_layout *layout)
 			return err;
 	}
 
-	for (i = 0; i < layout->segs_capacity; i++) {
-		seg = &layout->segs[i];
-		SSDFS_DBG(layout->env.show_debug,
-			  "seg_type %#x, seg_state %#x, seg_id %llu, "
-			  "pebs_count %u, pebs_capacity %u\n",
-			  seg->seg_type, seg->seg_state,
-			  seg->seg_id, seg->pebs_count,
-			  seg->pebs_capacity);
-
-		for (j = 0; j < seg->pebs_capacity; j++) {
-			peb = &seg->pebs[j];
-			SSDFS_DBG(layout->env.show_debug,
-				  "leb_id %llu, peb_id %llu\n",
-				  peb->leb_id, peb->peb_id);
-
-			for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
-				extent = &peb->extents[k];
-				SSDFS_DBG(layout->env.show_debug,
-					  "index %d, state %#x, offset %u, "
-					  "bytes_count %u, buf %p, "
-					  "compr_buf %p\n",
-					  k, extent->state, extent->offset,
-					  extent->bytes_count,
-					  extent->buf, extent->compr_buf);
-			}
-		}
-	}
+	mkfs_show_layout(layout, "prepare");
 
 	for (i = 0; i < SSDFS_METADATA_ITEMS_MAX; i++) {
 		if (!mkfs_ops[i]->validate)
@@ -813,33 +843,7 @@ static int mkfs_create(struct ssdfs_volume_layout *layout)
 			return err;
 	}
 
-	for (i = 0; i < layout->segs_capacity; i++) {
-		seg = &layout->segs[i];
-		SSDFS_DBG(layout->env.show_debug,
-			  "seg_type %#x, seg_state %#x, seg_id %llu, "
-			  "pebs_count %u, pebs_capacity %u\n",
-			  seg->seg_type, seg->seg_state,
-			  seg->seg_id, seg->pebs_count,
-			  seg->pebs_capacity);
-
-		for (j = 0; j < seg->pebs_capacity; j++) {
-			peb = &seg->pebs[j];
-			SSDFS_DBG(layout->env.show_debug,
-				  "leb_id %llu, peb_id %llu\n",
-				  peb->leb_id, peb->peb_id);
-
-			for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
-				extent = &peb->extents[k];
-				SSDFS_DBG(layout->env.show_debug,
-					  "index %d, state %#x, offset %u, "
-					  "bytes_count %u, buf %p, "
-					  "compr_buf %p\n",
-					  k, extent->state, extent->offset,
-					  extent->bytes_count,
-					  extent->buf, extent->compr_buf);
-			}
-		}
-	}
+	mkfs_show_layout(layout, "validate");
 
 	for (i = 0; i < SSDFS_METADATA_ITEMS_MAX; i++) {
 		if (!mkfs_ops[i]->define_layout)
@@ -849,33 +853,7 @@ static int mkfs_create(struct ssdfs_volume_layout *layout)
 			return err;
 	}
 
-	for (i = 0; i < layout->segs_capacity; i++) {
-		seg = &layout->segs[i];
-		SSDFS_DBG(layout->env.show_debug,
-			  "seg_type %#x, seg_state %#x, seg_id %llu, "
-			  "pebs_count %u, pebs_capacity %u\n",
-			  seg->seg_type, seg->seg_state,
-			  seg->seg_id, seg->pebs_count,
-			  seg->pebs_capacity);
-
-		for (j = 0; j < seg->pebs_capacity; j++) {
-			peb = &seg->pebs[j];
-			SSDFS_DBG(layout->env.show_debug,
-				  "leb_id %llu, peb_id %llu\n",
-				  peb->leb_id, peb->peb_id);
-
-			for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
-				extent = &peb->extents[k];
-				SSDFS_DBG(layout->env.show_debug,
-					  "index %d, state %#x, offset %u, "
-					  "bytes_count %u, buf %p, "
-					  "compr_buf %p\n",
-					  k, extent->state, extent->offset,
-					  extent->bytes_count,
-					  extent->buf, extent->compr_buf);
-			}
-		}
-	}
+	mkfs_show_layout(layout, "define_layout");
 
 	for (i = 0; i < SSDFS_METADATA_ITEMS_MAX; i++) {
 		if (!mkfs_ops[i]->commit)
@@ -885,33 +863,7 @@ static int mkfs_create(struct ssdfs_volume_layout *layout)
 			return err;
 	}
 
-	for (i = 0; i < layout->segs_capacity; i++) {
-		seg = &layout->segs[i];
-		SSDFS_DBG(layout->env.show_debug,
-			  "seg_type %#x, seg_state %#x, seg_id %llu, "
-			  "pebs_count %u, pebs_capacity %u\n",
-			  seg->seg_type, seg->seg_state,
-			  seg->seg_id, seg->pebs_count,
-			  seg->pebs_capacity);
-
-		for (j = 0; j < seg->pebs_capacity; j++) {
-			peb = &seg->pebs[j];
-			SSDFS_DBG(layout->env.show_debug,
-				  "leb_id %llu, peb_id %llu\n",
-				  peb->leb_id, peb->peb_id);
-
-			for (k = 0; k < SSDFS_SEG_LOG_ITEMS_COUNT; k++) {
-				extent = &peb->extents[k];
-				SSDFS_DBG(layout->env.show_debug,
-					  "index %d, state %#x, offset %u, "
-					  "bytes_count %u, buf %p, "
-					  "compr_buf %p\n",
-					  k, extent->state, extent->offset,
-					  extent->bytes_count,
-					  extent->buf, extent->compr_buf);
-			}
-		}
-	}
+	mkfs_show_layout(layout, "commit");
 
 	return 0;
 }
@@ -997,6 +949,8 @@ static int check_peb_before_write(struct ssdfs_volume_layout *layout,
 	SSDFS_DBG(layout->env.show_debug,
 		  "layout %p, leb_id %llu, peb_id %llu, bmap %p\n",
 		  layout, peb->leb_id, peb->peb_id, bmap);
+
+	*blks = 0;
 
 	for (i = 0; i < SSDFS_SEG_LOG_ITEMS_COUNT; i++) {
 		desc = &peb->extents[i];
@@ -1536,6 +1490,91 @@ static int prepare_write_buffer(struct ssdfs_volume_layout *layout,
 	return 0;
 }
 
+/*
+ * write_extent() - write extent into the PEB
+ * @layout: pointer on volume layout
+ * @desc: extent descriptor
+ * @peb_offset: current offset in PEB [in|out]
+ * @volume_offset: volume offset of write buffer [in|out]
+ * @flushed_bytes: count of flushed bytes of PEB [in|out]
+ */
+static int write_extent(struct ssdfs_volume_layout *layout,
+			struct ssdfs_extent_desc *desc,
+			u32 *peb_offset, u64 *volume_offset,
+			u32 *flushed_bytes)
+{
+	u32 capacity = layout->write_buffer.capacity;
+	u32 write_buf_offset;
+	u32 size;
+	char *buf;
+	int err;
+
+	if (!desc->buf)
+		return 0;
+
+	buf = desc->buf;
+
+	if (desc->offset < *peb_offset) {
+		SSDFS_ERR("desc->offset %u < peb_offset %u\n",
+			  desc->offset, *peb_offset);
+		return -ERANGE;
+	}
+
+	*peb_offset = desc->offset;
+	size = desc->bytes_count;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "peb_offset %u, size %u, flushed_bytes %u\n",
+		  *peb_offset, size, *flushed_bytes);
+
+	while (size > 0) {
+		u32 copied_bytes = 0;
+
+		write_buf_offset = *peb_offset % capacity;
+
+		err = prepare_write_buffer(layout, write_buf_offset,
+					   buf, size, &copied_bytes);
+		if (err == -ENOSPC) {
+			err = flush_write_buffer(layout, *volume_offset,
+						 capacity);
+			if (err) {
+				SSDFS_ERR("fail to flush write buffer: "
+					  "volume_offset %llu, err %d\n",
+					  *volume_offset, err);
+				return err;
+			}
+
+			*volume_offset += capacity;
+			*flushed_bytes += capacity;
+		} else if (err) {
+			SSDFS_ERR("fail to prepare write buffer: "
+				  "peb_offset %u, write_buf_offset %u, "
+				  "size %u, err %d\n",
+				  *peb_offset, write_buf_offset,
+				  size, err);
+			return err;
+		}
+
+		if (copied_bytes > size) {
+			SSDFS_ERR("copied_bytes %u > size %u\n",
+				  copied_bytes, size);
+			return -ERANGE;
+		}
+
+		buf += copied_bytes;
+		size -= copied_bytes;
+		*peb_offset += copied_bytes;
+
+		SSDFS_DBG(layout->env.show_debug,
+			  "copied_bytes %u, size %u, "
+			  "peb_offset %u\n",
+			  copied_bytes, size,
+			  *peb_offset);
+	}
+
+	return 0;
+}
+
 static int write_peb(struct ssdfs_volume_layout *layout,
 		     int seg_index, int peb_index)
 {
@@ -1581,76 +1620,15 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 	volume_offset = peb_id * erase_size;
 
 	for (i = 0; i < SSDFS_SEG_LOG_ITEMS_COUNT; i++) {
-		struct ssdfs_extent_desc *desc;
-		u32 write_buf_offset;
-		u32 size;
-		char *buf;
-
-		desc = &peb_desc->extents[i];
-		if (!desc->buf)
-			continue;
-
-		buf = desc->buf;
-
-		if (desc->offset < peb_offset) {
-			SSDFS_ERR("desc->offset %u < peb_offset %u\n",
-				  desc->offset, peb_offset);
-			return -ERANGE;
+		err = write_extent(layout, &peb_desc->extents[i],
+				   &peb_offset, &volume_offset,
+				   &flushed_bytes);
+		if (err) {
+			SSDFS_ERR("fail to write extent: "
+				  "item_index %u, err %d\n",
+				  i, err);
+			return err;
 		}
-
-		peb_offset = desc->offset;
-		size = desc->bytes_count;
-
-		SSDFS_DBG(layout->env.show_debug,
-			  "item_index %d, peb_offset %u, "
-			  "size %u, flushed_bytes %u\n",
-			  i, peb_offset, size, flushed_bytes);
-
-		while (size > 0) {
-			u32 copied_bytes = 0;
-
-			write_buf_offset =
-				peb_offset % layout->write_buffer.capacity;
-
-			err = prepare_write_buffer(layout, write_buf_offset,
-						   buf, size, &copied_bytes);
-			if (err == -ENOSPC) {
-				err = flush_write_buffer(layout, volume_offset,
-						layout->write_buffer.capacity);
-				if (err) {
-					SSDFS_ERR("fail to flush write buffer: "
-						  "volume_offset %llu, err %d\n",
-						  volume_offset, err);
-					return err;
-				}
-
-				volume_offset += layout->write_buffer.capacity;
-				flushed_bytes += layout->write_buffer.capacity;
-			} else if (err) {
-				SSDFS_ERR("fail to prepare write buffer: "
-					  "peb_offset %u, write_buf_offset %u, "
-					  "size %u, err %d\n",
-					  peb_offset, write_buf_offset,
-					  size, err);
-				return err;
-			}
-
-			if (copied_bytes > size) {
-				SSDFS_ERR("copied_bytes %u > size %u\n",
-					  copied_bytes, size);
-				return -ERANGE;
-			}
-
-			buf += copied_bytes;
-			size -= copied_bytes;
-			peb_offset += copied_bytes;
-
-			SSDFS_DBG(layout->env.show_debug,
-				  "copied_bytes %u, size %u, "
-				  "peb_offset %u\n",
-				  copied_bytes, size,
-				  peb_offset);
-		};
 	}
 
 	SSDFS_DBG(layout->env.show_debug,
@@ -1774,7 +1752,12 @@ static int write_device(struct ssdfs_volume_layout *layout)
 	if (err)
 		return err;
 
-	if (fsync(layout->env.fd) < 0) {
+	/*
+	 * MTD character device doesn't support fsync() (-EINVAL).
+	 * MTD device writes data synchronously without page cache.
+	 */
+	if (layout->env.device_type != SSDFS_MTD_DEVICE &&
+	    fsync(layout->env.fd) < 0) {
 		SSDFS_ERR("fail to sync device %s: %s\n",
 			  layout->env.dev_name, strerror(errno));
 		return errno;
@@ -1822,7 +1805,7 @@ int main(int argc, char *argv[])
 		.blk2off_tbl.pages_per_seg = U32_MAX,
 		.segbmap.has_backup_copy = SSDFS_FALSE,
 		.segbmap.segs_per_chain = SSDFS_SEGBMAP_SEGS_PER_CHAIN_DEFAULT,
-		.segbmap.fragments_per_peb = SSDFS_SEGBMAP_FRAG_PER_PEB_DEFAULT,
+		.segbmap.fragments_per_peb = U16_MAX,
 		.segbmap.log_pages = U16_MAX,
 		.segbmap.migration_threshold = U16_MAX,
 		.segbmap.compression = SSDFS_UNKNOWN_COMPRESSION,
@@ -1831,7 +1814,7 @@ int main(int argc, char *argv[])
 		.segbmap.fragments_array = NULL,
 		.maptbl.has_backup_copy = SSDFS_FALSE,
 		.maptbl.stripes_per_portion = SSDFS_MAPTBL_STRIPES_PER_FRAG_DEFAULT,
-		.maptbl.portions_per_fragment = SSDFS_MAPTBL_FRAG_PER_PEB_DEFAULT,
+		.maptbl.portions_per_fragment = U16_MAX,
 		.maptbl.log_pages = U16_MAX,
 		.maptbl.migration_threshold = U16_MAX,
 		.maptbl.reserved_pebs_per_fragment = U16_MAX,

@@ -1389,6 +1389,15 @@ int ssdfs_dumpfs_parse_blk2off_table_fragment(struct ssdfs_dumpfs_environment *e
 	if (flags & SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT)
 		SSDFS_DUMPFS_DUMP(env, "SSDFS_OFF_TABLE_HAS_NEXT_FRAGMENT ");
 
+	if (flags & SSDFS_BLK_DESC_TBL_COMPRESSED)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_BLK_DESC_TBL_COMPRESSED ");
+
+	if (flags & SSDFS_OFF_TABLE_HAS_OLD_LOG_FRAGMENT)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_OFF_TABLE_HAS_OLD_LOG_FRAGMENT ");
+
+	if (flags & SSDFS_INFLATED_OFF_TABLE)
+		SSDFS_DUMPFS_DUMP(env, "SSDFS_INFLATED_OFF_TABLE ");
+
 	if (flags == 0)
 		SSDFS_DUMPFS_DUMP(env, "NONE");
 
@@ -4995,20 +5004,23 @@ int ssdfs_dumpfs_parse_leb_tbl_fragment(struct ssdfs_dumpfs_environment *env,
 		physical_index = le16_to_cpu(desc[i].physical_index);
 		relation_index = le16_to_cpu(desc[i].relation_index);
 
+		SSDFS_DUMPFS_DUMP(env, "LEB %llu: ", start_leb + i);
+
 		if (physical_index >= U16_MAX)
-			main_peb = U64_MAX;
-		else
+			SSDFS_DUMPFS_DUMP(env, "MAIN_PEB[NONE] NONE, ");
+		else {
 			main_peb = start_leb + physical_index;
+			SSDFS_DUMPFS_DUMP(env, "MAIN_PEB[%u] %llu, ",
+					  physical_index, main_peb);
+		}
 
 		if (relation_index >= U16_MAX)
-			relation_peb = U64_MAX;
-		else
+			SSDFS_DUMPFS_DUMP(env, "RELATION_PEB[NONE] NONE\n");
+		else {
 			relation_peb = start_leb + relation_index;
-
-		SSDFS_DUMPFS_DUMP(env,
-				  "[%d] MAIN_PEB[%u] %llu, RELATION_PEB[%u] %llu\n",
-				  i, physical_index, main_peb,
-				  relation_index, relation_peb);
+			SSDFS_DUMPFS_DUMP(env, "RELATION_PEB[%u] %llu",
+					  relation_index, relation_peb);
+		}
 	}
 
 	SSDFS_DUMPFS_DUMP(env, "\n");

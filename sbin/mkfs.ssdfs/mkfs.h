@@ -187,6 +187,37 @@ struct ssdfs_meta_extents_layout {
 };
 
 /*
+ * struct ssdfs_metadata_peb_desc - description of metadata PEB's items
+ * @seg_type: segment type
+ * @seg_index: index of segment
+ * @peb_index: index of PEB in segment
+ * @inode_id: inode ID of metadata structure
+ * @compression: compression type of payload
+ * @item_size: size of item (fragment) in bytes
+ * @items_count: count of items in PEB
+ * @logical_byte_offset: offset of PEB's items in metadata structure
+ * @start_logical_blk: first logical block of PEB in segment
+ * @used_logical_blks: count of used logical blocks in segment
+ * @last_allocated_blk: last allocated logical block in segment
+ * @payload: buffer with items of PEB
+ */
+struct ssdfs_metadata_peb_desc {
+	int seg_type;
+	int seg_index;
+	int peb_index;
+	u64 inode_id;
+	int compression;
+	u32 item_size;
+	u32 items_count;
+	u64 logical_byte_offset;
+	u32 start_logical_blk;
+	u32 used_logical_blks;
+	u32 last_allocated_blk;
+
+	char *payload;
+};
+
+/*
  * struct ssdfs_segbmap_layout - segment bitmap creation structure
  * @has_backup_copy: backup copy is present?
  * @segs_per_chain: count of reserved (or allocated) segment in chain
@@ -440,9 +471,15 @@ struct ssdfs_mkfs_operations {
 	(sizeof(struct ssdfs_block_state_descriptor) + \
 	 (fragments_count * sizeof(struct ssdfs_fragment_desc)))
 
+/*
+ * The fragment of block descriptors area occupies PAGE_CACHE_SIZE
+ * (the area block table is not the part of fragment). The driver
+ * expects that every area (area block table + SSDFS_FRAGMENTS_CHAIN_MAX
+ * fragments) keeps SSDFS_FRAGMENTS_CHAIN_MAX * PAGE_SIZE bytes of
+ * block descriptors.
+ */
 #define BLK_DESC_PER_FRAGMENT() \
-	((PAGE_CACHE_SIZE - sizeof(struct ssdfs_area_block_table)) / \
-	 sizeof(struct ssdfs_block_descriptor))
+	(PAGE_CACHE_SIZE / sizeof(struct ssdfs_block_descriptor))
 
 #define BLK_DESC_TABLE_FRAGMENTS(blks_count) \
 	((blks_count + BLK_DESC_PER_FRAGMENT() - 1) / BLK_DESC_PER_FRAGMENT())
@@ -451,6 +488,28 @@ struct ssdfs_mkfs_operations {
 	((struct ssdfs_blk2off_table_header *)(ptr))
 #define TRANS_EXTENT(ptr) \
 	((struct ssdfs_translation_extent *)(ptr))
+
+/*
+ * ITEMS_IN_LAST_PORTION() - count of items in the last portion
+ * @items_count: total count of items
+ * @items_per_portion: count of items in full portion
+ *
+ * The last portion contains @items_per_portion items if @items_count
+ * is multiple of @items_per_portion.
+ */
+static inline
+u32 ITEMS_IN_LAST_PORTION(u32 items_count, u32 items_per_portion)
+{
+	if (items_count == 0)
+		return 0;
+
+	return items_count -
+		(((items_count - 1) / items_per_portion) * items_per_portion);
+}
+
+#define SSDFS_METADATA_PEB_USED_PERCENTAGE		(75)
+#define SSDFS_UNCOMPR_METADATA_PEB_USED_PERCENTAGE	(50)
+#define SSDFS_METADATA_LOG_MIN_FREE_BLKS		(2)
 
 static inline
 int META2SEG_TYPE(int meta_index)
@@ -603,6 +662,19 @@ int pre_commit_block_descriptors(struct ssdfs_volume_layout *layout,
 				 u16 valid_blks, u64 inode_id,
 				 u32 payload_offset_in_bytes,
 				 u32 item_size);
+int define_metadata_log_pages(struct ssdfs_volume_layout *layout,
+			      int seg_type, u32 item_blks,
+			      u32 items_wanted, u16 *log_pages);
+u32 max_metadata_items_per_peb(struct ssdfs_volume_layout *layout,
+				int seg_type, u32 item_blks, u32 log_pages);
+int set_block_descriptors_area(struct ssdfs_volume_layout *layout,
+				int seg_index, int peb_index,
+				u8 area_type, u32 *byte_offsets,
+				u16 valid_blks);
+int store_payload_in_diffs_area(struct ssdfs_volume_layout *layout,
+				int seg_index, int peb_index,
+				struct ssdfs_extent_desc *extent,
+				u32 valid_blks, u8 compression);
 void commit_block_descriptors(struct ssdfs_volume_layout *layout,
 			      int seg_index, int peb_index);
 int set_meta_area_extent(struct ssdfs_meta_area_extent *embedded,
@@ -621,6 +693,12 @@ int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 void commit_log_footer(struct ssdfs_volume_layout *layout,
 		       int seg_index, int peb_index,
 		       u32 blks_count);
+int define_metadata_peb_content(struct ssdfs_volume_layout *layout,
+				struct ssdfs_metadata_peb_desc *desc,
+				u32 *log_blks);
+int commit_metadata_peb_log(struct ssdfs_volume_layout *layout,
+			    int seg_type, int seg_index, int peb_index,
+			    u16 migration_threshold);
 
 /* initial_snapshot.c */
 int snap_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,

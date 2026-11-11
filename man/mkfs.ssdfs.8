@@ -57,7 +57,7 @@ Set a volume label.
 .TP
 .BR \-M ", " \-\-maptbl " " \fIhas_copy,stripes_per_fragment=value,...\fR
 PEB mapping table options. Full syntax:
-has_copy,stripes_per_fragment=\fIvalue\fR,fragments_per_peb=\fIvalue\fR,log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,reserved_pebs_per_fragment=\fIpercentage\fR,compression=(none|zlib|lzo).
+has_copy,stripes_per_fragment=\fIvalue\fR,fragments_per_peb=\fIvalue\fR,log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,reserved_pebs_per_fragment=\fIpercentage\fR,compression=(none|zlib|lzo|lz4|zstd).
 .TP
 .BR \-m ", " \-\-migration-threshold " " \fIvalue\fR
 Max amount of migration PEBs for segment.
@@ -76,7 +76,7 @@ Erase whole device or partition by mkfs.
 .TP
 .BR \-S ", " \-\-segbmap " " \fIhas_copy,segs_per_chain=value,...\fR
 Segment bitmap options. Full syntax:
-has_copy,segs_per_chain=\fIvalue\fR,fragments_per_peb=\fIvalue\fR,log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,compression=(none|zlib|lzo).
+has_copy,segs_per_chain=\fIvalue\fR,fragments_per_peb=\fIvalue\fR,log_pages=\fIvalue\fR,migration_threshold=\fIvalue\fR,compression=(none|zlib|lzo|lz4|zstd).
 .TP
 .BR \-s ", " \-\-segsize " " \fIsize\fR
 Segment size of target device. Supported sizes: 128KB, 256KB, 512KB,

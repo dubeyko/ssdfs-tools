@@ -132,9 +132,9 @@ static void check_segbmap_segs_per_chain(int *value)
 
 static void check_segbmap_fragments_per_peb(int value)
 {
-	if (value >= USHRT_MAX) {
+	if (value == 0 || value >= USHRT_MAX) {
 		SSDFS_ERR("invalid segbmap option: "
-			  "fragments_per_peb %d is huge\n",
+			  "fragments_per_peb %d is invalid\n",
 			  value);
 		print_usage();
 		exit(EXIT_FAILURE);
@@ -176,9 +176,9 @@ static void check_maptbl_stripes_per_fragment(int value)
 
 static void check_maptbl_fragments_per_peb(int value)
 {
-	if (value >= USHRT_MAX) {
+	if (value == 0 || value >= USHRT_MAX) {
 		SSDFS_ERR("invalid maptbl option: "
-			  "fragments_per_peb %d is huge\n",
+			  "fragments_per_peb %d is invalid\n",
 			  value);
 		print_usage();
 		exit(EXIT_FAILURE);

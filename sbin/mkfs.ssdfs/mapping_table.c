@@ -53,6 +53,28 @@ void correct_maptbl_stripes_per_portion(struct ssdfs_volume_layout *layout)
 	}
 }
 
+/*
+ * maptbl_peb_portions() - count of portions in mapping table's PEB
+ * @layout: pointer on volume layout
+ * @peb_id: sequential number of PEB in the mapping table's PEBs chain
+ *
+ * Every mapping table's PEB contains @portions_per_fragment portions,
+ * excluding the last one that can contain fewer portions.
+ */
+static inline
+u32 maptbl_peb_portions(struct ssdfs_volume_layout *layout, u32 peb_id)
+{
+	u32 portions_count = layout->maptbl.portions_count;
+	u32 portions_per_peb = layout->maptbl.portions_per_fragment;
+	u64 first_portion = (u64)peb_id * portions_per_peb;
+
+	if (first_portion >= portions_count)
+		return 0;
+
+	return min_t(u32, portions_per_peb,
+			  portions_count - (u32)first_portion);
+}
+
 int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 				   int *segs)
 {
@@ -60,6 +82,7 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u64 seg_nums;
 	u64 fragments;
 	u32 portions_per_fragment;
+	u32 max_portions_per_peb;
 	u16 stripes_per_portion;
 	u32 portion_size;
 	u64 pebs_per_volume;
@@ -76,6 +99,7 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u32 lebtbl_portion_mempages;
 	u32 leb_desc_per_mempage;
 	u32 leb_desc_per_portion;
+	int err;
 
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
@@ -186,46 +210,49 @@ define_stripes_per_portion:
 	fragments /= peb_desc_per_portion;
 	BUG_ON(fragments >= U32_MAX);
 
-	portions_per_fragment = layout->env.erase_size / portion_size;
+	/* the portions of PEB are stored in one log */
+	err = define_metadata_log_pages(layout, SSDFS_MAPTBL_SEG_TYPE,
+				portion_size / layout->page_size,
+				min_t(u32, layout->maptbl.portions_per_fragment,
+				      fragments),
+				&layout->maptbl.log_pages);
+	if (err)
+		return err;
 
-	if (portions_per_fragment < layout->maptbl.portions_per_fragment) {
-		u32 bytes_count;
+	layout->sb.vh.maptbl_log_pages =
+			cpu_to_le16(layout->maptbl.log_pages);
 
-		bytes_count = layout->maptbl.portions_per_fragment * portion_size;
+	max_portions_per_peb = max_metadata_items_per_peb(layout,
+					SSDFS_MAPTBL_SEG_TYPE,
+					portion_size / layout->page_size,
+					layout->maptbl.log_pages);
+	portions_per_fragment = layout->maptbl.portions_per_fragment;
 
-		if (bytes_count > layout->env.erase_size) {
-			u32 diff_size;
-			u32 diff_fragments;
-			u32 corrected_value;
-
-			diff_size = bytes_count - layout->env.erase_size;
-			diff_fragments = diff_size + portion_size - 1;
-			diff_fragments /= portion_size;
-			corrected_value = layout->maptbl.portions_per_fragment -
-					  diff_fragments;
-
-			portions_per_fragment = max_t(u32, portions_per_fragment,
-						  corrected_value);
-			BUG_ON(portions_per_fragment >= U16_MAX);
-			layout->maptbl.portions_per_fragment =
-						(u16)portions_per_fragment;
-
-			SSDFS_INFO("corrected maptbl portions_per_fragment %u\n",
-				   portions_per_fragment);
-		} else {
-			/* use portions_per_fragment is requested by user */
-			portions_per_fragment = layout->maptbl.portions_per_fragment;
-		}
-	} else if (portions_per_fragment > layout->maptbl.portions_per_fragment) {
-		/* use portions_per_fragment is requested by user */
-		portions_per_fragment = layout->maptbl.portions_per_fragment;
+	if (portions_per_fragment == U16_MAX) {
+		/* user hasn't requested any value */
+		portions_per_fragment = max_portions_per_peb;
+	} else if (portions_per_fragment > max_portions_per_peb) {
+		SSDFS_WARN("fragments_per_peb %u is corrected to %u\n",
+			   portions_per_fragment, max_portions_per_peb);
+		portions_per_fragment = max_portions_per_peb;
 	}
 
-	maptbl_pebs = (fragments + portions_per_fragment - 1) / portions_per_fragment;
+	portions_per_fragment = min_t(u32, portions_per_fragment, fragments);
+
+	/*
+	 * Distribute portions evenly among the minimal number of PEBs.
+	 * Every PEB (excluding the last one) contains portions_per_fragment
+	 * portions. The mapping table keeps only the portions that
+	 * describe the volume's PEBs, because the driver expects that
+	 * the count of fragments corresponds to the volume's size.
+	 */
+	maptbl_pebs = (fragments + portions_per_fragment - 1) /
+							portions_per_fragment;
+	portions_per_fragment = (fragments + maptbl_pebs - 1) / maptbl_pebs;
 	maptbl_segs = (maptbl_pebs + pebs_per_seg - 1) / pebs_per_seg;
 
-	maptbl_pebs = maptbl_segs * pebs_per_seg;
-	fragments = maptbl_pebs * portions_per_fragment;
+	BUG_ON(portions_per_fragment >= U16_MAX);
+	layout->maptbl.portions_per_fragment = (u16)portions_per_fragment;
 
 	/* portion_id is 16 bits wide in LEB/PEB table's fragment header */
 	if (fragments >= U16_MAX) {
@@ -599,7 +626,8 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 	size_t desc_size = sizeof(struct ssdfs_peb_descriptor);
 	u16 stripes = layout->maptbl.stripes_per_portion;
 	u32 lebtbl_portion_bytes = layout->maptbl.lebtbl_portion_bytes;
-	u8 *pebtbl = portion + lebtbl_portion_bytes;
+	u32 descs_per_stripe = (layout->page_size - hdr_size) / desc_size;
+	u8 *pebtbl;
 	u8 *desc_array;
 	u16 stripe_id;
 	u64 peb_id;
@@ -614,17 +642,37 @@ int check_portion_pebs_validity(struct ssdfs_volume_layout *layout,
 	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
 
 	for (stripe_id = 0; stripe_id < stripes; stripe_id++) {
-		pebtbl += stripe_id * layout->page_size;
+		/* every stripe's PEB table occupies one page */
+		pebtbl = portion + lebtbl_portion_bytes;
+		pebtbl += (u32)stripe_id * layout->page_size;
 		hdr = (struct ssdfs_peb_table_fragment_header *)pebtbl;
+
+		if (le16_to_cpu(hdr->magic) != SSDFS_PEB_TABLE_MAGIC) {
+			SSDFS_ERR("invalid PEB table's magic: "
+				  "stripe_id %u, magic %#x\n",
+				  stripe_id, le16_to_cpu(hdr->magic));
+			return -EIO;
+		}
+
 		pebs_count = le16_to_cpu(hdr->pebs_count);
 		peb_id = le64_to_cpu(hdr->start_peb);
 		desc_array = pebtbl + hdr_size;
+
+		if (pebs_count > descs_per_stripe) {
+			SSDFS_ERR("invalid PEB table: "
+				  "stripe_id %u, pebs_count %u, "
+				  "descs_per_stripe %u\n",
+				  stripe_id, pebs_count,
+				  descs_per_stripe);
+			return -EIO;
+		}
 
 		for (i = 0; i < pebs_count; i++, peb_id++) {
 			u8 *cur_ptr;
 
 			offset = peb_id * peb_size;
-			cur_ptr = desc_array + (peb_id * desc_size);
+			/* descriptors' array of stripe starts from start_peb */
+			cur_ptr = desc_array + ((u32)i * desc_size);
 			desc = (struct ssdfs_peb_descriptor *)cur_ptr;
 
 			res = layout->env.dev_ops->check_peb(fd, offset,
@@ -717,11 +765,12 @@ int check_pebs_validity(struct ssdfs_volume_layout *layout)
 		return res;
 
 	maptbl_pebs = layout->maptbl.maptbl_pebs;
-	portions_per_peb = layout->maptbl.portions_per_fragment;
 	portion_size = layout->maptbl.portion_size;
 
 	for (findex = 0; findex < maptbl_pebs; findex++) {
 		u8 *peb_buf = layout->maptbl.fragments_array[findex];
+
+		portions_per_peb = (u16)maptbl_peb_portions(layout, findex);
 
 		for (pindex = 0; pindex < portions_per_peb; pindex++) {
 			u8 *portion = peb_buf + (pindex * portion_size);
@@ -1681,370 +1730,6 @@ int maptbl_mkfs_validate(struct ssdfs_volume_layout *layout)
 	return 0;
 }
 
-static void maptbl_set_log_pages(struct ssdfs_volume_layout *layout,
-				 u32 blks)
-{
-	u32 erasesize;
-	u32 pagesize;
-	u32 pages_per_peb;
-	u32 log_pages_default;
-	u32 log_pages = 0;
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "log_pages %u, blks_count %u\n",
-		  layout->maptbl.log_pages, blks);
-
-	BUG_ON(blks == 0);
-	BUG_ON(blks >= U16_MAX);
-
-	erasesize = layout->env.erase_size;
-	pagesize = layout->page_size;
-	pages_per_peb = erasesize / pagesize;
-
-	BUG_ON((blks / 2) > pages_per_peb);
-
-	if (pages_per_peb % blks) {
-		SSDFS_WARN("pages_per_peb %u, blks %u\n",
-			   pages_per_peb, blks);
-	}
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "log_pages %u\n",
-		  layout->maptbl.log_pages);
-
-	blks = min_t(u32, blks, (u32)SSDFS_LOG_MAX_PAGES);
-
-	if (layout->maptbl.log_pages == U16_MAX)
-		log_pages = blks;
-	else {
-		log_pages = layout->maptbl.log_pages;
-
-		if (log_pages < blks) {
-			SSDFS_WARN("log_pages is corrected from %u to %u\n",
-				   log_pages, blks);
-			log_pages = blks;
-		} else if (log_pages % blks) {
-			SSDFS_WARN("log_pages %u, blks %u\n",
-				   log_pages,
-				   blks);
-		}
-	}
-
-try_align_log_pages:
-	SSDFS_DBG(layout->env.show_debug,
-		  "TRY ALIGN LOG PAGES: "
-		  "log_pages %u, blks_count %u\n",
-		  log_pages, blks);
-
-	while (layout->env.erase_size % (log_pages * layout->page_size))
-		log_pages++;
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "ALIGNED: log_pages %u\n",
-		  log_pages);
-
-	BUG_ON(log_pages > pages_per_peb);
-
-	if (log_pages == pages_per_peb) {
-		/*
-		 * Stop align log_pages
-		 */
-	} else if ((log_pages - blks) < 3) {
-		log_pages += 3;
-		goto try_align_log_pages;
-	}
-
-	if (pages_per_peb % log_pages) {
-		SSDFS_WARN("pages_per_peb %u, log_pages %u\n",
-			   pages_per_peb, log_pages);
-	}
-
-	log_pages_default = pages_per_peb / SSDFS_LOGS_PER_PEB_DEFAULT;
-	log_pages = max_t(u32, log_pages, log_pages_default);
-	log_pages = min_t(u32, log_pages, (u32)SSDFS_LOG_MAX_PAGES);
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "log_pages %u\n",
-		  layout->maptbl.log_pages);
-
-	layout->maptbl.log_pages = log_pages;
-	BUG_ON(log_pages >= U16_MAX);
-	layout->sb.vh.maptbl_log_pages = cpu_to_le16((u16)log_pages);
-
-	SSDFS_DBG(layout->env.show_debug,
-		  "log_pages %u\n",
-		  layout->maptbl.log_pages);
-}
-
-int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
-{
-	struct ssdfs_metadata_desc *meta_desc;
-	int seg_index;
-	int segs_count;
-	u32 maptbl_pebs;
-	u32 pebs_per_seg;
-	u32 page_size = layout->page_size;
-	size_t portion_size = layout->maptbl.portion_size;
-	u16 portions_per_fragment = layout->maptbl.portions_per_fragment;
-	size_t peb_buffer_size = portion_size * portions_per_fragment;
-	u32 portions_count = layout->maptbl.portions_count;
-	int i, j;
-	u32 valid_blks;
-	int fragment_index = 0;
-	u32 log_pages = 0;
-	u32 payload_offset_in_bytes = 0;
-	u32 start_logical_blk;
-	u32 used_logical_blks = 0;
-	u32 last_allocated_blk = U16_MAX;
-	int err;
-
-	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
-
-	meta_desc = &layout->meta_array[SSDFS_PEB_MAPPING_TABLE];
-	segs_count = meta_desc->segs_count;
-	maptbl_pebs = layout->maptbl.maptbl_pebs;
-	pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
-
-	if (segs_count <= 0 ||
-	    segs_count > ((maptbl_pebs + pebs_per_seg - 1) / pebs_per_seg)) {
-		SSDFS_ERR("invalid segs_count %d\n", segs_count);
-		return -ERANGE;
-	}
-
-	if (meta_desc->start_seg_index >= layout->segs_capacity) {
-		SSDFS_ERR("start_seg_index %d >= segs_capacity %d\n",
-			  meta_desc->start_seg_index,
-			  layout->segs_capacity);
-		return -ERANGE;
-	}
-
-	if ((layout->segs_count + segs_count) > layout->segs_capacity) {
-		SSDFS_ERR("not enough space for commit: "
-			  "segs_count %d, request %d, capacity %d\n",
-			  layout->segs_count, segs_count,
-			  layout->segs_capacity);
-		return -E2BIG;
-	}
-
-	seg_index = meta_desc->start_seg_index;
-	valid_blks = (peb_buffer_size + page_size - 1) / page_size;
-
-	for (i = 0; i < segs_count; i++) {
-		start_logical_blk = 0;
-
-		used_logical_blks = 0;
-		last_allocated_blk = U16_MAX;
-
-		for (j = 0; j < pebs_per_seg; j++) {
-			used_logical_blks += valid_blks;
-
-			if (used_logical_blks == 0) {
-				SSDFS_ERR("invalid used_logical_blks %u\n",
-					  used_logical_blks);
-				return -ERANGE;
-			}
-
-			last_allocated_blk = used_logical_blks - 1;
-		}
-
-		for (j = 0; j < pebs_per_seg; j++) {
-			struct ssdfs_peb_content *peb_desc;
-			struct ssdfs_extent_desc *extent;
-			u32 blks;
-			u64 logical_byte_offset;
-
-			if (fragment_index >= portions_count)
-				break;
-
-			logical_byte_offset =
-				(u64)fragment_index * portion_size;
-
-			layout->calculated_open_zones++;
-
-			SSDFS_DBG(layout->env.show_debug,
-				  "calculated_open_zones %u\n",
-				  layout->calculated_open_zones);
-
-			layout->segs[seg_index].pebs_count++;
-			BUG_ON(layout->segs[seg_index].pebs_count >
-				layout->segs[seg_index].pebs_capacity);
-			peb_desc = &layout->segs[seg_index].pebs[j];
-
-			err = set_extent_start_offset(layout,
-							SSDFS_MAPTBL_SEG_TYPE,
-							peb_desc,
-							SSDFS_SEG_HEADER);
-			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			err = define_segment_header_layout(layout, seg_index,
-							   j);
-			if (err) {
-				SSDFS_ERR("fail to define seg header's layout: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			err = set_extent_start_offset(layout,
-							SSDFS_MAPTBL_SEG_TYPE,
-							peb_desc,
-							SSDFS_BLOCK_BITMAP);
-			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			err = pre_commit_block_bitmap(layout, seg_index, j,
-						      peb_buffer_size,
-						      start_logical_blk,
-						      valid_blks);
-			if (err)
-				return err;
-
-			err = set_extent_start_offset(layout,
-							SSDFS_MAPTBL_SEG_TYPE,
-							peb_desc,
-							SSDFS_OFFSET_TABLE);
-			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			err = pre_commit_offset_table(layout, seg_index, j,
-							logical_byte_offset,
-							start_logical_blk,
-							valid_blks,
-							used_logical_blks,
-							last_allocated_blk);
-			if (err)
-				return err;
-
-			err = set_extent_start_offset(layout,
-						      SSDFS_MAPTBL_SEG_TYPE,
-						      peb_desc,
-						      SSDFS_BLOCK_DESCRIPTORS);
-			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			err = pre_commit_block_descriptors(layout, seg_index,
-							j, start_logical_blk,
-							valid_blks,
-							SSDFS_MAPTBL_INO,
-							payload_offset_in_bytes,
-							layout->page_size);
-			if (err)
-				return err;
-
-			err = set_extent_start_offset(layout,
-							SSDFS_MAPTBL_SEG_TYPE,
-							peb_desc,
-							SSDFS_LOG_PAYLOAD);
-			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			extent = &peb_desc->extents[SSDFS_LOG_PAYLOAD];
-
-			BUG_ON(extent->buf);
-			extent->buf =
-				layout->maptbl.fragments_array[fragment_index];
-			if (!extent->buf) {
-				SSDFS_ERR("invalid fragment pointer: "
-					  "buffer_index %d\n",
-					  i + j);
-				return -ERANGE;
-			}
-			layout->maptbl.fragments_array[fragment_index] = NULL;
-
-			extent->bytes_count = peb_buffer_size;
-
-			err = set_extent_start_offset(layout,
-							SSDFS_MAPTBL_SEG_TYPE,
-							peb_desc,
-							SSDFS_LOG_FOOTER);
-			if (err) {
-				SSDFS_ERR("fail to define extent's offset: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			err = define_log_footer_layout(layout, seg_index, j);
-			if (err) {
-				SSDFS_ERR("fail to define seg footer's layout: "
-					  "err %d\n", err);
-				return err;
-			}
-
-			if (layout->blkbmap.has_backup_copy) {
-				err = set_extent_start_offset(layout,
-						    SSDFS_MAPTBL_SEG_TYPE,
-						    peb_desc,
-						    SSDFS_BLOCK_BITMAP_BACKUP);
-				if (err) {
-					SSDFS_ERR("fail to define offset: "
-						  "err %d\n", err);
-					return err;
-				}
-
-				err = pre_commit_block_bitmap_backup(layout,
-								seg_index,
-								j,
-								peb_buffer_size,
-								start_logical_blk,
-								valid_blks);
-				if (err)
-					return err;
-			}
-
-			if (layout->blk2off_tbl.has_backup_copy) {
-				err = set_extent_start_offset(layout,
-						    SSDFS_MAPTBL_SEG_TYPE,
-						    peb_desc,
-						    SSDFS_OFFSET_TABLE_BACKUP);
-				if (err) {
-					SSDFS_ERR("fail to define offset: "
-						  "err %d\n", err);
-					return err;
-				}
-
-				err = pre_commit_offset_table_backup(layout,
-							seg_index, j,
-							logical_byte_offset,
-							start_logical_blk,
-							valid_blks,
-							used_logical_blks,
-							last_allocated_blk);
-				if (err)
-					return err;
-			}
-
-			blks = calculate_log_pages(layout,
-						   SSDFS_MAPTBL_SEG_TYPE,
-						   peb_desc);
-			log_pages = max_t(u32, blks, log_pages);
-
-			fragment_index++;
-			payload_offset_in_bytes += peb_buffer_size;
-			start_logical_blk += valid_blks;
-		}
-
-		seg_index++;
-	}
-
-	maptbl_set_log_pages(layout, log_pages);
-	return 0;
-}
-
 static inline
 void calculate_lebtbl_fragment_checksum(u8 *ptr)
 {
@@ -2085,9 +1770,8 @@ void calculate_pebtbl_fragment_checksum(u8 *ptr)
 
 static
 void calculate_peb_fragments_checksum(struct ssdfs_volume_layout *layout,
-					void *fragments)
+					void *fragments, u32 peb_portions)
 {
-	u16 portions_per_fragment = layout->maptbl.portions_per_fragment;
 	size_t portion_size = layout->maptbl.portion_size;
 	u16 lebtbl_mempages;
 	u32 lebtbl_portion_bytes = layout->maptbl.lebtbl_portion_bytes;
@@ -2100,7 +1784,7 @@ void calculate_peb_fragments_checksum(struct ssdfs_volume_layout *layout,
 	lebtbl_mempages = (u16)(lebtbl_portion_bytes / layout->page_size);
 	BUG_ON(lebtbl_mempages == 0);
 
-	for (i = 0; i < portions_per_fragment; i++) {
+	for (i = 0; i < peb_portions; i++) {
 		ptr = (u8 *)fragments + (i * portion_size);
 
 		for (j = 0; j < lebtbl_mempages; j++) {
@@ -2121,30 +1805,165 @@ void calculate_peb_fragments_checksum(struct ssdfs_volume_layout *layout,
 	}
 }
 
-static
-void maptbl_define_migration_threshold(struct ssdfs_volume_layout *layout,
-					int seg_index, int peb_index)
+int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 {
-	struct ssdfs_segment_desc *seg_desc;
-	struct ssdfs_peb_content *peb_desc;
-	struct ssdfs_extent_desc *lf_extent;
-	struct ssdfs_log_footer *footer;
+	struct ssdfs_metadata_desc *meta_desc;
+	int seg_index;
+	int segs_count;
+	u32 maptbl_pebs;
+	u32 pebs_per_seg;
+	u32 page_size = layout->page_size;
+	size_t portion_size = layout->maptbl.portion_size;
+	u16 portions_per_fragment = layout->maptbl.portions_per_fragment;
+	size_t peb_buffer_size;
+	u32 peb_portions;
+	int i, j;
+	u32 valid_blks;
+	int fragment_index = 0;
+	u32 max_log_blks = 0;
+	u32 payload_offset_in_bytes = 0;
+	u32 start_logical_blk;
+	u32 used_logical_blks = 0;
+	u32 last_allocated_blk = U16_MAX;
+	int err;
+
+	SSDFS_DBG(layout->env.show_debug, "layout %p\n", layout);
+
+	meta_desc = &layout->meta_array[SSDFS_PEB_MAPPING_TABLE];
+	segs_count = meta_desc->segs_count;
+	maptbl_pebs = layout->maptbl.maptbl_pebs;
+	pebs_per_seg = (u32)(layout->seg_size / layout->env.erase_size);
+
+	if (segs_count <= 0 ||
+	    segs_count > ((maptbl_pebs + pebs_per_seg - 1) / pebs_per_seg)) {
+		SSDFS_ERR("invalid segs_count %d\n", segs_count);
+		return -ERANGE;
+	}
+
+	if (meta_desc->start_seg_index >= layout->segs_capacity) {
+		SSDFS_ERR("start_seg_index %d >= segs_capacity %d\n",
+			  meta_desc->start_seg_index,
+			  layout->segs_capacity);
+		return -ERANGE;
+	}
+
+	if ((layout->segs_count + segs_count) > layout->segs_capacity) {
+		SSDFS_ERR("not enough space for commit: "
+			  "segs_count %d, request %d, capacity %d\n",
+			  layout->segs_count, segs_count,
+			  layout->segs_capacity);
+		return -E2BIG;
+	}
+
+	seg_index = meta_desc->start_seg_index;
+
+	for (i = 0; i < segs_count; i++) {
+		start_logical_blk = 0;
+
+		used_logical_blks = 0;
+		last_allocated_blk = U16_MAX;
+
+		for (j = 0; j < pebs_per_seg; j++) {
+			peb_portions = maptbl_peb_portions(layout,
+							fragment_index + j);
+			if (peb_portions == 0)
+				break;
+
+			peb_buffer_size = portion_size * peb_portions;
+			valid_blks = (peb_buffer_size + page_size - 1) /
+								page_size;
+			used_logical_blks += valid_blks;
+
+			if (used_logical_blks == 0) {
+				SSDFS_ERR("invalid used_logical_blks %u\n",
+					  used_logical_blks);
+				return -ERANGE;
+			}
+
+			last_allocated_blk = used_logical_blks - 1;
+		}
+
+		for (j = 0; j < pebs_per_seg; j++) {
+			struct ssdfs_metadata_peb_desc desc;
+			u32 blks;
+			u64 logical_byte_offset;
+
+			peb_portions = maptbl_peb_portions(layout,
+							   fragment_index);
+			if (peb_portions == 0)
+				break;
+
+			peb_buffer_size = portion_size * peb_portions;
+			valid_blks = (peb_buffer_size + page_size - 1) /
+								page_size;
+
+			logical_byte_offset = (u64)fragment_index *
+					portions_per_fragment * portion_size;
+
+			layout->calculated_open_zones++;
+
+			SSDFS_DBG(layout->env.show_debug,
+				  "calculated_open_zones %u\n",
+				  layout->calculated_open_zones);
+
+			layout->segs[seg_index].pebs_count++;
+			BUG_ON(layout->segs[seg_index].pebs_count >
+				layout->segs[seg_index].pebs_capacity);
+
+			if (!layout->maptbl.fragments_array[fragment_index]) {
+				SSDFS_ERR("invalid fragment pointer: "
+					  "buffer_index %d\n",
+					  fragment_index);
+				return -ERANGE;
+			}
+
+			/* fragments are not changed after the validation */
+			calculate_peb_fragments_checksum(layout,
+				layout->maptbl.fragments_array[fragment_index],
+				peb_portions);
+
+			desc.seg_type = SSDFS_MAPTBL_SEG_TYPE;
+			desc.seg_index = seg_index;
+			desc.peb_index = j;
+			desc.inode_id = SSDFS_MAPTBL_INO;
+			desc.compression = layout->maptbl.compression;
+			desc.item_size = portion_size;
+			desc.items_count = peb_portions;
+			desc.payload =
+				layout->maptbl.fragments_array[fragment_index];
+			desc.logical_byte_offset = logical_byte_offset;
+			desc.start_logical_blk = start_logical_blk;
+			desc.used_logical_blks = used_logical_blks;
+			desc.last_allocated_blk = last_allocated_blk;
+
+			err = define_metadata_peb_content(layout, &desc,
+							  &blks);
+			if (err) {
+				SSDFS_ERR("fail to define PEB's log: "
+					  "seg_index %d, peb_index %d, "
+					  "err %d\n",
+					  seg_index, j, err);
+				return err;
+			}
+
+			free(layout->maptbl.fragments_array[fragment_index]);
+			layout->maptbl.fragments_array[fragment_index] = NULL;
+
+			max_log_blks = max_t(u32, blks, max_log_blks);
+
+			fragment_index++;
+			payload_offset_in_bytes += peb_buffer_size;
+			start_logical_blk += valid_blks;
+		}
+
+		seg_index++;
+	}
 
 	SSDFS_DBG(layout->env.show_debug,
-		  "layout %p, seg_index %d, peb_index %d, "
-		  "segbmap migration_threshold %u\n",
-		  layout, seg_index, peb_index,
-		  layout->maptbl.migration_threshold);
+		  "log_pages %u, max_log_blks %u\n",
+		  layout->maptbl.log_pages, max_log_blks);
 
-	seg_desc = &layout->segs[seg_index];
-	peb_desc = &seg_desc->pebs[peb_index];
-	lf_extent = &peb_desc->extents[SSDFS_LOG_FOOTER];
-
-	BUG_ON(!lf_extent->buf);
-	footer = (struct ssdfs_log_footer *)lf_extent->buf;
-
-	footer->volume_state.migration_threshold =
-			cpu_to_le16(layout->maptbl.migration_threshold);
+	return 0;
 }
 
 int maptbl_mkfs_commit(struct ssdfs_volume_layout *layout)
@@ -2154,8 +1973,6 @@ int maptbl_mkfs_commit(struct ssdfs_volume_layout *layout)
 	int segs_count;
 	u32 maptbl_pebs;
 	u32 pebs_per_seg;
-	u32 portions_count = layout->maptbl.portions_count;
-	u32 metadata_blks;
 	int i, j;
 	int fragment_index = 0;
 	int err;
@@ -2186,68 +2003,22 @@ int maptbl_mkfs_commit(struct ssdfs_volume_layout *layout)
 
 	for (i = 0; i < segs_count; i++) {
 		for (j = 0; j < pebs_per_seg; j++) {
-			void *ptr;
-			struct ssdfs_leb_table_fragment_header *hdr;
-			struct ssdfs_peb_content *peb_desc;
-			struct ssdfs_extent_desc *extent;
-			u32 blks;
-
-			if (fragment_index >= portions_count)
+			if (maptbl_peb_portions(layout, fragment_index) == 0)
 				break;
 
 			BUG_ON(j >= layout->segs[seg_index].pebs_capacity);
 
-			peb_desc = &layout->segs[seg_index].pebs[j];
-			extent = &peb_desc->extents[SSDFS_LOG_PAYLOAD];
-			BUG_ON(!extent->buf);
-
-			ptr = (u8 *)extent->buf;
-			hdr = (struct ssdfs_leb_table_fragment_header *)ptr;
-
-			if (le16_to_cpu(hdr->magic) != SSDFS_LEB_TABLE_MAGIC)
-				break;
-
-			err = pre_commit_segment_header(layout, seg_index, j,
-							SSDFS_MAPTBL_SEG_TYPE);
-			if (err)
+			err = commit_metadata_peb_log(layout,
+					SSDFS_MAPTBL_SEG_TYPE,
+					seg_index, j,
+					layout->maptbl.migration_threshold);
+			if (err) {
+				SSDFS_ERR("fail to commit PEB's log: "
+					  "seg_index %d, peb_index %d, "
+					  "err %d\n",
+					  seg_index, j, err);
 				return err;
-
-			calculate_peb_fragments_checksum(layout, extent->buf);
-
-			err = pre_commit_log_footer(layout,
-						    SSDFS_MAPTBL_SEG_TYPE,
-						    seg_index, j);
-			if (err)
-				return err;
-
-			maptbl_define_migration_threshold(layout,
-							  seg_index, j);
-
-			metadata_blks = calculate_metadata_blks(layout,
-							SSDFS_MAPTBL_SEG_TYPE,
-							peb_desc);
-
-			commit_block_bitmap(layout, seg_index, j,
-					    metadata_blks);
-			commit_offset_table(layout, seg_index, j);
-			commit_block_descriptors(layout, seg_index, j);
-
-			if (layout->blkbmap.has_backup_copy) {
-				commit_block_bitmap_backup(layout, seg_index,
-							   j, metadata_blks);
 			}
-
-			if (layout->blk2off_tbl.has_backup_copy) {
-				commit_offset_table_backup(layout, seg_index,
-							   j);
-			}
-
-			blks = calculate_log_pages(layout,
-						   SSDFS_MAPTBL_SEG_TYPE,
-						   peb_desc);
-			commit_log_footer(layout, seg_index, j, blks);
-			commit_segment_header(layout, seg_index, j,
-					      blks);
 
 			fragment_index++;
 		}

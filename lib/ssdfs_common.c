@@ -247,6 +247,7 @@ int open_device(struct ssdfs_environment *env, u32 flags)
 {
 	struct mtd_info_user mtd;
 	struct stat stat;
+	struct stat dev_stat;
 	u32 default_flags = O_RDWR | O_LARGEFILE;
 	int err;
 
@@ -254,6 +255,15 @@ int open_device(struct ssdfs_environment *env, u32 flags)
 		  env->dev_name, flags);
 
 	flags = default_flags | flags;
+
+	/*
+	 * MTD character device doesn't support direct I/O and
+	 * open() fails with -EINVAL for O_DIRECT flag.
+	 */
+	if ((flags & O_DIRECT) &&
+	    fstatat(AT_FDCWD, env->dev_name, &dev_stat, 0) == 0 &&
+	    S_ISCHR(dev_stat.st_mode))
+		flags &= ~O_DIRECT;
 
 	env->fd = open(env->dev_name, flags);
 	if (env->fd == -1) {
