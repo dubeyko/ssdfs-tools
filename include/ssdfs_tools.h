@@ -118,6 +118,9 @@ struct ssdfs_time_range {
  * @show_debug: show debug messages
  * @fs_size: size in bytes of selected partition
  * @erase_size: PEB size in bytes
+ * @seg_size: segment size in bytes
+ * @fs_create_time: volume creation timestamp
+ * @fs_uuid: volume UUID
  * @open_zones: number of open/active zones
  * @page_size: logical block size in bytes
  * @device_type: opened device type
@@ -131,6 +134,9 @@ struct ssdfs_environment {
 
 	u64 fs_size;
 	u32 erase_size;
+	u32 seg_size;
+	u64 fs_create_time;
+	u8 fs_uuid[SSDFS_UUID_SIZE];
 	u32 open_zones;
 	u32 page_size;
 
@@ -149,6 +155,11 @@ struct ssdfs_environment {
  * @log_size: log's size in bytes
  * @log_index: log index in chain
  * @logs_count: count of logs in the range
+ * @log_pages: size of PEB's full log in pages
+ * @create_time: PEB creation timestamp
+ * @log_flags: current log's flags
+ * @log_timestamp: current log's creation timestamp
+ * @log_cno: current log's creation checkpoint
  */
 struct ssdfs_peb_environment {
 	u64 id;
@@ -159,6 +170,13 @@ struct ssdfs_peb_environment {
 	u32 log_size;
 	u32 log_index;
 	u32 logs_count;
+
+	u16 log_pages;
+	u64 create_time;
+
+	u32 log_flags;
+	u64 log_timestamp;
+	u64 log_cno;
 };
 
 /*
@@ -374,6 +392,7 @@ struct ssdfs_metadata_map {
  * @data_file: data file environment
  * @timestamp: timestamp defining the state of files
  * @metadata_map: metadata map
+ * @private_data: pointer on private data
  *
  * @name_buf: name buffer
  */
@@ -390,6 +409,8 @@ struct ssdfs_thread_state {
 	struct ssdfs_file_environment data_file;
 	struct ssdfs_time_range timestamp;
 	struct ssdfs_metadata_map metadata_map;
+
+	void *private_data;
 
 	char name_buf[SSDFS_MAX_NAME_LEN + 1];
 };
@@ -1259,6 +1280,8 @@ int ssdfs_read_partial_log_header(struct ssdfs_environment *env,
 				  void *buf);
 int ssdfs_find_any_valid_peb(struct ssdfs_environment *env,
 			     struct ssdfs_segment_header *hdr);
+int ssdfs_scan_device_for_valid_peb(struct ssdfs_environment *env,
+				    struct ssdfs_segment_header *hdr);
 
 /* lib/compression.c */
 

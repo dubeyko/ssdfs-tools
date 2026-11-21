@@ -124,6 +124,7 @@ int main(int argc, char *argv[])
 		.base.show_info = SSDFS_TRUE,
 		.base.erase_size = SSDFS_128KB,
 		.base.page_size = SSDFS_4KB,
+		.base.seg_size = SSDFS_128KB,
 		.base.fs_size = 0,
 		.base.device_type = SSDFS_DEVICE_TYPE_MAX,
 		.threads.jobs = NULL,
@@ -138,9 +139,10 @@ int main(int argc, char *argv[])
 		.auto_repair = SSDFS_FALSE,
 		.yes_all_questions = SSDFS_FALSE,
 		.be_verbose = SSDFS_FALSE,
-		.seg_size = SSDFS_128KB,
+		.report_level = SSDFS_FSCK_REPORT_DEFAULT_LEVEL,
 	};
 	int res;
+	int exit_code = SSDFS_FSCK_EXIT_OPERATIONAL_ERROR;
 	int err = 0;
 
 	ssdfs_fsck_init_detection_result(&env);
@@ -159,7 +161,7 @@ int main(int argc, char *argv[])
 
 	err = open_device(&env.base, 0);
 	if (err)
-		exit(EXIT_FAILURE);
+		exit(SSDFS_FSCK_EXIT_OPERATIONAL_ERROR);
 
 	SSDFS_FSCK_INFO(env.base.show_info,
 			"[001]\t[SUCCESS]\n");
@@ -199,9 +201,26 @@ int main(int argc, char *argv[])
 			"[002]\t[SUCCESS]\n");
 
 	if (res == SSDFS_FSCK_NO_FILE_SYSTEM_DETECTED) {
+		if (env.detection_result.stale_ssdfs_found) {
+			SSDFS_FSCK_INFO(env.base.show_info,
+					"%s file system has been detected "
+					"on %s: stale SSDFS metadata "
+					"have been ignored\n",
+					env.detection_result.foreign_fs_type,
+					env.base.dev_name);
+		} else if (env.detection_result.foreign_fs_type[0] != '\0') {
+			SSDFS_FSCK_INFO(env.base.show_info,
+					"%s file system has been detected "
+					"on %s\n",
+					env.detection_result.foreign_fs_type,
+					env.base.dev_name);
+		}
+
 		SSDFS_FSCK_INFO(env.base.show_info,
 				"No SSDFS file system has been detected on %s\n",
 				env.base.dev_name);
+		/* nothing to check */
+		exit_code = SSDFS_FSCK_EXIT_OPERATIONAL_ERROR;
 		goto fsck_finish;
 	}
 
@@ -259,16 +278,23 @@ int main(int argc, char *argv[])
 		SSDFS_FSCK_INFO(env.base.show_info,
 				"No corruptions have been detected. "
 				"Have a nice day.\n");
+		exit_code = SSDFS_FSCK_EXIT_OK;
 		goto fsck_finish;
 
 	case SSDFS_FSCK_VOLUME_COMPLETELY_DESTROYED:
 	case SSDFS_FSCK_VOLUME_HEAVILY_CORRUPTED:
 	case SSDFS_FSCK_VOLUME_SLIGHTLY_CORRUPTED:
 	case SSDFS_FSCK_VOLUME_UNCLEAN_UMOUNT:
+		/* corruption stays until successful recovery */
+		exit_code = SSDFS_FSCK_EXIT_ERRORS_UNCORRECTED;
+
 		if (env.no_change) {
 			SSDFS_FSCK_INFO(env.base.show_info,
 					"Volume is corrupted. "
-					"Please, use FSCK or RECOVERFS tool.\n");
+					"Run fsck.ssdfs without -n option "
+					"to recover the volume or "
+					"use recoverfs.ssdfs to extract "
+					"the files.\n");
 			goto fsck_finish;
 		}
 
@@ -291,13 +317,17 @@ int main(int argc, char *argv[])
 			goto try_recover_volume;
 
 		case SSDFS_FSCK_NO_USER_ANSWER:
-			SSDFS_INFO("Volume is corrupted. "
-				   "Please, use FSCK or RECOVERFS tool.\n");
+			SSDFS_INFO("Volume is corrupted and "
+				   "has not been recovered. "
+				   "Use recoverfs.ssdfs to extract "
+				   "the files.\n");
 			goto fsck_finish;
 
 		default:
-			SSDFS_INFO("Unrecognized answer. Volume is corrupted. "
-				   "Please, use FSCK or RECOVERFS tool.\n");
+			SSDFS_INFO("Unrecognized answer. Volume is corrupted "
+				   "and has not been recovered. "
+				   "Use recoverfs.ssdfs to extract "
+				   "the files.\n");
 			goto fsck_finish;
 		}
 		break;
@@ -317,6 +347,7 @@ try_recover_volume:
 		SSDFS_FSCK_INFO(env.base.show_info,
 				"No need for recovery on %s\n",
 				env.base.dev_name);
+		exit_code = SSDFS_FSCK_EXIT_OK;
 		break;
 
 	case SSDFS_FSCK_UNABLE_RECOVER:
@@ -329,6 +360,7 @@ try_recover_volume:
 		SSDFS_FSCK_INFO(env.base.show_info && env.be_verbose,
 				"Metadata were completely rebuilt on %s\n",
 				env.base.dev_name);
+		exit_code = SSDFS_FSCK_EXIT_ERRORS_CORRECTED;
 		break;
 
 	case SSDFS_FSCK_METADATA_PARTIALLY_LOST:
@@ -347,6 +379,7 @@ try_recover_volume:
 		SSDFS_FSCK_INFO(env.base.show_info && env.be_verbose,
 				"Probably, NAND was degraded on %s\n",
 				env.base.dev_name);
+		exit_code = SSDFS_FSCK_EXIT_ERRORS_CORRECTED;
 		break;
 
 	case SSDFS_FSCK_RECOVERY_DEVICE_MALFUNCTION:
@@ -365,16 +398,19 @@ try_recover_volume:
 		SSDFS_FSCK_INFO(env.base.show_info && env.be_verbose,
 				"SSDFS volume has been recovered on %s\n",
 				env.base.dev_name);
+		exit_code = SSDFS_FSCK_EXIT_ERRORS_CORRECTED;
 		break;
 
 	case SSDFS_FSCK_RECOVERY_FAILED:
 		SSDFS_ERR("fail to recover SSDFS file system on %s\n",
 			  env.base.dev_name);
+		exit_code = SSDFS_FSCK_EXIT_OPERATIONAL_ERROR;
 		goto fsck_finish;
 
 	default:
 		SSDFS_ERR("unknown recovery result on %s\n",
 			  env.base.dev_name);
+		exit_code = SSDFS_FSCK_EXIT_OPERATIONAL_ERROR;
 		goto fsck_finish;
 	}
 
@@ -386,5 +422,8 @@ fsck_finish:
 	ssdfs_fsck_destroy_check_result(&env);
 	ssdfs_fsck_destroy_recovery_result(&env);
 	close(env.base.fd);
-	exit(err ? EXIT_FAILURE : EXIT_SUCCESS);
+	SSDFS_DBG(env.base.show_debug,
+		  "exit code %d\n", exit_code);
+
+	exit(exit_code);
 }

@@ -3770,6 +3770,12 @@ void __commit_partial_log_header(struct ssdfs_volume_layout *layout,
 	memcpy(&pl_footer->shared_dict_btree,
 		&layout->sb.vs.shared_dict_btree,
 		sizeof(pl_footer->shared_dict_btree));
+	memcpy(&pl_footer->snapshots_btree,
+		&layout->sb.vs.snapshots_btree,
+		sizeof(pl_footer->snapshots_btree));
+	memcpy(&pl_footer->invextree,
+		&layout->sb.vh.invextree,
+		sizeof(pl_footer->invextree));
 
 	pl_footer->sequence_id = cpu_to_le32(0);
 

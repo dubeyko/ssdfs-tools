@@ -17,15 +17,6 @@
 
 #define SSDFS_FSCK_METADATA_MAP_CAPACITY_MIN		(8)
 
-#define SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND		(1 << 0)
-#define SSDFS_FSCK_SB_SEGS_FOUND			(1 << 1)
-#define SSDFS_FSCK_MAPPING_TBL_FOUND			(1 << 2)
-#define SSDFS_FSCK_SEGMENT_BITMAP_FOUND			(1 << 3)
-#define SSDFS_FSCK_MAPTBL_CACHE_FOUND			(1 << 4)
-#define SSDFS_FSCK_METADATA_PEB_MAP_PREPARED		(1 << 5)
-#define SSDFS_FSCK_NOTHING_FOUND_MASK			0x0
-#define SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK	0x1F
-
 /*
  * struct ssdfs_fsck_found_log - found log descriptor
  * @peb_id: PEB ID
@@ -126,9 +117,24 @@ struct ssdfs_fsck_mapping_table_cache {
 	u32 bytes_count;
 };
 
+#define SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND		(1 << 0)
+#define SSDFS_FSCK_SB_SEGS_FOUND			(1 << 1)
+#define SSDFS_FSCK_MAPPING_TBL_FOUND			(1 << 2)
+#define SSDFS_FSCK_SEGMENT_BITMAP_FOUND			(1 << 3)
+#define SSDFS_FSCK_MAPTBL_CACHE_FOUND			(1 << 4)
+#define SSDFS_FSCK_METADATA_PEB_MAP_PREPARED		(1 << 5)
+#define SSDFS_FSCK_NOTHING_FOUND_MASK			0x0
+#define SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK	0x1F
+
 /*
  * struct ssdfs_fsck_volume_creation_point - volume creation point
  * @found_metadata: found metadata bitmap
+ * @searched_metadata: bitmap of metadata that detection phase has tried
+ *                     to find (the same flags as @found_metadata); if
+ *                     the location of metadata is unknown (for example,
+ *                     superblock segments are not found, so segment
+ *                     bitmap and mapping table cannot be located), then
+ *                     the metadata are not searched
  * @volume_creation_timestamp: volume creation timestamp
  * @base_snapshot_seg: base snapshot segment desriptor
  * @superblock_seg: superblock segment descriptor
@@ -139,6 +145,7 @@ struct ssdfs_fsck_mapping_table_cache {
  */
 struct ssdfs_fsck_volume_creation_point {
 	u64 found_metadata;
+	u64 searched_metadata;
 	u64 volume_creation_timestamp;
 	struct ssdfs_fsck_base_snapshot_segment_detection base_snapshot_seg;
 	struct ssdfs_fsck_superblock_segment_detection superblock_seg;
@@ -314,6 +321,27 @@ void ssdfs_fsck_destroy_metadata_map(struct ssdfs_fsck_volume_creation_point *pt
 		map = &ptr->metadata_map[i];
 		__ssdfs_fsck_destroy_metadata_map(map);
 	}
+}
+
+static inline
+int is_ssdfs_segment_header(struct ssdfs_signature *magic)
+{
+	return le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
+			le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC;
+}
+
+static inline
+int is_ssdfs_partial_log_header(struct ssdfs_signature *magic)
+{
+	return le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
+			le16_to_cpu(magic->key) == SSDFS_PARTIAL_LOG_HDR_MAGIC;
+}
+
+static inline
+int is_ssdfs_log_footer(struct ssdfs_signature *magic)
+{
+	return le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
+			le16_to_cpu(magic->key) == SSDFS_LOG_FOOTER_MAGIC;
 }
 
 #endif /* _SSDFS_UTILS_DETECT_FILE_SYSTEM_H */

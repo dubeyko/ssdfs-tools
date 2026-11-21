@@ -46,6 +46,13 @@ void print_usage(void)
 	SSDFS_INFO("\t [-s|--segsize size]\t  segment size of target device "
 		   "(128KB|256KB|512KB|1MB|2MB|4MB|8MB|16MB|32MB|64MB|...).\n");
 	SSDFS_INFO("\t [-y|--yes-all-questions]\t  assume YES to all questions.\n");
+	SSDFS_INFO("\t [-R|--report-level level]  detail level of "
+		   "corruption report:\n");
+	SSDFS_INFO("\t\t\t\t  1|summary  - state of key metadata "
+		   "structures (default);\n");
+	SSDFS_INFO("\t\t\t\t  2|parts    - corrupted parts of "
+		   "metadata structures;\n");
+	SSDFS_INFO("\t\t\t\t  3|full     - every corrupted item.\n");
 	SSDFS_INFO("\t [-v|--be-verbose]\t  be verbose.\n");
 	SSDFS_INFO("\t [-V|--version]\t\t  print version and exit.\n");
 }
@@ -58,7 +65,7 @@ static void check_pagesize(int pagesize)
 
 	if (err) {
 		print_usage();
-		exit(EXIT_FAILURE);
+		exit(SSDFS_FSCK_EXIT_USAGE_ERROR);
 	}
 }
 
@@ -70,7 +77,7 @@ static void check_segsize(u64 segsize)
 
 	if (err) {
 		print_usage();
-		exit(EXIT_FAILURE);
+		exit(SSDFS_FSCK_EXIT_USAGE_ERROR);
 	}
 }
 
@@ -82,8 +89,36 @@ static void check_erasesize(u64 erasesize)
 
 	if (err) {
 		print_usage();
-		exit(EXIT_FAILURE);
+		exit(SSDFS_FSCK_EXIT_USAGE_ERROR);
 	}
+}
+
+static
+int parse_report_level(const char *str)
+{
+	static const char *names[SSDFS_FSCK_REPORT_LEVEL_MAX] = {
+		[SSDFS_FSCK_REPORT_SUMMARY] = "summary",
+		[SSDFS_FSCK_REPORT_PARTS] = "parts",
+		[SSDFS_FSCK_REPORT_FULL] = "full",
+	};
+	char *end = NULL;
+	long level;
+	int i;
+
+	for (i = SSDFS_FSCK_REPORT_SUMMARY; i < SSDFS_FSCK_REPORT_LEVEL_MAX; i++) {
+		if (strcmp(str, names[i]) == 0)
+			return i;
+	}
+
+	level = strtol(str, &end, 10);
+	if (end != str && *end == '\0' &&
+	    level >= SSDFS_FSCK_REPORT_SUMMARY &&
+	    level < SSDFS_FSCK_REPORT_LEVEL_MAX)
+		return (int)level;
+
+	SSDFS_ERR("invalid report level: %s\n", str);
+	print_usage();
+	exit(SSDFS_FSCK_EXIT_USAGE_ERROR);
 }
 
 void parse_options(int argc, char *argv[],
@@ -92,7 +127,7 @@ void parse_options(int argc, char *argv[],
 	int c;
 	int oi = 1;
 	u64 granularity;
-	char sopts[] = "B:de:fhj:npqs:yvV";
+	char sopts[] = "B:de:fhj:npqR:s:yvV";
 	static const struct option lopts[] = {
 		{"pagesize", 1, NULL, 'B'},
 		{"debug", 0, NULL, 'd'},
@@ -103,6 +138,7 @@ void parse_options(int argc, char *argv[],
 		{"no-change", 0, NULL, 'n'},
 		{"auto-repair", 0, NULL, 'p'},
 		{"quiet", 0, NULL, 'q'},
+		{"report-level", 1, NULL, 'R'},
 		{"segsize", 1, NULL, 's'},
 		{"yes-all-questions", 0, NULL, 'y'},
 		{"be-verbose", 0, NULL, 'v'},
@@ -153,14 +189,17 @@ void parse_options(int argc, char *argv[],
 		case 'q':
 			env->base.show_info = SSDFS_FALSE;
 			break;
+		case 'R':
+			env->report_level = parse_report_level(optarg);
+			break;
 		case 's':
 			granularity = detect_granularity(optarg);
 			if (granularity >= U64_MAX) {
-				env->seg_size = atoll(optarg);
-				check_segsize(env->seg_size);
+				env->base.seg_size = atoll(optarg);
+				check_segsize(env->base.seg_size);
 			} else {
 				check_segsize(granularity);
-				env->seg_size = granularity;
+				env->base.seg_size = granularity;
 			}
 			break;
 		case 'y':
@@ -174,12 +213,12 @@ void parse_options(int argc, char *argv[],
 			exit(EXIT_SUCCESS);
 		default:
 			print_usage();
-			exit(EXIT_FAILURE);
+			exit(SSDFS_FSCK_EXIT_USAGE_ERROR);
 		}
 	}
 
 	if (optind != argc - 1) {
 		print_usage();
-		exit(EXIT_FAILURE);
+		exit(SSDFS_FSCK_EXIT_USAGE_ERROR);
 	}
 }

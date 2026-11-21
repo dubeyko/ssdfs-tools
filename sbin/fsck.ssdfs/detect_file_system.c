@@ -12,18 +12,11 @@
  * Authors: Viacheslav Dubeyko <slava@dubeyko.com>
  */
 
+#include <blkid/blkid.h>
+
 #include "ssdfs_tools.h"
 #include "fsck.h"
 
-enum {
-	SSDFS_FSCK_SEARCH_RESULT_UNKNOWN,
-	SSDFS_FSCK_SEARCH_RESULT_SUCCESS,
-	SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND,
-	SSDFS_FSCK_SEARCH_RESULT_FAILURE,
-	SSDFS_FSCK_SEARCH_RESULT_STATE_MAX
-};
-
-static inline
 struct ssdfs_fsck_volume_creation_point *
 ssdfs_fsck_get_creation_point(struct ssdfs_fsck_environment *env, int index)
 {
@@ -59,6 +52,7 @@ static
 void ssdfs_fsck_init_creation_point(struct ssdfs_fsck_volume_creation_point *ptr)
 {
 	ptr->found_metadata = SSDFS_FSCK_NOTHING_FOUND_MASK;
+	ptr->searched_metadata = SSDFS_FSCK_NOTHING_FOUND_MASK;
 	ptr->volume_creation_timestamp = U64_MAX;
 	ssdfs_fsck_init_base_snapshot_seg(ptr);
 	ssdfs_fsck_init_superblock_seg(ptr);
@@ -75,6 +69,10 @@ void ssdfs_fsck_init_detection_result(struct ssdfs_fsck_environment *env)
 
 	SSDFS_DBG(env->base.show_debug,
 		  "init detection result\n");
+
+	memset(env->detection_result.foreign_fs_type, 0,
+		sizeof(env->detection_result.foreign_fs_type));
+	env->detection_result.stale_ssdfs_found = SSDFS_FALSE;
 
 	array = &env->detection_result.array;
 	array->state = SSDFS_FSCK_CREATION_ARRAY_NOT_INITIALIZED;
@@ -131,27 +129,6 @@ void ssdfs_fsck_destroy_detection_result(struct ssdfs_fsck_environment *env)
 
 typedef int (*detect_fn)(struct ssdfs_fsck_environment *env);
 
-static inline
-int is_ssdfs_segment_header(struct ssdfs_signature *magic)
-{
-	return le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
-			le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC;
-}
-
-static inline
-int is_ssdfs_partial_log_header(struct ssdfs_signature *magic)
-{
-	return le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
-			le16_to_cpu(magic->key) == SSDFS_PARTIAL_LOG_HDR_MAGIC;
-}
-
-static inline
-int is_ssdfs_log_footer(struct ssdfs_signature *magic)
-{
-	return le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
-			le16_to_cpu(magic->key) == SSDFS_LOG_FOOTER_MAGIC;
-}
-
 static
 int ssdfs_fsck_find_metadata_segment(struct ssdfs_fsck_environment *env,
 				     u64 peb_id,
@@ -198,7 +175,94 @@ int ssdfs_fsck_find_metadata_segment(struct ssdfs_fsck_environment *env,
 	return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
 }
 
+/*
+ * ssdfs_fsck_read_found_log_footer() - read footer of the found log
+ * @env: fsck environment
+ * @log: found log descriptor
+ *
+ * Read the footer that the header of the found log refers to.
+ * The header can be a segment header or a partial log header.
+ * The footer can be a log footer or a partial log header
+ * (SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER). The absent footer or
+ * invalid footer's descriptor doesn't stop the search: the footer
+ * is left zeroed and the check logic will detect the corruption.
+ */
 static
+int ssdfs_fsck_read_found_log_footer(struct ssdfs_fsck_environment *env,
+				     struct ssdfs_fsck_found_log *log)
+{
+	struct ssdfs_metadata_descriptor *desc;
+	u32 peb_size = env->base.erase_size;
+	u32 flags;
+	u32 area_offset;
+	u32 area_size;
+	int err;
+
+	memset(&log->footer, 0, sizeof(union ssdfs_metadata_footer));
+
+	if (is_ssdfs_segment_header(&log->header.magic)) {
+		desc = &log->header.seg_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
+		flags = le32_to_cpu(log->header.seg_hdr.seg_flags);
+	} else if (is_ssdfs_partial_log_header(&log->header.magic)) {
+		desc = &log->header.pl_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
+		flags = le32_to_cpu(log->header.pl_hdr.pl_flags);
+	} else {
+		SSDFS_ERR("invalid state of header: "
+			  "peb_id %llu, start_page %u\n",
+			  log->peb_id, log->start_page);
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+	}
+
+	if (!(flags & (SSDFS_LOG_HAS_FOOTER |
+			SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER))) {
+		SSDFS_DBG(env->base.show_debug,
+			  "log hasn't footer: peb_id %llu, start_page %u\n",
+			  log->peb_id, log->start_page);
+		return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+	}
+
+	area_offset = le32_to_cpu(desc->offset);
+	area_size = le32_to_cpu(desc->size);
+
+	if (area_size > sizeof(union ssdfs_metadata_footer))
+		area_size = sizeof(union ssdfs_metadata_footer);
+
+	if (area_size == 0 || area_offset >= peb_size ||
+	    area_size > (peb_size - area_offset)) {
+		SSDFS_DBG(env->base.show_debug,
+			  "invalid footer's descriptor: "
+			  "peb_id %llu, start_page %u, "
+			  "area_offset %u, area_size %u\n",
+			  log->peb_id, log->start_page,
+			  area_offset, area_size);
+		return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+	}
+
+	if (flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER) {
+		err = ssdfs_read_partial_log_footer(&env->base,
+						    log->peb_id, peb_size,
+						    area_offset, area_size,
+						    &log->footer.pl_hdr);
+	} else {
+		err = ssdfs_read_log_footer(&env->base,
+					    log->peb_id, peb_size,
+					    area_offset, area_size,
+					    &log->footer.footer);
+	}
+
+	if (err) {
+		SSDFS_ERR("fail to read log footer: "
+			  "peb_id %llu, start_page %u, "
+			  "area_offset %u, area_size %u, err %d\n",
+			  log->peb_id, log->start_page,
+			  area_offset, area_size, err);
+		memset(&log->footer, 0, sizeof(union ssdfs_metadata_footer));
+		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+	}
+
+	return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+}
+
 int ssdfs_fsck_find_last_full_log(struct ssdfs_fsck_environment *env,
 				  struct ssdfs_fsck_found_log *log)
 {
@@ -221,7 +285,7 @@ int ssdfs_fsck_find_last_full_log(struct ssdfs_fsck_environment *env,
 	if (is_ssdfs_segment_header(&log->header.magic)) {
 		hdr = &log->header.seg_hdr;
 
-		page_size = 1 << hdr->volume_hdr.log_pagesize;
+		page_size = ssdfs_fsck_log_page_size(&env->base, hdr);
 		BUG_ON(page_size == 0);
 		pages_per_peb = peb_size / page_size;
 		BUG_ON(pages_per_peb == 0);
@@ -263,7 +327,7 @@ int ssdfs_fsck_find_last_full_log(struct ssdfs_fsck_environment *env,
 			  "pages_per_peb %u\n",
 			  log->peb_id, cur_page,
 			  pages_per_peb);
-		return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+		goto read_footer;
 	}
 
 	do {
@@ -299,30 +363,26 @@ int ssdfs_fsck_find_last_full_log(struct ssdfs_fsck_environment *env,
 		cur_page += full_log_pages;
 	} while (cur_page < pages_per_peb);
 
-	return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
+read_footer:
+	return ssdfs_fsck_read_found_log_footer(env, log);
 }
 
-static
 int ssdfs_fsck_find_last_partial_log(struct ssdfs_fsck_environment *env,
 				     struct ssdfs_fsck_found_log *log)
 {
 	struct ssdfs_segment_header *hdr = NULL;
 	struct ssdfs_partial_log_header pl_hdr;
-	struct ssdfs_log_footer footer;
-	struct ssdfs_metadata_descriptor *desc;
 	size_t plh_size = sizeof(struct ssdfs_partial_log_header);
-	size_t footer_size = sizeof(struct ssdfs_log_footer);
 	u32 peb_size = env->base.erase_size;
 	u32 page_size = U32_MAX;
 	u32 pages_per_peb = U32_MAX;
 	u32 cur_page = U32_MAX;
 	u16 full_log_pages = U16_MAX;
 	u32 upper_page;
-	u32 area_offset;
-	u32 area_size;
 	u32 seg_flags;
 	u32 log_offset;
 	u32 log_bytes = U32_MAX;
+	int res;
 	int err;
 
 	SSDFS_DBG(env->base.show_debug,
@@ -333,7 +393,7 @@ int ssdfs_fsck_find_last_partial_log(struct ssdfs_fsck_environment *env,
 	if (is_ssdfs_segment_header(&log->header.magic)) {
 		hdr = &log->header.seg_hdr;
 
-		page_size = 1 << hdr->volume_hdr.log_pagesize;
+		page_size = ssdfs_fsck_log_page_size(&env->base, hdr);
 		BUG_ON(page_size == 0);
 		pages_per_peb = peb_size / page_size;
 		BUG_ON(pages_per_peb == 0);
@@ -348,49 +408,16 @@ int ssdfs_fsck_find_last_partial_log(struct ssdfs_fsck_environment *env,
 
 	BUG_ON(!hdr);
 
-	desc = &hdr->desc_array[SSDFS_LOG_FOOTER_INDEX];
-	area_offset = le32_to_cpu(desc->offset);
-	area_size = le32_to_cpu(desc->size);
 	seg_flags = le32_to_cpu(hdr->seg_flags);
 
+	/*
+	 * ssdfs_fsck_find_last_full_log() has read
+	 * the footer of the last full log.
+	 */
 	if (seg_flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER) {
-		err = ssdfs_read_partial_log_footer(&env->base,
-						    log->peb_id,
-						    peb_size,
-						    area_offset,
-						    area_size,
-						    &pl_hdr);
-		if (err) {
-			SSDFS_ERR("fail to read partial log footer: "
-				  "peb_id %llu, peb_size %u, "
-				  "area_offset %u, area_size %u, "
-				  "err %d\n",
-				  log->peb_id, peb_size,
-				  area_offset, area_size,
-				  err);
-			return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
-		}
-
-		log_bytes = le32_to_cpu(pl_hdr.log_bytes);
+		log_bytes = le32_to_cpu(log->footer.pl_hdr.log_bytes);
 	} else if (seg_flags & SSDFS_LOG_HAS_FOOTER) {
-		err = ssdfs_read_log_footer(&env->base,
-					    log->peb_id,
-					    peb_size,
-					    area_offset,
-					    area_size,
-					    &footer);
-		if (err) {
-			SSDFS_ERR("fail to read log footer: "
-				  "peb_id %llu, peb_size %u, "
-				  "area_offset %u, area_size %u, "
-				  "err %d\n",
-				  log->peb_id, peb_size,
-				  area_offset, area_size,
-				  err);
-			return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
-		}
-
-		log_bytes = le32_to_cpu(footer.log_bytes);
+		log_bytes = le32_to_cpu(log->footer.footer.log_bytes);
 	} else {
 		SSDFS_ERR("invalid state of log footer: "
 			  "peb_id %llu, start_page %u\n",
@@ -398,22 +425,14 @@ int ssdfs_fsck_find_last_partial_log(struct ssdfs_fsck_environment *env,
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	if ((log_bytes / page_size) >= full_log_pages) {
-		if (seg_flags & SSDFS_PARTIAL_HEADER_INSTEAD_FOOTER) {
-			memcpy(&log->footer.pl_hdr, &pl_hdr, plh_size);
-		} else {
-			memcpy(&log->footer.footer, &footer, footer_size);
-		}
-
+	if ((log_bytes / page_size) >= full_log_pages)
 		return SSDFS_FSCK_SEARCH_RESULT_SUCCESS;
-	}
 
 	cur_page = log->start_page + (log_bytes / page_size);
 	upper_page = log->start_page + full_log_pages;
 
 	do {
 		struct ssdfs_signature *magic = NULL;
-		u32 pl_flags;
 
 		log_offset = cur_page * page_size;
 
@@ -442,29 +461,9 @@ int ssdfs_fsck_find_last_partial_log(struct ssdfs_fsck_environment *env,
 			log->start_page = cur_page;
 		}
 
-		pl_flags = le32_to_cpu(pl_hdr.pl_flags);
-
-		if (pl_flags & SSDFS_LOG_HAS_FOOTER) {
-			desc = &pl_hdr.desc_array[SSDFS_LOG_FOOTER_INDEX];
-			area_offset = le32_to_cpu(desc->offset);
-			area_size = le32_to_cpu(desc->size);
-
-			err = ssdfs_read_log_footer(&env->base,
-						    log->peb_id,
-						    peb_size,
-						    area_offset,
-						    area_size,
-						    &log->footer.footer);
-			if (err) {
-				SSDFS_ERR("fail to read log footer: "
-					  "peb_id %llu, peb_size %u, "
-					  "area_offset %u, area_size %u, "
-					  "err %d\n",
-					  log->peb_id, peb_size,
-					  area_offset, area_size,
-					  err);
-			}
-		}
+		res = ssdfs_fsck_read_found_log_footer(env, log);
+		if (res != SSDFS_FSCK_SEARCH_RESULT_SUCCESS)
+			return res;
 
 		log_bytes = le32_to_cpu(pl_hdr.log_bytes);
 		if ((log_bytes / page_size) == 0)
@@ -498,6 +497,8 @@ int is_base_snapshot_segment_found(struct ssdfs_fsck_environment *env)
 		SSDFS_ERR("fail to get creation point\n");
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
+
+	creation_point->searched_metadata |= SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND;
 
 	base_snapshot_seg = &creation_point->base_snapshot_seg;
 	log = &base_snapshot_seg->log;
@@ -549,7 +550,6 @@ int is_base_snapshot_segment_found(struct ssdfs_fsck_environment *env)
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	env->seg_size = 1 << log->header.seg_hdr.volume_hdr.log_segsize;
 	creation_point->found_metadata |= SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND;
 
 	SSDFS_DBG(env->base.show_debug,
@@ -590,24 +590,49 @@ int __is_superblock_segment_found(struct ssdfs_fsck_environment *env,
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
-	if (!(creation_point->found_metadata &
-				SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND)) {
-		SSDFS_ERR("base snapshot segment is not found\n");
-		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
-	}
+	if (creation_point->found_metadata &
+				SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND) {
+		base_snapshot_seg = &creation_point->base_snapshot_seg;
+		log = &base_snapshot_seg->log;
+		magic = &log->header.magic;
 
-	base_snapshot_seg = &creation_point->base_snapshot_seg;
-	log = &base_snapshot_seg->log;
-	magic = &log->header.magic;
+		if (!is_ssdfs_segment_header(magic)) {
+			SSDFS_ERR("invalid state of base snapshot "
+				  "segment's found log\n");
+			return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+		}
 
-	if (is_ssdfs_segment_header(magic)) {
 		hdr = &log->header.seg_hdr;
-		leb2peb_pair = &hdr->volume_hdr.sb_pebs[cur_index][copy_index];
-		peb_id = le64_to_cpu(leb2peb_pair->peb_id);
 	} else {
-		SSDFS_ERR("invalid state of base snapshot segment's found log\n");
-		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
+		/*
+		 * Base snapshot segment is not found. But every segment
+		 * header contains the copy of volume header. The segment
+		 * header of found valid PEB (see ssdfs_find_any_valid_peb())
+		 * is used to locate the superblock segments.
+		 */
+		magic = &env->detection_result.found_valid_peb.magic;
+
+		if (!is_ssdfs_segment_header(magic)) {
+			SSDFS_DBG(env->base.show_debug,
+				  "no volume header to locate "
+				  "superblock segment\n");
+			return SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND;
+		}
+
+		hdr = &env->detection_result.found_valid_peb.seg_hdr;
+
+		if (creation_point->volume_creation_timestamp >= U64_MAX) {
+			creation_point->volume_creation_timestamp =
+				le64_to_cpu(hdr->volume_hdr.create_time);
+		}
+
+		SSDFS_DBG(env->base.show_debug,
+			  "base snapshot segment is not found: "
+			  "volume header of found valid PEB is used\n");
 	}
+
+	leb2peb_pair = &hdr->volume_hdr.sb_pebs[cur_index][copy_index];
+	peb_id = le64_to_cpu(leb2peb_pair->peb_id);
 
 	res = ssdfs_fsck_find_metadata_segment(env,
 						peb_id,
@@ -938,6 +963,8 @@ int is_superblock_segments_found(struct ssdfs_fsck_environment *env)
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
+	creation_point->searched_metadata |= SSDFS_FSCK_SB_SEGS_FOUND;
+
 	switch (is_main_superblock_segment_found(env)) {
 	case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
 		/* continue logic */
@@ -969,6 +996,7 @@ int is_superblock_segments_found(struct ssdfs_fsck_environment *env)
 	}
 
 	creation_point->found_metadata |= SSDFS_FSCK_SB_SEGS_FOUND;
+	creation_point->searched_metadata |= SSDFS_FSCK_MAPTBL_CACHE_FOUND;
 
 	switch (is_mapping_table_cache_found(env)) {
 	case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
@@ -1028,7 +1056,7 @@ int ssdfs_fsck_allocate_segbmap_logs_array(struct ssdfs_fsck_environment *env)
 	log = &creation_point->superblock_seg.logs[SSDFS_MAIN_SB_SEG];
 	segbmap_hdr = &log->header.seg_hdr.volume_hdr.segbmap;
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
+	lebs_per_seg = env->base.seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
 
 	segs_count = 0;
@@ -1082,7 +1110,7 @@ int ssdfs_fsck_allocate_segbmap_logs_array(struct ssdfs_fsck_environment *env)
 		}
 	}
 
-	volume_segs = env->base.fs_size / env->seg_size;
+	volume_segs = env->base.fs_size / env->base.seg_size;
 	threshold = (volume_segs * 25) / 100;
 
 	if (segs_count == 0 || segs_count > threshold) {
@@ -1413,7 +1441,7 @@ int ssdfs_fsck_find_segbmap_segment_by_id(struct ssdfs_fsck_environment *env,
 
 	segbmap = &creation_point->segbmap;
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
+	lebs_per_seg = env->base.seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
 
 	start_leb_id = seg_id * lebs_per_seg;
@@ -1491,7 +1519,7 @@ int ssdfs_fsck_find_segbmap_extent(struct ssdfs_fsck_environment *env,
 	segbmap = &creation_point->segbmap;
 	segbmap_hdr = &segbmap->segbmap_sb_hdr;
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
+	lebs_per_seg = env->base.seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
 
 	if (extent_index >= SEGBMAP_LIMIT1) {
@@ -1685,6 +1713,8 @@ int is_segment_bitmap_found(struct ssdfs_fsck_environment *env)
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
 
+	creation_point->searched_metadata |= SSDFS_FSCK_SEGMENT_BITMAP_FOUND;
+
 	res = ssdfs_fsck_allocate_segbmap_logs_array(env);
 	switch (res) {
 	case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
@@ -1771,7 +1801,7 @@ int ssdfs_fsck_allocate_maptbl_logs_array(struct ssdfs_fsck_environment *env)
 	log = &creation_point->superblock_seg.logs[SSDFS_MAIN_SB_SEG];
 	maptbl_hdr = &log->header.seg_hdr.volume_hdr.maptbl;
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
+	lebs_per_seg = env->base.seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
 
 	segs_count = 0;
@@ -1825,7 +1855,7 @@ int ssdfs_fsck_allocate_maptbl_logs_array(struct ssdfs_fsck_environment *env)
 		}
 	}
 
-	volume_segs = env->base.fs_size / env->seg_size;
+	volume_segs = env->base.fs_size / env->base.seg_size;
 	threshold = (volume_segs * 25) / 100;
 
 	if (segs_count == 0 || segs_count > threshold) {
@@ -2065,7 +2095,7 @@ int ssdfs_fsck_find_maptbl_segment(struct ssdfs_fsck_environment *env,
 
 	maptbl = &creation_point->maptbl;
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
+	lebs_per_seg = env->base.seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
 
 	start_leb_id = seg_id * lebs_per_seg;
@@ -2143,7 +2173,7 @@ int ssdfs_fsck_find_maptbl_extent(struct ssdfs_fsck_environment *env,
 	maptbl = &creation_point->maptbl;
 	maptbl_hdr = &maptbl->maptbl_sb_hdr;
 
-	lebs_per_seg = env->seg_size / env->base.erase_size;
+	lebs_per_seg = env->base.seg_size / env->base.erase_size;
 	BUG_ON(lebs_per_seg == 0);
 
 	if (extent_index >= MAPTBL_LIMIT1) {
@@ -2336,6 +2366,8 @@ int is_mapping_table_found(struct ssdfs_fsck_environment *env)
 		SSDFS_ERR("fail to get creation point\n");
 		return SSDFS_FSCK_SEARCH_RESULT_FAILURE;
 	}
+
+	creation_point->searched_metadata |= SSDFS_FSCK_MAPPING_TBL_FOUND;
 
 	res = ssdfs_fsck_allocate_maptbl_logs_array(env);
 	switch (res) {
@@ -2596,8 +2628,8 @@ int ssdfs_fsck_process_peb(struct ssdfs_thread_state *state)
 void *ssdfs_fsck_process_peb_range(void *arg)
 {
 	struct ssdfs_thread_state *state = (struct ssdfs_thread_state *)arg;
-	u64 per_1_percent = 0;
-	u64 message_threshold = 0;
+	u64 percentage;
+	u64 shown_percentage = 0;
 	u64 start_peb_id;
 	u64 i;
 	int err;
@@ -2612,12 +2644,6 @@ void *ssdfs_fsck_process_peb_range(void *arg)
 	state->err = 0;
 	start_peb_id = state->peb.id;
 
-	per_1_percent = state->peb.pebs_count / 100;
-	if (per_1_percent == 0)
-		per_1_percent = 1;
-
-	message_threshold = per_1_percent;
-
 	SSDFS_FSCK_INFO(state->base.show_info,
 			"thread %d, PEB %llu, percentage %u\n",
 			state->id, state->peb.id, 0);
@@ -2625,13 +2651,22 @@ void *ssdfs_fsck_process_peb_range(void *arg)
 	for (i = 0; i < state->peb.pebs_count; i++) {
 		state->peb.id = start_peb_id + i;
 
-		if (i >= message_threshold) {
+		/*
+		 * Percentage of processed PEBs. It cannot be calculated
+		 * by means of PEBs count per 1%: integer division gives
+		 * wrong result if PEBs count is not multiple of 100
+		 * (for example, 256 PEBs give 2 PEBs per 1% and 127%
+		 * at the end).
+		 */
+		percentage = (i * 100) / state->peb.pebs_count;
+
+		if (percentage > shown_percentage) {
 			SSDFS_FSCK_INFO(state->base.show_info,
 					"thread %d, PEB %llu, percentage %llu\n",
 					state->id, state->peb.id,
-					(i / per_1_percent));
+					percentage);
 
-			message_threshold += per_1_percent;
+			shown_percentage = percentage;
 		}
 
 		err = ssdfs_fsck_process_peb(state);
@@ -2941,6 +2976,7 @@ int execute_whole_volume_search(struct ssdfs_fsck_environment *env)
 		ssdfs_init_thread_state(&env->threads.jobs[i],
 					i,
 					&env->base,
+					NULL,
 					pebs_per_thread,
 					pebs_count,
 					env->base.erase_size);
@@ -2995,6 +3031,104 @@ free_threads_pool:
 	return res;
 }
 
+/*
+ * is_peb0_segment_header_valid() - check segment header of PEB #0
+ * @env: fsck environment
+ *
+ * PEB #0 contains the segment header of base snapshot segment.
+ *
+ * RETURN: SSDFS_TRUE if PEB #0 has segment header with valid
+ *         signature and checksum.
+ */
+static
+int is_peb0_segment_header_valid(struct ssdfs_fsck_environment *env)
+{
+	struct ssdfs_segment_header hdr;
+	size_t hdr_size = sizeof(struct ssdfs_segment_header);
+	int err;
+
+	err = ssdfs_read_segment_header(&env->base, 0, env->base.erase_size,
+					0, hdr_size, &hdr);
+	if (err) {
+		SSDFS_DBG(env->base.show_debug,
+			  "fail to read segment header of PEB #0: "
+			  "err %d\n", err);
+		return SSDFS_FALSE;
+	}
+
+	if (!is_ssdfs_segment_header(&hdr.volume_hdr.magic))
+		return SSDFS_FALSE;
+
+	return is_csum_valid(&hdr.volume_hdr.check, &hdr, hdr_size);
+}
+
+/*
+ * ssdfs_fsck_find_foreign_file_system() - find another file system
+ * @env: fsck environment
+ *
+ * Another file system can be created on the device that contained
+ * SSDFS volume. Such file system overwrites PEB #0 (for example,
+ * ext4 superblock is located at the same offset as SSDFS segment
+ * header) but the rest of erase blocks can keep stale SSDFS metadata.
+ * The method probes the superblock signatures of known file systems
+ * (by means of libblkid) and stores the type of found file system
+ * into env->detection_result.foreign_fs_type.
+ *
+ * RETURN: SSDFS_TRUE if another file system has been found.
+ */
+static
+int ssdfs_fsck_find_foreign_file_system(struct ssdfs_fsck_environment *env)
+{
+	char *fs_type = env->detection_result.foreign_fs_type;
+	size_t fs_type_len = sizeof(env->detection_result.foreign_fs_type);
+	blkid_probe pr;
+	const char *type = NULL;
+	int found = SSDFS_FALSE;
+	int res;
+
+	pr = blkid_new_probe();
+	if (!pr) {
+		SSDFS_DBG(env->base.show_debug,
+			  "fail to create blkid probe\n");
+		return SSDFS_FALSE;
+	}
+
+	if (blkid_probe_set_device(pr, env->base.fd, 0, 0)) {
+		SSDFS_DBG(env->base.show_debug,
+			  "fail to set device of blkid probe\n");
+		goto finish_probe;
+	}
+
+	blkid_probe_enable_partitions(pr, 0);
+	blkid_probe_enable_superblocks(pr, 1);
+	blkid_probe_set_superblocks_flags(pr, BLKID_SUBLKS_TYPE);
+
+	res = blkid_do_safeprobe(pr);
+	if (res != 0) {
+		/* nothing found (1), ambiguous result (-2) or error (-1) */
+		SSDFS_DBG(env->base.show_debug,
+			  "no file system signature: res %d\n", res);
+		goto finish_probe;
+	}
+
+	if (blkid_probe_lookup_value(pr, "TYPE", &type, NULL) || !type)
+		goto finish_probe;
+
+	if (strcmp(type, "ssdfs") == 0)
+		goto finish_probe;
+
+	snprintf(fs_type, fs_type_len, "%s", type);
+	found = SSDFS_TRUE;
+
+	SSDFS_DBG(env->base.show_debug,
+		  "another file system has been found: type %s\n",
+		  fs_type);
+
+finish_probe:
+	blkid_free_probe(pr);
+	return found;
+}
+
 int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
 {
 	struct ssdfs_fsck_detection_result *detection_result;
@@ -3013,6 +3147,34 @@ int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
 
 	err = ssdfs_find_any_valid_peb(&env->base, &buf->seg_hdr);
 	if (err == -ENODATA) {
+		/*
+		 * Another file system doesn't need the scan
+		 * of the whole device.
+		 */
+		if (ssdfs_fsck_find_foreign_file_system(env)) {
+			SSDFS_DBG(env->base.show_debug,
+				  "device contains %s file system\n",
+				  env->detection_result.foreign_fs_type);
+			env->detection_result.state =
+					SSDFS_FSCK_NO_FILE_SYSTEM_DETECTED;
+			goto finish_detection;
+		}
+
+		/*
+		 * The beginning of the device can be overwritten
+		 * (for example, zeroed) but the rest of the volume
+		 * can still contain the valid PEBs.
+		 */
+		SSDFS_FSCK_INFO(env->base.show_info,
+				"No valid PEB at the beginning of %s: "
+				"scan the whole device...\n",
+				env->base.dev_name);
+
+		err = ssdfs_scan_device_for_valid_peb(&env->base,
+						      &buf->seg_hdr);
+	}
+
+	if (err == -ENODATA) {
 		SSDFS_DBG(env->base.show_debug,
 			  "unable to find any valid PEB\n");
 		env->detection_result.state = SSDFS_FSCK_NO_FILE_SYSTEM_DETECTED;
@@ -3022,8 +3184,36 @@ int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
 		goto detection_failure;
 	}
 
-	env->base.erase_size = 1 << buf->seg_hdr.volume_hdr.log_erasesize;
-	env->base.page_size = 1 << buf->seg_hdr.volume_hdr.log_pagesize;
+	/*
+	 * The valid SSDFS metadata have been found in some PEB.
+	 * But if PEB #0 has no valid segment header and contains
+	 * another file system, then the found metadata are stale
+	 * metadata of SSDFS volume that existed before creation
+	 * of another file system. A healthy SSDFS volume can keep
+	 * stale signatures of previous file system. As a result,
+	 * the signatures are probed only if PEB #0 is not valid.
+	 */
+	if (!is_peb0_segment_header_valid(env) &&
+	    ssdfs_fsck_find_foreign_file_system(env)) {
+		SSDFS_DBG(env->base.show_debug,
+			  "stale SSDFS metadata: "
+			  "device contains %s file system\n",
+			  env->detection_result.foreign_fs_type);
+		env->detection_result.stale_ssdfs_found = SSDFS_TRUE;
+		env->detection_result.state = SSDFS_FSCK_NO_FILE_SYSTEM_DETECTED;
+		goto finish_detection;
+	}
+
+	env->base.erase_size =
+		ssdfs_fsck_log2_to_size(buf->seg_hdr.volume_hdr.log_erasesize);
+	env->base.page_size =
+		ssdfs_fsck_log2_to_size(buf->seg_hdr.volume_hdr.log_pagesize);
+	env->base.seg_size =
+		ssdfs_fsck_log2_to_size(buf->seg_hdr.volume_hdr.log_segsize);
+	env->base.fs_create_time =
+			le64_to_cpu(buf->seg_hdr.volume_hdr.create_time);
+	memcpy(env->base.fs_uuid, buf->seg_hdr.volume_hdr.uuid,
+		SSDFS_UUID_SIZE);
 
 	for (i = 0; i < SSDFS_FSCK_SEARCH_FUNCTION_MAX; i++) {
 		switch (detect_actions[i](env)) {
@@ -3032,6 +3222,15 @@ int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
 			break;
 
 		case SSDFS_FSCK_SEARCH_RESULT_NOT_FOUND:
+			/*
+			 * The rest of metadata can be located by means of
+			 * volume header of found valid PEB, if base snapshot
+			 * segment has not been found. Otherwise, the next
+			 * metadata structures depend on the not found one.
+			 */
+			if (detect_actions[i] == is_base_snapshot_segment_found)
+				break;
+
 			goto complete_volume_search;
 
 		default:
@@ -3041,7 +3240,15 @@ int is_device_contains_ssdfs_volume(struct ssdfs_fsck_environment *env)
 		}
 	}
 
-	if (env->force_checking) {
+	creation_point = ssdfs_fsck_get_creation_point(env, 0);
+	if (!creation_point) {
+		SSDFS_ERR("fail to get creation point\n");
+		goto detection_failure;
+	}
+
+	if (env->force_checking ||
+	    !(creation_point->found_metadata &
+				SSDFS_FSCK_BASE_SNAPSHOT_SEG_FOUND)) {
 complete_volume_search:
 		switch (execute_whole_volume_search(env)) {
 		case SSDFS_FSCK_SEARCH_RESULT_SUCCESS:
@@ -3065,8 +3272,13 @@ complete_volume_search:
 		env->detection_result.state = SSDFS_FSCK_NO_FILE_SYSTEM_DETECTED;
 		SSDFS_DBG(env->base.show_debug,
 			  "file system hasn't been detected\n");
-	} else if (creation_point->found_metadata ==
+	} else if ((creation_point->found_metadata &
+			SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK) ==
 				SSDFS_FSCK_ALL_CRITICAL_METADATA_FOUND_MASK) {
+		/*
+		 * Non-critical flags (for example,
+		 * SSDFS_FSCK_METADATA_PEB_MAP_PREPARED) can be set too.
+		 */
 		env->detection_result.state = SSDFS_FSCK_DEVICE_HAS_FILE_SYSTEM;
 		SSDFS_DBG(env->base.show_debug,
 			  "file system has been found\n");

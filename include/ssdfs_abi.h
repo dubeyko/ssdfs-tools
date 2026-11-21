@@ -111,6 +111,10 @@
 #define SSDFS_PEB_CACHE_INO			15
 #define SSDFS_ROOT_INO				16
 
+#define SSDFS_INITIAL_SNAPSHOT_SEG_ID		0
+#define SSDFS_INITIAL_SNAPSHOT_SEG_LEB_ID	0
+#define SSDFS_INITIAL_SNAPSHOT_SEG_PEB_ID	0
+
 /*
  * struct ssdfs_revision - metadata structure version
  * @major: major version number

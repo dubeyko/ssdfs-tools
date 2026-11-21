@@ -769,30 +769,200 @@ int ssdfs_read_partial_log_header(struct ssdfs_environment *env,
 	return 0;
 }
 
-#define SSDFS_TOOLS_PEB_SEARCH_SHIFT	(1)
+#define SSDFS_TOOLS_PROBE_MIN_LOG_ERASESIZE	(17)	/* 128KB */
+#define SSDFS_TOOLS_PROBE_MAX_LOG_ERASESIZE	(31)	/* 2GB */
+#define SSDFS_TOOLS_PROBE_PEBS_MAX		(16)
+#define SSDFS_TOOLS_MIN_LOG_PAGESIZE		(12)	/* 4KB */
+#define SSDFS_TOOLS_MAX_LOG_PAGESIZE		(17)	/* 128KB */
+#define SSDFS_TOOLS_MAX_LOG_SEGSIZE		(31)	/* u32 segment size */
 
+/*
+ * is_segment_header_valid() - check segment header's magic and checksum
+ * @hdr: segment header
+ */
+static inline
+int is_segment_header_valid(struct ssdfs_segment_header *hdr)
+{
+	struct ssdfs_signature *magic = &hdr->volume_hdr.magic;
+	struct ssdfs_metadata_check *check = &hdr->volume_hdr.check;
+
+	if (le32_to_cpu(magic->common) != SSDFS_SUPER_MAGIC ||
+	    le16_to_cpu(magic->key) != SSDFS_SEGMENT_HDR_MAGIC)
+		return SSDFS_FALSE;
+
+	return is_csum_valid(check, hdr,
+			     sizeof(struct ssdfs_segment_header));
+}
+
+/*
+ * is_volume_geometry_valid() - check volume geometry of segment header
+ * @env: environment
+ * @hdr: segment header
+ *
+ * The found segment header defines the volume geometry (page size,
+ * erase size and segment size) for the rest of the logic. The header
+ * can have valid checksum but corrupted geometry (for example, after
+ * memory corruption before the header has been written). Such header
+ * cannot be the source of the volume geometry: the erase block has to
+ * contain several pages, the segment has to contain at least one erase
+ * block, and the segment cannot be bigger than the volume.
+ */
+static inline
+int is_volume_geometry_valid(struct ssdfs_environment *env,
+			     struct ssdfs_segment_header *hdr)
+{
+	struct ssdfs_volume_header *vh = &hdr->volume_hdr;
+
+	if (vh->log_pagesize < SSDFS_TOOLS_MIN_LOG_PAGESIZE ||
+	    vh->log_pagesize > SSDFS_TOOLS_MAX_LOG_PAGESIZE)
+		return SSDFS_FALSE;
+
+	if (vh->log_erasesize < SSDFS_TOOLS_PROBE_MIN_LOG_ERASESIZE ||
+	    vh->log_erasesize > SSDFS_TOOLS_PROBE_MAX_LOG_ERASESIZE ||
+	    vh->log_erasesize <= vh->log_pagesize)
+		return SSDFS_FALSE;
+
+	if (vh->log_segsize < vh->log_erasesize ||
+	    vh->log_segsize > SSDFS_TOOLS_MAX_LOG_SEGSIZE)
+		return SSDFS_FALSE;
+
+	if (((u64)1 << vh->log_segsize) > env->fs_size)
+		return SSDFS_FALSE;
+
+	return SSDFS_TRUE;
+}
+
+/*
+ * ssdfs_find_any_valid_peb() - find any PEB with valid segment header
+ * @env: environment
+ * @hdr: buffer for found segment header [out]
+ *
+ * The segment header of PEB #0 (base snapshot segment) defines
+ * the erase size of the volume. If this header is corrupted,
+ * then erase size is unknown. As a result, the method probes
+ * the first PEBs for every possible erase size. The found header
+ * is accepted only if it describes the same erase size that has
+ * been used to find it. The header of PEB #0 or of any probed PEB
+ * is accepted only if it describes valid volume geometry.
+ *
+ * RETURN:
+ * [success]
+ * [failure] - error code:
+ *
+ * %-ENODATA     - no valid segment header has been found.
+ */
 int ssdfs_find_any_valid_peb(struct ssdfs_environment *env,
 			     struct ssdfs_segment_header *hdr)
 {
-	size_t sg_size = sizeof(struct ssdfs_segment_header);
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
-	u32 peb_size = env->erase_size;
-	u64 factor = 1;
-	int err = -ENODATA;
+	u32 sg_size = sizeof(struct ssdfs_segment_header);
+	u32 log_erasesize;
+	u64 peb_id;
+	int err;
 
-	do {
-		struct ssdfs_signature *magic = NULL;
-		struct ssdfs_metadata_check *check = NULL;
+	SSDFS_DBG(env->show_debug,
+		  "try to read the offset %u\n",
+		  SSDFS_RESERVED_VBR_SIZE);
 
-		SSDFS_DBG(env->show_debug,
-			  "try to read the offset %llu\n",
-			  offset);
+	err = ssdfs_read_segment_header(env, 0, env->erase_size,
+					0, sg_size, hdr);
+	if (err) {
+		SSDFS_ERR("fail to read segment header of PEB #0: "
+			  "err %d\n", err);
+		return err;
+	}
 
-		err = ssdfs_read_segment_header(env,
-						offset / peb_size,
-						peb_size,
-						0, peb_size,
-						hdr);
+	if (is_segment_header_valid(hdr) &&
+	    is_volume_geometry_valid(env, hdr))
+		return 0;
+
+	SSDFS_DBG(env->show_debug,
+		  "PEB #0 has corrupted segment header "
+		  "or volume geometry: probe the first PEBs\n");
+
+	for (log_erasesize = SSDFS_TOOLS_PROBE_MIN_LOG_ERASESIZE;
+	     log_erasesize <= SSDFS_TOOLS_PROBE_MAX_LOG_ERASESIZE;
+	     log_erasesize++) {
+		u32 erase_size = (u32)1 << log_erasesize;
+
+		for (peb_id = 1; peb_id <= SSDFS_TOOLS_PROBE_PEBS_MAX; peb_id++) {
+			if (((peb_id + 1) * erase_size) > env->fs_size)
+				break;
+
+			err = ssdfs_read_segment_header(env, peb_id,
+							erase_size,
+							0, sg_size, hdr);
+			if (err) {
+				SSDFS_ERR("fail to read segment header: "
+					  "peb_id %llu, erase_size %u, "
+					  "err %d\n",
+					  peb_id, erase_size, err);
+				return err;
+			}
+
+			if (!is_segment_header_valid(hdr))
+				continue;
+
+			if (hdr->volume_hdr.log_erasesize != log_erasesize)
+				continue;
+
+			if (!is_volume_geometry_valid(env, hdr))
+				continue;
+
+			SSDFS_DBG(env->show_debug,
+				  "valid segment header has been found: "
+				  "peb_id %llu, erase_size %u\n",
+				  peb_id, erase_size);
+			return 0;
+		}
+	}
+
+	SSDFS_DBG(env->show_debug,
+		  "SSDFS has not been found on the device %s\n",
+		  env->dev_name);
+
+	return -ENODATA;
+}
+
+/*
+ * ssdfs_scan_device_for_valid_peb() - scan whole device for valid PEB
+ * @env: environment
+ * @hdr: buffer for found segment header [out]
+ *
+ * ssdfs_find_any_valid_peb() probes only PEB #0 and the first PEBs.
+ * If the beginning of the device has been overwritten (for example,
+ * zeroed), then the rest of the volume can still contain the valid
+ * PEBs. The method reads the segment header at every offset that is
+ * aligned on the minimal erase size (128KB) and accepts the header
+ * only if the offset is aligned on the erase size that the header
+ * describes and the header describes valid volume geometry.
+ * The method issues one read per 128KB of the device. It should be
+ * used only if ssdfs_find_any_valid_peb() has failed.
+ *
+ * RETURN:
+ * [success]
+ * [failure] - error code:
+ *
+ * %-ENODATA     - no valid segment header has been found.
+ */
+int ssdfs_scan_device_for_valid_peb(struct ssdfs_environment *env,
+				    struct ssdfs_segment_header *hdr)
+{
+	u32 sg_size = sizeof(struct ssdfs_segment_header);
+	u32 step = (u32)1 << SSDFS_TOOLS_PROBE_MIN_LOG_ERASESIZE;
+	u64 pebs_count = env->fs_size / step;
+	u64 peb_id;
+	int err;
+
+	SSDFS_DBG(env->show_debug,
+		  "scan the device %s: step %u, pebs_count %llu\n",
+		  env->dev_name, step, pebs_count);
+
+	for (peb_id = 1; peb_id < pebs_count; peb_id++) {
+		u64 offset = peb_id * step;
+		u32 log_erasesize;
+
+		err = ssdfs_read_segment_header(env, peb_id, step,
+						0, sg_size, hdr);
 		if (err) {
 			SSDFS_ERR("fail to read segment header: "
 				  "offset %llu, err %d\n",
@@ -800,32 +970,27 @@ int ssdfs_find_any_valid_peb(struct ssdfs_environment *env,
 			return err;
 		}
 
-		magic = &hdr->volume_hdr.magic;
-		check = &hdr->volume_hdr.check;
+		if (!is_segment_header_valid(hdr))
+			continue;
 
-		if (le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
-		    le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC) {
-			if (!is_csum_valid(check, hdr, sg_size))
-				err = -ENODATA;
-		} else
-			err = -ENODATA;
+		/* log_erasesize is in the valid range after this check */
+		if (!is_volume_geometry_valid(env, hdr))
+			continue;
 
-		if (!err)
-			break;
+		log_erasesize = hdr->volume_hdr.log_erasesize;
+		if (offset % ((u64)1 << log_erasesize))
+			continue;
 
-		if (offset == SSDFS_RESERVED_VBR_SIZE)
-			offset = env->erase_size;
-		else {
-			factor <<= SSDFS_TOOLS_PEB_SEARCH_SHIFT;
-			offset += factor * env->erase_size;
-		}
-	} while (offset < env->fs_size);
-
-	if (err) {
-		SSDFS_ERR("SSDFS has not been found on the device %s\n",
-			  env->dev_name);
-		return err;
+		SSDFS_DBG(env->show_debug,
+			  "valid segment header has been found: "
+			  "offset %llu, erase_size %llu\n",
+			  offset, (u64)1 << log_erasesize);
+		return 0;
 	}
 
-	return 0;
+	SSDFS_DBG(env->show_debug,
+		  "SSDFS has not been found on the device %s\n",
+		  env->dev_name);
+
+	return -ENODATA;
 }

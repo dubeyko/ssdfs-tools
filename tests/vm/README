@@ -1,0 +1,99 @@
+SSDFS tools: VM tests
+=====================
+
+These scripts are executed inside a virtual machine (as root) with
+SSDFS kernel driver and a disposable block device. They are NOT part
+of "make check": they destroy the content of the device.
+
+Every guest script has the same interface:
+
+    <script> <device> <log dir>
+
+    Environment:
+      TOOLS_DIR - ssdfs-tools build (default: this source tree,
+                  i.e. the tools are built in-tree)
+      MKFS_OPTS - options of mkfs.ssdfs
+
+Scripts
+-------
+
+guest-fsck.sh
+    mkfs -> fsck -> mount, I/O, umount -> fsck -> recoverfs.
+    Checks that fsck.ssdfs reports healthy volume (exit code 0)
+    and recoverfs.ssdfs succeeds on the volume after I/O.
+    FSCK_OPTS defines fsck options (default: -n -f -v).
+    Debug output: <log dir>/fsck-{fresh,after-io}-debug.log,
+                  <log dir>/recoverfs-after-io-debug.log.
+
+guest-fsck-corrupt.sh
+    fsck.ssdfs/recoverfs.ssdfs corruption tests. The volume is
+    created once by mkfs.ssdfs. Every test case restores pristine
+    metadata (the first 128MB), corrupts one field of the base
+    snapshot segment's log (PEB #0) by ssdfs-corrupt.py and checks:
+      (1) exit code of fsck.ssdfs;
+      (2) diagnostic message of the corrupted item (debug output);
+      (3) number of corrupted items of base snapshot segment.
+    Also checks fsck exit codes of usage error and absent volume,
+    that fsck.ssdfs reports no SSDFS volume (without suggesting
+    the recovery) if ext4 has been created over SSDFS volume
+    (requires mkfs.ext4 in the guest), and that recoverfs.ssdfs
+    finds a valid PEB if PEB #0 is corrupted. The zeroed-first-4kb
+    case zeroes the segment header of PEB #0: only base snapshot
+    segment has to be reported as not found (the rest of metadata
+    is located by volume header of another PEB). The zeroed-head case
+    re-creates the volume with 128KB erase size, copies PEB #8 into
+    PEB #313 and zeroes PEBs #0-312: fsck.ssdfs has to scan the whole
+    device and report the corrupted volume, recoverfs.ssdfs and
+    dump.ssdfs (-g) have to find the valid PEB.
+    CASES selects test cases (default: all).
+    Output: CORRUPT-TEST <case> PASS|FAIL lines, the final
+            "SSDFS-TEST: PASS|FAIL" line, <log dir>/corrupt/<case>.log.
+    Requires python3 in the guest.
+
+ssdfs-corrupt.py <device> <case>
+ssdfs-corrupt.py --list
+    Corrupts one field of segment header or log footer of PEB #0
+    (header-segbmap-* and header-maptbl-* cases corrupt segment bitmap
+    and mapping table headers of the volume header, including their
+    metadata extents). The checksum of the modified structure is
+    recalculated (except
+    signature and checksum cases), so only the target item has to be
+    detected as corrupted. The exception is header-log-* and
+    header-pebs-per-seg cases: the volume geometry fields depend on
+    each other, so all items that use the geometry are detected as
+    corrupted. fsck.ssdfs takes the volume geometry from PEB #0 if
+    the geometry looks sane (header-log-segsize case), otherwise
+    from another PEB (header-log-erasesize case). The
+    header-log-erasesize-max and header-log-segsize-overflow cases
+    check extreme values (fsck.ssdfs must not fail or crash).
+    The layout offsets correspond to
+    include/ssdfs_abi.h: update them if on-disk layout changes.
+
+fsck.ssdfs corruption report (-R|--report-level)
+-------------------------------------------------
+
+    1|summary  - state of key metadata structures (default)
+    2|parts    - + corrupted parts of metadata structures
+                 with the number of corrupted items
+    3|full     - + every corrupted item
+
+guest-fsck-corrupt.sh uses -R 3 to check the reported items.
+
+fsck.ssdfs exit codes
+---------------------
+
+    0  - no errors
+    1  - errors corrected
+    4  - errors left uncorrected
+    8  - operational error (including absent SSDFS volume)
+    16 - usage error
+
+Example (virtme-ng)
+-------------------
+
+    ./autogen.sh && ./configure && make
+    truncate -s 2G /tmp/ssdfs.img
+    mkdir -p logs
+    vng --run <kernel build> --disk /tmp/ssdfs.img --user root \
+        --rwdir $PWD --exec \
+        "tests/vm/guest-fsck-corrupt.sh /dev/vda $PWD/logs"

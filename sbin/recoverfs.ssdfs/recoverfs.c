@@ -242,7 +242,19 @@ int ssdfs_recoverfs_extract_inline_files(struct ssdfs_recoverfs_environment *env
 		    name,
 		    O_RDWR | O_LARGEFILE,
 		    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-	if (fd < 0) {
+	if (fd < 0 && errno == ENOENT) {
+		/*
+		 * No inodes b-tree's node has been recovered
+		 * (for example, b-tree has root node only).
+		 * Nothing to extract.
+		 */
+		SSDFS_DBG(env->base.show_debug,
+			  "no inodes b-tree's nodes: "
+			  "output_folder %s, file %s\n",
+			  env->output_folder.name,
+			  name);
+		return 0;
+	} else if (fd < 0) {
 		err = errno;
 		SSDFS_ERR("unable to open %s: %s\n",
 			  name, strerror(errno));
@@ -372,6 +384,17 @@ int main(int argc, char *argv[])
 			     "[002]\tFIND FIRST VALID PEB...\n");
 
 	err = ssdfs_find_any_valid_peb(&env.base, &buf.seg_hdr);
+	if (err == -ENODATA) {
+		/*
+		 * The beginning of the device can be overwritten
+		 * but the rest of the volume can contain the valid PEBs.
+		 */
+		SSDFS_RECOVERFS_INFO(env.base.show_info,
+				     "No valid PEB at the beginning "
+				     "of the device: scan the whole device...\n");
+		err = ssdfs_scan_device_for_valid_peb(&env.base, &buf.seg_hdr);
+	}
+
 	if (err) {
 		SSDFS_ERR("unable to find any valid PEB\n");
 		goto close_device;

@@ -26,8 +26,6 @@
 
 #include "dumpfs.h"
 
-#define SSDFS_DUMPFS_PEB_SEARCH_SHIFT	(1)
-
 /*
  * Make sure that the output folder exists and can be written before
  * the dumping starts. Otherwise, every dumped log would fail separately.
@@ -403,63 +401,48 @@ int ssdfs_dumpfs_read_partial_log_header(struct ssdfs_dumpfs_environment *env,
 	return 0;
 }
 
+/*
+ * ssdfs_dumpfs_find_any_valid_peb() - find any PEB with valid segment header
+ * @env: dump environment
+ * @hdr: buffer for found segment header [out]
+ *
+ * The method probes PEB #0 and the first PEBs for every possible
+ * erase size. If the beginning of the device has been overwritten
+ * (for example, zeroed), then the method scans the whole device.
+ *
+ * RETURN:
+ * [success]
+ * [failure] - error code:
+ *
+ * %-ENODATA     - no valid segment header has been found.
+ */
 int ssdfs_dumpfs_find_any_valid_peb(struct ssdfs_dumpfs_environment *env,
 				    struct ssdfs_segment_header *hdr)
 {
-	size_t sg_size = sizeof(struct ssdfs_segment_header);
-	u64 offset = SSDFS_RESERVED_VBR_SIZE;
-	u32 peb_size = env->base.erase_size;
-	u64 factor = 1;
-	int err = -ENODATA;
+	int err;
 
 	SSDFS_DBG(env->base.show_debug,
 		  "command: %#x\n",
 		  env->command);
 
-	do {
-		struct ssdfs_signature *magic = NULL;
-		struct ssdfs_metadata_check *check = NULL;
+	err = ssdfs_find_any_valid_peb(&env->base, hdr);
+	if (err == -ENODATA) {
+		SSDFS_DUMPFS_INFO(env->base.show_info,
+				  "No valid PEB at the beginning of %s: "
+				  "scan the whole device...\n",
+				  env->base.dev_name);
 
-		SSDFS_DBG(env->base.show_debug,
-			  "try to read the offset %llu\n",
-			  offset);
+		err = ssdfs_scan_device_for_valid_peb(&env->base, hdr);
+	}
 
-		err = ssdfs_read_segment_header(&env->base,
-						offset / peb_size,
-						peb_size,
-						0, peb_size,
-						hdr);
-		if (err) {
-			SSDFS_ERR("fail to read segment header: "
-				  "offset %llu, err %d\n",
-				  offset, err);
-			return err;
-		}
-
-		magic = &hdr->volume_hdr.magic;
-		check = &hdr->volume_hdr.check;
-
-		if (le32_to_cpu(magic->common) == SSDFS_SUPER_MAGIC &&
-		    le16_to_cpu(magic->key) == SSDFS_SEGMENT_HDR_MAGIC) {
-			if (!is_csum_valid(check, hdr, sg_size))
-				err = -ENODATA;
-		} else
-			err = -ENODATA;
-
-		if (!err)
-			break;
-
-		if (offset == SSDFS_RESERVED_VBR_SIZE)
-			offset = env->base.erase_size;
-		else {
-			factor <<= SSDFS_DUMPFS_PEB_SEARCH_SHIFT;
-			offset += factor * env->base.erase_size;
-		}
-	} while (offset < env->base.fs_size);
-
-	if (err) {
+	if (err == -ENODATA) {
 		SSDFS_ERR("SSDFS isn't found on the device %s\n",
 			  env->base.dev_name);
+		return err;
+	} else if (err) {
+		SSDFS_ERR("fail to find any valid PEB: "
+			  "device %s, err %d\n",
+			  env->base.dev_name, err);
 		return err;
 	}
 

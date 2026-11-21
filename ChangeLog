@@ -2,6 +2,9 @@
 *                            CHANGELOG SECTION                                 *
 ********************************************************************************
 
+v.4.78 [November 20, 2026]
+    (*) [fsck] Implement base snapshot check logic.
+
 v.4.77 [November 11, 2026]
     (*) Create multiple fragments per one PEB in segment bitmap's
         and PEB mapping table's segments.
