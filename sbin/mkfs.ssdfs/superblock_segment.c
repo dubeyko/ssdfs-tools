@@ -1653,11 +1653,10 @@ int sb_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			if (i != SSDFS_CUR_SB_SEG)
 				goto inc_seg_index;
 
-			layout->calculated_open_zones++;
-
-			SSDFS_DBG(layout->env.show_debug,
-				  "calculated_open_zones %u\n",
-				  layout->calculated_open_zones);
+			err = account_open_zone(layout,
+				layout->segs[seg_index].pebs[peb_index].peb_id);
+			if (err)
+				return err;
 
 			layout->segs[seg_index].pebs_count = 1;
 			BUG_ON(layout->segs[seg_index].pebs_count >

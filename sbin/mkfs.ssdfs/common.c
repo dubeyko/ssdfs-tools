@@ -4196,3 +4196,74 @@ int commit_metadata_peb_log(struct ssdfs_volume_layout *layout,
 
 	return 0;
 }
+
+/*
+ * is_peb_in_conventional_zone() - check that PEB is a conventional zone
+ * @layout: pointer on volume layout
+ * @peb_id: PEB ID
+ *
+ * Zoned device (for example, SMR HDD) can contain conventional zones.
+ * Conventional zone has no write pointer, it doesn't need to be
+ * opened/finished/reset and it doesn't consume the open zones
+ * resource of the device.
+ *
+ * RETURN:
+ * [SSDFS_TRUE]  - PEB is a conventional zone of zoned device.
+ * [SSDFS_FALSE] - PEB is a sequential zone or device is not zoned.
+ * [failure]     - negative error code.
+ */
+int is_peb_in_conventional_zone(struct ssdfs_volume_layout *layout,
+				u64 peb_id)
+{
+	if (layout->env.device_type != SSDFS_ZNS_DEVICE)
+		return SSDFS_FALSE;
+
+	if (peb_id == U64_MAX) {
+		SSDFS_ERR("invalid peb_id\n");
+		return -ERANGE;
+	}
+
+	return zns_is_conventional_peb(layout->env.fd,
+					peb_id * layout->env.erase_size,
+					layout->env.show_debug);
+}
+
+/*
+ * account_open_zone() - account the open zone of PEB
+ * @layout: pointer on volume layout
+ * @peb_id: PEB ID
+ *
+ * The calculated number of open zones is stored on the volume
+ * and the driver uses it to track the open zones limit of the device.
+ * PEB in conventional zone is not accounted because conventional
+ * zone cannot be opened.
+ *
+ * RETURN:
+ * [success]
+ * [failure] - negative error code.
+ */
+int account_open_zone(struct ssdfs_volume_layout *layout, u64 peb_id)
+{
+	int res;
+
+	res = is_peb_in_conventional_zone(layout, peb_id);
+	if (res < 0) {
+		SSDFS_ERR("fail to check zone type: "
+			  "peb_id %llu, err %d\n",
+			  peb_id, res);
+		return res;
+	} else if (res == SSDFS_TRUE) {
+		SSDFS_DBG(layout->env.show_debug,
+			  "conventional zone: peb_id %llu\n",
+			  peb_id);
+		return 0;
+	}
+
+	layout->calculated_open_zones++;
+
+	SSDFS_DBG(layout->env.show_debug,
+		  "peb_id %llu, calculated_open_zones %u\n",
+		  peb_id, layout->calculated_open_zones);
+
+	return 0;
+}

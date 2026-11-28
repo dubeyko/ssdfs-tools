@@ -86,7 +86,6 @@ int maptbl_mkfs_allocation_policy(struct ssdfs_volume_layout *layout,
 	u16 stripes_per_portion;
 	u32 portion_size;
 	u64 pebs_per_volume;
-	u64 portions_per_volume;
 	u32 pebs_per_seg;
 	u32 maptbl_segs;
 	u32 maptbl_pebs;
@@ -131,30 +130,6 @@ define_stripes_per_portion:
 		layout->maptbl.stripes_per_portion = stripes_per_portion;
 	}
 
-	switch (layout->env.device_type) {
-	case SSDFS_MTD_DEVICE:
-	case SSDFS_BLK_DEVICE:
-		/* do nothing */
-		break;
-
-	case SSDFS_ZNS_DEVICE:
-		portions_per_volume = pebs_per_volume + peb_desc_per_portion - 1;
-		portions_per_volume /= peb_desc_per_portion;
-
-		if (portions_per_volume > U16_MAX) {
-			SSDFS_ERR("portions_per_volume %llu is too huge\n",
-				  portions_per_volume);
-			return -E2BIG;
-		}
-
-		stripes_per_portion = (u16) portions_per_volume;
-		layout->maptbl.stripes_per_portion = stripes_per_portion;
-		break;
-
-	default:
-		BUG();
-	};
-
 	if (pebs_per_seg > stripes_per_portion) {
 		u32 leb_index_per_stripe;
 
@@ -174,7 +149,18 @@ define_stripes_per_portion:
 	pebtbl_portion_bytes = stripes_per_portion * layout->page_size;
 	pebtbl_portion_mempages = stripes_per_portion;
 
-	leb_desc_per_portion = peb_desc_per_portion + leb_desc_per_mempage - 1;
+	/*
+	 * The volume header keeps lebs_per_fragment limited by
+	 * the volume's PEBs count and the driver calculates
+	 * the LEB table's pages on the basis of this value.
+	 * The portion's capacity can be bigger than the volume
+	 * (for example, one portion for the whole volume
+	 * with big zones). The LEB table's size has to be
+	 * calculated by means of the same limited value.
+	 */
+	leb_desc_per_portion = (u32)min_t(u64, (u64)peb_desc_per_portion,
+					  pebs_per_volume);
+	leb_desc_per_portion += leb_desc_per_mempage - 1;
 	lebtbl_mempages = leb_desc_per_portion / leb_desc_per_mempage;
 	leb_desc_per_portion = lebtbl_mempages * leb_desc_per_mempage;
 	/*
@@ -1278,6 +1264,7 @@ int mark_unallocated_pebs_as_pre_erased(struct ssdfs_volume_layout *layout)
 	struct ssdfs_peb_table_fragment_header *pebtbl_hdr;
 	u8 *pebtbl;
 	u16 stripes_per_portion = layout->maptbl.stripes_per_portion;
+	u64 lebs_per_portion = layout->maptbl.lebs_per_portion;
 	u32 fragment_index;
 	u32 portion_index;
 	u16 leb_desc_index;
@@ -1295,6 +1282,8 @@ int mark_unallocated_pebs_as_pre_erased(struct ssdfs_volume_layout *layout)
 			  "do nothing: volume will be erased by mkfs\n");
 		return 0;
 	}
+
+	BUG_ON(lebs_per_portion == 0);
 
 	total_pebs_count = layout->env.fs_size / layout->env.erase_size;
 
@@ -1367,7 +1356,14 @@ define_next_peb_id:
 			peb_id = start_peb + pebs_count;
 		}
 
-		leb_id = start_leb + lebs_count;
+		/*
+		 * The PEB tables of the whole portion have been processed.
+		 * The LEB table of the portion can be split on several
+		 * fragments (memory pages). Skip the rest of LEB table
+		 * fragments of the portion because these LEBs refer to
+		 * the PEB tables that have been processed already.
+		 */
+		leb_id = ((leb_id / lebs_per_portion) + 1) * lebs_per_portion;
 	}
 
 	layout->maptbl.pre_erased_pebs = unallocated_pebs;
@@ -1900,11 +1896,10 @@ int maptbl_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 			logical_byte_offset = (u64)fragment_index *
 					portions_per_fragment * portion_size;
 
-			layout->calculated_open_zones++;
-
-			SSDFS_DBG(layout->env.show_debug,
-				  "calculated_open_zones %u\n",
-				  layout->calculated_open_zones);
+			err = account_open_zone(layout,
+				layout->segs[seg_index].pebs[j].peb_id);
+			if (err)
+				return err;
 
 			layout->segs[seg_index].pebs_count++;
 			BUG_ON(layout->segs[seg_index].pebs_count >

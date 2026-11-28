@@ -688,6 +688,9 @@ int define_meta_extents_area(struct ssdfs_volume_layout *layout,
 			     struct ssdfs_meta_extents_layout *src);
 int define_log_footer_layout(struct ssdfs_volume_layout *layout,
 			     int seg_index, int peb_index);
+int is_peb_in_conventional_zone(struct ssdfs_volume_layout *layout,
+				u64 peb_id);
+int account_open_zone(struct ssdfs_volume_layout *layout, u64 peb_id);
 int pre_commit_log_footer(struct ssdfs_volume_layout *layout,
 			  int seg_type, int seg_index, int peb_index);
 void commit_log_footer(struct ssdfs_volume_layout *layout,

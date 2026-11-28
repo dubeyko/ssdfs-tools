@@ -1363,6 +1363,7 @@ int zns_check_nand_geometry(int fd, struct ssdfs_nand_geometry *info,
 			    int is_debug);
 int zns_check_peb(int fd, u64 offset, u32 erasesize,
 		  int need_close_zone, int is_debug);
+int zns_is_conventional_peb(int fd, u64 offset, int is_debug);
 
 static const struct ssdfs_device_ops mtd_ops = {
 	.read = mtd_read,

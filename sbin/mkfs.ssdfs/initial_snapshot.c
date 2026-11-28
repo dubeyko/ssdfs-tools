@@ -85,6 +85,14 @@ int snap_mkfs_define_layout(struct ssdfs_volume_layout *layout)
 	peb_index = 0;
 	peb_desc = &layout->segs[seg_index].pebs[peb_index];
 
+	/*
+	 * The driver adds the snapshot superblock logs into
+	 * the initial snapshot segment. The zone stays open.
+	 */
+	err = account_open_zone(layout, peb_desc->peb_id);
+	if (err)
+		return err;
+
 	err = set_extent_start_offset(layout, SSDFS_INITIAL_SNAPSHOT_SEG_TYPE,
 					peb_desc, SSDFS_SEG_HEADER);
 	if (err) {

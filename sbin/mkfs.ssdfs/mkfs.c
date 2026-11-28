@@ -254,6 +254,7 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 	u64 pebs_count;
 	u32 pebs_per_seg;
 	u32 pages_per_seg;
+	u32 pages_per_peb;
 	u64 pebs_per_nand_die;
 	int res;
 
@@ -352,6 +353,20 @@ static int validate_key_creation_options(struct ssdfs_volume_layout *layout)
 		/* do nothing */
 		break;
 	};
+
+	/*
+	 * The metadata structures keep log_pages as __le16
+	 * and the whole PEB can be one log.
+	 */
+	pages_per_peb = erase_size / page_size;
+	if (pages_per_peb >= U16_MAX) {
+		SSDFS_ERR("erase size %u is too big for page size %u: "
+			  "pages_per_peb %u should be less than %u. "
+			  "Please, use bigger page size.\n",
+			  erase_size, page_size,
+			  pages_per_peb, U16_MAX);
+		return -EINVAL;
+	}
 
 	segs_count = fs_size / seg_size;
 	layout->env.fs_size = segs_count * seg_size;
@@ -1665,16 +1680,12 @@ static int write_peb(struct ssdfs_volume_layout *layout,
 		BUG();
 	};
 
-	switch (seg_desc->seg_type) {
-	case SSDFS_INITIAL_SNAPSHOT:
-		need_close_zone = SSDFS_TRUE;
-		layout->env.open_zones--;
-		break;
-
-	default:
-		need_close_zone = SSDFS_FALSE;
-		break;
-	}
+	/*
+	 * Every zone of metadata segment stays open, including
+	 * the initial snapshot segment, because the driver
+	 * continues to add logs into these zones.
+	 */
+	need_close_zone = SSDFS_FALSE;
 
 	volume_offset = peb_id * erase_size;
 	err = layout->env.dev_ops->check_peb(layout->env.fd,
